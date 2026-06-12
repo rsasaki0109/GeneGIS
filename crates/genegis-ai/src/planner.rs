@@ -8,6 +8,7 @@ use crate::error::AiError;
 use crate::intent::ParsedIntent;
 use crate::llm::{merge_llm_intent, plan_with_llm};
 use crate::resolver::{bind_catalog_dataset, ResolvedWorkflow, WorkflowId, resolve_workflow};
+use crate::tool_call::{llm_tool_calls, rule_based_tool_calls, PlannerToolCall};
 
 /// Whether to return the plan only or proceed to execution (CLI maps this).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +24,7 @@ pub struct PlanResult {
     pub resolved: ResolvedWorkflow,
     pub workflow: GeoWorkflow,
     pub mode: &'static str,
+    pub tool_calls: Vec<PlannerToolCall>,
 }
 
 pub fn plan_from_prompt(prompt: &str) -> Result<PlanResult, AiError> {
@@ -33,10 +35,11 @@ pub fn plan_with_config(prompt: &str, config: &PlannerConfig) -> Result<PlanResu
     match config.backend {
         PlannerBackend::RuleBased => plan_rule_based(prompt),
         PlannerBackend::Llm => match plan_with_llm(prompt, config) {
-            Ok(mut resolved) => {
+            Ok((mut resolved, llm_tools)) => {
                 let intent = merge_llm_intent(prompt, &resolved);
                 bind_catalog_dataset(&alpha_catalog(), &mut resolved)?;
-                build_plan(intent, resolved, "llm_openai_compatible")
+                let tool_calls = llm_tool_calls(&resolved, &llm_tools);
+                build_plan(intent, resolved, "llm_openai_compatible", tool_calls)
             }
             Err(err) if config.fallback_to_rules => {
                 eprintln!("LLM planner failed ({err}); falling back to rule-based resolver");
@@ -50,13 +53,15 @@ pub fn plan_with_config(prompt: &str, config: &PlannerConfig) -> Result<PlanResu
 fn plan_rule_based(prompt: &str) -> Result<PlanResult, AiError> {
     let intent = ParsedIntent::parse(prompt);
     let resolved = resolve_workflow(&intent)?;
-    build_plan(intent, resolved, "rule_based_mvp")
+    let tool_calls = rule_based_tool_calls(&intent, &resolved);
+    build_plan(intent, resolved, "rule_based_mvp", tool_calls)
 }
 
 fn build_plan(
     intent: ParsedIntent,
     resolved: ResolvedWorkflow,
     mode: &'static str,
+    tool_calls: Vec<PlannerToolCall>,
 ) -> Result<PlanResult, AiError> {
     let mut workflow = workflow_for(resolved.workflow_id);
     workflow.goal = resolved.goal.clone();
@@ -66,6 +71,7 @@ fn build_plan(
         resolved,
         workflow,
         mode,
+        tool_calls,
     })
 }
 
@@ -110,5 +116,14 @@ mod tests {
         };
         let plan = plan_with_config("名古屋市の人口密度を表示", &config).expect("plan");
         assert_eq!(plan.mode, "rule_based_mvp");
+        assert_eq!(plan.tool_calls.len(), 3);
+        assert_eq!(plan.tool_calls[0].tool, "parse_intent");
+    }
+
+    #[test]
+    fn rule_based_plan_includes_tool_calls() {
+        let plan = plan_from_prompt("名古屋市の人口密度を表示").expect("plan");
+        assert_eq!(plan.tool_calls.len(), 3);
+        assert!(plan.tool_calls.iter().all(|call| call.ok));
     }
 }

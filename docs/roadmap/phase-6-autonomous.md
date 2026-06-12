@@ -32,7 +32,7 @@
 - [x] Verification retry policy (re-execute + re-verify on DuckDB failure)
 - [x] GeneGIS Server `POST/GET /api/agent/runs` persisted under `.genegis/`
 - [x] Collab comments linked to agent run id + workflow step id
-- [ ] LLM planner emits structured tool calls (fallback to rule planner offline)
+- [x] LLM planner emits structured tool calls (fallback to rule planner offline)
 
 ## Recommended order
 

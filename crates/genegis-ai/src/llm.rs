@@ -4,6 +4,7 @@ use crate::backend::PlannerConfig;
 use crate::error::AiError;
 use crate::intent::ParsedIntent;
 use crate::resolver::{ResolvedWorkflow, WorkflowId};
+use crate::tool_call::PlannerToolCall;
 
 #[derive(Debug, Deserialize)]
 struct LlmPlanPayload {
@@ -12,6 +13,8 @@ struct LlmPlanPayload {
     confidence: f32,
     rationale: Vec<String>,
     ambiguities: Vec<String>,
+    #[serde(default)]
+    tool_calls: Vec<PlannerToolCall>,
 }
 
 const SYSTEM_PROMPT: &str = r#"You are the GeneGIS workflow planner. Map the user request to exactly one MVP workflow.
@@ -21,11 +24,28 @@ Available workflows:
 - remote-cog-demo — fetch remote GeoTIFF/COG metadata via catalog + HTTP range-read
 
 Respond with JSON only (no markdown):
-{"workflow_id":"nagoya-density|remote-cog-demo","goal":"<user goal>","confidence":0.0,"rationale":["..."],"ambiguities":["..."]}
+{
+  "workflow_id":"nagoya-density|remote-cog-demo",
+  "goal":"<user goal>",
+  "confidence":0.0,
+  "rationale":["..."],
+  "ambiguities":["..."],
+  "tool_calls":[
+    {
+      "tool":"llm_plan_workflow",
+      "input":{"prompt":"<echo user prompt>"},
+      "output":{"workflow_id":"nagoya-density","confidence":0.9},
+      "ok":true
+    }
+  ]
+}
 
-If the request is unsupported, set workflow_id to nagoya-density only when Nagoya + population density is clearly intended, or remote-cog-demo when remote COG metadata is clearly intended; otherwise respond with confidence 0 and explain in ambiguities."#;
+tool_calls must list structured planner steps you performed (at minimum llm_plan_workflow). If unsupported, set confidence to 0, explain in ambiguities, and set ok=false on tool_calls."#;
 
-pub fn plan_with_llm(prompt: &str, config: &PlannerConfig) -> Result<ResolvedWorkflow, AiError> {
+pub fn plan_with_llm(
+    prompt: &str,
+    config: &PlannerConfig,
+) -> Result<(ResolvedWorkflow, Vec<PlannerToolCall>), AiError> {
     let api_key = config
         .llm_api_key
         .as_deref()
@@ -69,7 +89,10 @@ pub fn plan_with_llm(prompt: &str, config: &PlannerConfig) -> Result<ResolvedWor
     parse_llm_plan(content, prompt)
 }
 
-pub fn parse_llm_plan(content: &str, prompt: &str) -> Result<ResolvedWorkflow, AiError> {
+pub fn parse_llm_plan(
+    content: &str,
+    prompt: &str,
+) -> Result<(ResolvedWorkflow, Vec<PlannerToolCall>), AiError> {
     let parsed: LlmPlanPayload = serde_json::from_str(content.trim())
         .map_err(|err| AiError::LlmResponse(format!("invalid JSON: {err}")))?;
 
@@ -79,18 +102,21 @@ pub fn parse_llm_plan(content: &str, prompt: &str) -> Result<ResolvedWorkflow, A
         )));
     }
 
-    Ok(ResolvedWorkflow {
-        workflow_id: parsed.workflow_id,
-        dataset_id: String::new(),
-        goal: if parsed.goal.trim().is_empty() {
-            prompt.to_string()
-        } else {
-            parsed.goal
+    Ok((
+        ResolvedWorkflow {
+            workflow_id: parsed.workflow_id,
+            dataset_id: String::new(),
+            goal: if parsed.goal.trim().is_empty() {
+                prompt.to_string()
+            } else {
+                parsed.goal
+            },
+            confidence: parsed.confidence.clamp(0.0, 1.0),
+            rationale: parsed.rationale,
+            ambiguities: parsed.ambiguities,
         },
-        confidence: parsed.confidence.clamp(0.0, 1.0),
-        rationale: parsed.rationale,
-        ambiguities: parsed.ambiguities,
-    })
+        parsed.tool_calls,
+    ))
 }
 
 pub fn merge_llm_intent(prompt: &str, resolved: &ResolvedWorkflow) -> ParsedIntent {
@@ -113,10 +139,21 @@ mod tests {
             "goal": "Show Nagoya population density",
             "confidence": 0.92,
             "rationale": ["place:nagoya", "metric:population_density"],
-            "ambiguities": ["ward granularity"]
+            "ambiguities": ["ward granularity"],
+            "tool_calls": [
+                {
+                    "tool": "llm_plan_workflow",
+                    "input": {"prompt": "Show Nagoya population density"},
+                    "output": {"workflow_id": "nagoya-density", "confidence": 0.92},
+                    "ok": true
+                }
+            ]
         }"#;
-        let resolved = parse_llm_plan(json, "Show Nagoya population density").expect("parse");
+        let (resolved, tools) =
+            parse_llm_plan(json, "Show Nagoya population density").expect("parse");
         assert_eq!(resolved.workflow_id, WorkflowId::NagoyaDensity);
         assert!(resolved.confidence > 0.9);
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].tool, "llm_plan_workflow");
     }
 }

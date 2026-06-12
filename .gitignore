@@ -23,3 +23,4 @@ docs/assets/hero-frame-*.png
 .genegis/collab.json
 .genegis/collab.json.automerge
 .genegis/agent-run.json
+.genegis/agent-runs/

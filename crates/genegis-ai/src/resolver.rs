@@ -20,7 +20,7 @@ impl WorkflowId {
         }
     }
 
-    fn dataset_tags(self) -> &'static [&'static str] {
+    pub fn dataset_tags(self) -> &'static [&'static str] {
         match self {
             Self::NagoyaDensity => &["nagoya", "density"],
             Self::RemoteCogDemo => &["cog", "remote", "demo"],

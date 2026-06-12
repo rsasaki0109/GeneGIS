@@ -132,21 +132,40 @@ fn resolve_dataset(plan: &PlanResult) -> Result<DatasetRecord, AgentError> {
 }
 
 fn record_plan_step(plan: &PlanResult) -> Result<AgentStep, AgentError> {
-    Ok(
-        AgentStep::new(AgentRole::Planner, "rule_planner", "Resolve intent to workflow IR")
-            .with_tool_call(ToolCall {
-                tool: "plan_workflow".into(),
-                input: serde_json::json!({ "prompt": plan.intent.raw_prompt }),
-                output: serde_json::json!({
-                    "workflow_id": plan.resolved.workflow_id.as_str(),
-                    "dataset_id": plan.resolved.dataset_id,
-                    "confidence": plan.resolved.confidence,
-                    "mode": plan.mode,
-                }),
-                ok: true,
-            })
-            .finish(),
-    )
+    let mut step = AgentStep::new(
+        AgentRole::Planner,
+        if plan.mode.starts_with("llm_") {
+            "llm_planner"
+        } else {
+            "rule_planner"
+        },
+        "Resolve intent to workflow IR",
+    );
+
+    if plan.tool_calls.is_empty() {
+        step = step.with_tool_call(ToolCall {
+            tool: "plan_workflow".into(),
+            input: serde_json::json!({ "prompt": plan.intent.raw_prompt }),
+            output: serde_json::json!({
+                "workflow_id": plan.resolved.workflow_id.as_str(),
+                "dataset_id": plan.resolved.dataset_id,
+                "confidence": plan.resolved.confidence,
+                "mode": plan.mode,
+            }),
+            ok: true,
+        });
+    } else {
+        for call in &plan.tool_calls {
+            step = step.with_tool_call(ToolCall {
+                tool: call.tool.clone(),
+                input: call.input.clone(),
+                output: call.output.clone(),
+                ok: call.ok,
+            });
+        }
+    }
+
+    Ok(step.finish())
 }
 
 fn record_catalog_step(plan: &PlanResult, dataset: &DatasetRecord) -> Result<AgentStep, AgentError> {
@@ -259,8 +278,9 @@ mod tests {
         assert_eq!(run.verify_attempts, 1);
         assert_eq!(run.steps.len(), 4);
         assert_eq!(run.steps[0].role, AgentRole::Planner);
+        assert_eq!(run.steps[0].tool_calls.len(), 3);
+        assert_eq!(run.steps[0].tool_calls[0].tool, "parse_intent");
         assert_eq!(run.steps[1].agent, "catalog_agent");
-        assert_eq!(run.steps[2].role, AgentRole::Executor);
         assert_eq!(run.steps[3].role, AgentRole::Verifier);
     }
 
