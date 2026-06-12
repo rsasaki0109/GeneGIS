@@ -2468,6 +2468,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "genegis-agent",
+ "genegis-ai",
  "genegis-analysis",
  "genegis-collab",
  "genegis-plugin-host",

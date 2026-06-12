@@ -14,4 +14,6 @@ pub enum AiError {
     LlmTransport(String),
     #[error("LLM response error: {0}")]
     LlmResponse(String),
+    #[error("JSON error: {0}")]
+    Json(String),
 }

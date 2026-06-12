@@ -1,5 +1,5 @@
 use chrono::Utc;
-use genegis_ai::{plan_with_config, PlanResult};
+use genegis_ai::{plan_with_config, PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
     build_ask_result, run_analysis_for_plan, verify_analysis_densities,
 };
@@ -8,6 +8,9 @@ use uuid::Uuid;
 
 use crate::error::AgentError;
 use crate::model::{AgentRole, AgentRun, AgentRunConfig, AgentStep, ToolCall};
+use crate::tool_registry::{
+    validate_executor_tool, validate_planner_tools, validate_verifier_tool,
+};
 
 /// Multi-agent orchestrator (Phase 6 — plan → catalog → execute → verify with retries).
 #[derive(Debug, Clone, Default)]
@@ -26,30 +29,39 @@ impl AgentOrchestrator {
     }
 
     pub fn run(&self, prompt: &str) -> Result<AgentRun, AgentError> {
+        let plan = plan_with_config(prompt, &self.config.planner)?;
+        if plan.mode.starts_with("llm_") {
+            validate_planner_tools(&plan.tool_calls)?;
+        }
+
+        let steps = vec![record_plan_step(&plan)?];
+        if self.config.plan_only {
+            plan.save_to_path(DEFAULT_AGENT_PLAN_PATH)
+                .map_err(|err| AgentError::Message(err.to_string()))?;
+            return Ok(build_plan_only_run(prompt, plan, steps));
+        }
+
+        self.execute_after_plan(prompt, plan, steps)
+    }
+
+    /// Human gate: execute a previously approved plan without re-planning.
+    pub fn execute_plan(&self, plan: PlanResult) -> Result<AgentRun, AgentError> {
+        if plan.mode.starts_with("llm_") {
+            validate_planner_tools(&plan.tool_calls)?;
+        }
+        let prompt = plan.intent.raw_prompt.clone();
+        let steps = vec![record_plan_step(&plan)?];
+        self.execute_after_plan(&prompt, plan, steps)
+    }
+
+    fn execute_after_plan(
+        &self,
+        prompt: &str,
+        plan: PlanResult,
+        mut steps: Vec<AgentStep>,
+    ) -> Result<AgentRun, AgentError> {
         let started_at = Utc::now();
         let run_id = Uuid::new_v4();
-        let mut steps = Vec::new();
-
-        let plan = plan_with_config(prompt, &self.config.planner)?;
-        steps.push(record_plan_step(&plan)?);
-
-        if self.config.plan_only {
-            return Ok(AgentRun {
-                id: run_id,
-                prompt: prompt.to_string(),
-                plan_only: true,
-                planner_mode: plan.mode.to_string(),
-                workflow_id: Some(plan.resolved.workflow_id.as_str().to_string()),
-                confidence: Some(plan.resolved.confidence),
-                verification_passed: false,
-                verify_attempts: 0,
-                collab_comment_ids: Vec::new(),
-                started_at,
-                finished_at: Utc::now(),
-                steps,
-                summary: plan_summary(&plan),
-            });
-        }
 
         let dataset = resolve_dataset(&plan)?;
         steps.push(record_catalog_step(&plan, &dataset)?);
@@ -86,7 +98,7 @@ impl AgentOrchestrator {
                 id: run_id,
                 prompt: prompt.to_string(),
                 plan_only: false,
-                planner_mode: plan.mode.to_string(),
+                planner_mode: plan.mode.clone(),
                 workflow_id: Some(plan.resolved.workflow_id.as_str().to_string()),
                 confidence: Some(plan.resolved.confidence),
                 verification_passed: false,
@@ -109,7 +121,7 @@ impl AgentOrchestrator {
             id: run_id,
             prompt: prompt.to_string(),
             plan_only: false,
-            planner_mode: plan.mode.to_string(),
+            planner_mode: plan.mode.clone(),
             workflow_id: Some(plan.resolved.workflow_id.as_str().to_string()),
             confidence: Some(plan.resolved.confidence),
             verification_passed: true,
@@ -120,6 +132,24 @@ impl AgentOrchestrator {
             steps,
             summary: ask.summary,
         })
+    }
+}
+
+fn build_plan_only_run(prompt: &str, plan: PlanResult, steps: Vec<AgentStep>) -> AgentRun {
+    AgentRun {
+        id: Uuid::new_v4(),
+        prompt: prompt.to_string(),
+        plan_only: true,
+        planner_mode: plan.mode.clone(),
+        workflow_id: Some(plan.resolved.workflow_id.as_str().to_string()),
+        confidence: Some(plan.resolved.confidence),
+        verification_passed: false,
+        verify_attempts: 0,
+        collab_comment_ids: Vec::new(),
+        started_at: Utc::now(),
+        finished_at: Utc::now(),
+        steps,
+        summary: plan_summary(&plan),
     }
 }
 
@@ -169,6 +199,7 @@ fn record_plan_step(plan: &PlanResult) -> Result<AgentStep, AgentError> {
 }
 
 fn record_catalog_step(plan: &PlanResult, dataset: &DatasetRecord) -> Result<AgentStep, AgentError> {
+    validate_executor_tool("catalog_resolve")?;
     Ok(
         AgentStep::new(
             AgentRole::Executor,
@@ -194,6 +225,7 @@ fn record_catalog_step(plan: &PlanResult, dataset: &DatasetRecord) -> Result<Age
 }
 
 fn record_retry_step(attempt: u32) -> Result<AgentStep, AgentError> {
+    validate_executor_tool("verify_retry")?;
     Ok(
         AgentStep::new(
             AgentRole::Executor,
@@ -215,6 +247,7 @@ fn record_execute_step(
     ward_count: usize,
     attempt: u32,
 ) -> Result<AgentStep, AgentError> {
+    validate_executor_tool("run_nagoya_density")?;
     Ok(
         AgentStep::new(
             AgentRole::Executor,
@@ -236,6 +269,7 @@ fn record_execute_step(
 }
 
 fn record_verify_step(passed: bool, attempt: u32) -> Result<AgentStep, AgentError> {
+    validate_verifier_tool("duckdb_verify")?;
     Ok(
         AgentStep::new(
             AgentRole::Verifier,
@@ -260,12 +294,14 @@ fn plan_summary(plan: &PlanResult) -> serde_json::Value {
         "confidence": plan.resolved.confidence,
         "workflow_steps": plan.workflow.steps.len(),
         "planner_mode": plan.mode,
+        "pending_plan_path": DEFAULT_AGENT_PLAN_PATH,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use genegis_ai::plan_from_prompt;
 
     #[test]
     fn runs_north_star_agent_trace() {
@@ -294,5 +330,17 @@ mod tests {
         assert!(!run.verification_passed);
         assert_eq!(run.steps.len(), 1);
         assert_eq!(run.steps[0].role, AgentRole::Planner);
+    }
+
+    #[test]
+    fn human_gate_execute_saved_plan() {
+        let plan = plan_from_prompt("名古屋市の人口密度を表示").expect("plan");
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .execute_plan(plan)
+            .expect("execute");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.steps.len(), 4);
     }
 }

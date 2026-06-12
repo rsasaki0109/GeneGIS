@@ -15,6 +15,8 @@ pub struct Workspace {
     pub layers: Vec<Layer>,
     pub views: Vec<View>,
     pub active_view: Option<ViewId>,
+    #[serde(default)]
+    pub provenance: crate::ProvenanceStore,
 }
 
 impl Workspace {
@@ -29,6 +31,7 @@ impl Workspace {
             layers: Vec::new(),
             views: Vec::new(),
             active_view: None,
+            provenance: crate::ProvenanceStore::default(),
         }
     }
 

@@ -220,6 +220,13 @@ li.note {
   line-height: 1.4;
 }
 
+.agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .agent-item {
   border: 1px solid var(--border);
   border-radius: 8px;

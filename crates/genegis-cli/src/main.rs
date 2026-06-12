@@ -10,6 +10,7 @@ use genegis_agent::{
     pull_latest_agent_run, push_agent_run, AgentOrchestrator, AgentRun, AgentRunConfig,
     AgentRole, DEFAULT_AGENT_RUN_PATH, DEFAULT_SERVER_URL,
 };
+use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{nagoya_population_density_template, remote_cog_metadata_template};
@@ -738,8 +739,120 @@ fn handle_agent(args: &[String]) {
                 }
             }
         }
+        Some("plan") => {
+            let planner_config = planner_config_from_args(args);
+            let output = agent_output_path(args);
+            let prompt = collect_prompt(args);
+            if prompt.is_empty() {
+                eprintln!(
+                    "Usage: genegis agent plan \"名古屋市の人口密度を表示\" [--planner rule|llm] [-o FILE]"
+                );
+                process::exit(1);
+            }
+
+            let run = match AgentOrchestrator::new()
+                .with_config(
+                    AgentRunConfig::rule_based_offline()
+                        .with_planner(planner_config)
+                        .plan_only(),
+                )
+                .run(&prompt)
+            {
+                Ok(run) => run,
+                Err(err) => {
+                    eprintln!("Agent plan error: {err}");
+                    process::exit(1);
+                }
+            };
+
+            if let Err(err) = run.save_to_path(&output) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+            eprintln!(
+                "Pending plan saved to {} · run {}",
+                DEFAULT_AGENT_PLAN_PATH,
+                run.id
+            );
+            eprintln!("Approve with: genegis agent execute");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&run.summary).expect("json")
+            );
+        }
+        Some("execute") => {
+            let output = agent_output_path(args);
+            let push_to_server = args.iter().any(|a| a == "--push");
+            let link_collab = args.iter().any(|a| a == "--link-collab");
+            let verify_retries = args
+                .iter()
+                .position(|a| a == "--verify-retries")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(2);
+
+            let plan = match PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH) {
+                Ok(plan) => plan,
+                Err(err) => {
+                    eprintln!(
+                        "No pending plan at {}: {err}",
+                        DEFAULT_AGENT_PLAN_PATH
+                    );
+                    eprintln!("Run: genegis agent plan \"名古屋市の人口密度を表示\"");
+                    process::exit(1);
+                }
+            };
+
+            let mut run = match AgentOrchestrator::new()
+                .with_config(
+                    AgentRunConfig::rule_based_offline()
+                        .with_verify_retries(verify_retries)
+                        .with_link_collab_on_failure(link_collab),
+                )
+                .execute_plan(plan)
+            {
+                Ok(run) => run,
+                Err(err) => {
+                    eprintln!("Agent execute error: {err}");
+                    process::exit(1);
+                }
+            };
+
+            if link_collab && !run.verification_passed {
+                let _ = link_agent_failure_comment(&mut run);
+            }
+
+            if let Err(err) = run.save_to_path(&output) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+
+            if push_to_server {
+                let server_url = collab_server_url(args);
+                if let Err(err) = push_agent_run(&server_url, &run) {
+                    eprintln!("Failed to push agent run: {err}");
+                    process::exit(1);
+                }
+            }
+
+            eprintln!(
+                "Agent run {} · verification {}",
+                run.id,
+                if run.verification_passed {
+                    "passed"
+                } else {
+                    "failed"
+                }
+            );
+
+            if !run.verification_passed {
+                process::exit(1);
+            }
+        }
         _ => {
             eprintln!("Usage: genegis agent run \"PROMPT\" [--plan-only] [--planner rule|llm] [--verify-retries N] [--push] [--link-collab] [--json] [-o FILE]");
+            eprintln!("       genegis agent plan \"PROMPT\" [--planner rule|llm]");
+            eprintln!("       genegis agent execute [--push] [--link-collab] [--verify-retries N] [-o FILE]");
             eprintln!("       genegis agent pull [--url URL] [-o FILE]");
             eprintln!("       genegis agent push [--url URL] [-i FILE]");
             process::exit(1);
@@ -1042,6 +1155,8 @@ Usage:
   genegis agent run "..." --verify-retries 2       DuckDB verify retry policy
   genegis agent run "..." --push --link-collab     Push trace + link collab on failure
   genegis agent run "..." --json -o .genegis/agent-run.json  Export trace JSON
+  genegis agent plan "名古屋市の人口密度を表示"         Human gate — save pending plan JSON
+  genegis agent execute [--push] [--link-collab]   Approve pending plan → execute → verify
   genegis agent pull [--url URL] [-o FILE]         Pull latest run from GeneGIS Server
   genegis agent push [--url URL] [-i FILE]         Push run trace to GeneGIS Server
   genegis workflow run nagoya-density              Print workflow graph JSON

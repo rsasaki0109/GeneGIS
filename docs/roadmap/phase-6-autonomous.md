@@ -34,6 +34,14 @@
 - [x] Collab comments linked to agent run id + workflow step id
 - [x] LLM planner emits structured tool calls (fallback to rule planner offline)
 
+### Phase 6 gamma (human gate + provenance + allowlist)
+
+- [x] Tool allowlist registry — reject unknown planner/executor/verifier tools (ADR 0003)
+- [x] Human-in-the-loop gate — `agent plan` / `agent execute` + workbench Plan / Approve buttons
+- [x] Pending plan persistence (`.genegis/agent-plan.json`)
+- [x] Project provenance wired to agent runs (`agent_run_id`, `workflow_id`)
+- [x] Agent orchestration guide ([`docs/guides/agent-orchestration.md`](../guides/agent-orchestration.md))
+
 ## Recommended order
 
 1. **Agent run model** — `AgentRun`, `AgentStep`, `ToolCall` JSON schema

@@ -11,6 +11,8 @@ const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
 const agentMetaEl = document.getElementById("agent-meta");
 const agentStepsEl = document.getElementById("agent-steps");
+const agentPlanBtn = document.getElementById("agent-plan-btn");
+const agentExecuteBtn = document.getElementById("agent-execute-btn");
 const commentFormEl = document.getElementById("comment-form");
 const commentAuthorEl = document.getElementById("comment-author");
 const commentBodyEl = document.getElementById("comment-body");
@@ -189,6 +191,20 @@ async function loadAgentTrace() {
     agentMetaEl.textContent = `Error: ${err.message || err}`;
     agentStepsEl.textContent = "";
   }
+}
+
+async function invokeAgentPlan(prompt) {
+  const response = await fetch("/api/agent/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  return response.json();
+}
+
+async function invokeAgentExecute() {
+  const response = await fetch("/api/agent/execute", { method: "POST" });
+  return response.json();
 }
 
 function renderCollabSync(sync) {
@@ -423,6 +439,50 @@ downloadPngBtn.addEventListener("click", downloadPng);
 gpuPreviewBtn.addEventListener("click", openGpuPreview);
 commentFormEl.addEventListener("submit", submitComment);
 commentSyncBtn.addEventListener("click", syncComments);
+
+agentPlanBtn?.addEventListener("click", async () => {
+  const prompt = promptEl.value.trim();
+  if (!prompt) {
+    setStatus("Enter a prompt first");
+    return;
+  }
+  agentPlanBtn.disabled = true;
+  setStatus("Planning…");
+  try {
+    const payload = await invokeAgentPlan(prompt);
+    if (!payload.ok) {
+      throw new Error(payload.error || "Agent plan failed");
+    }
+    renderAgentRun(payload.run);
+    await loadComments();
+    setStatus("Plan saved — approve to execute");
+  } catch (err) {
+    console.error(err);
+    setStatus(`Plan error: ${err.message || err}`);
+  } finally {
+    agentPlanBtn.disabled = false;
+  }
+});
+
+agentExecuteBtn?.addEventListener("click", async () => {
+  agentExecuteBtn.disabled = true;
+  setStatus("Executing approved plan…");
+  try {
+    const payload = await invokeAgentExecute();
+    if (!payload.ok) {
+      throw new Error(payload.error || "Agent execute failed");
+    }
+    renderAgentRun(payload.run);
+    await loadComments();
+    setStatus("Agent run verified");
+  } catch (err) {
+    console.error(err);
+    setStatus(`Execute error: ${err.message || err}`);
+  } finally {
+    agentExecuteBtn.disabled = false;
+  }
+});
+
 loadPlugins();
 loadComments();
 loadAgentTrace();

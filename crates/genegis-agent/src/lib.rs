@@ -4,6 +4,7 @@ pub mod error;
 pub mod model;
 pub mod orchestrator;
 pub mod remote;
+pub mod tool_registry;
 
 pub use error::AgentError;
 pub use model::{
@@ -11,3 +12,4 @@ pub use model::{
 };
 pub use orchestrator::AgentOrchestrator;
 pub use remote::{pull_latest_agent_run, push_agent_run, DEFAULT_SERVER_URL};
+pub use tool_registry::{validate_executor_tool, validate_planner_tools, validate_verifier_tool};

@@ -11,6 +11,7 @@ use genegis_agent::{
     pull_latest_agent_run, push_agent_run, AgentOrchestrator, AgentRun, AgentRunConfig,
     AgentRole, DEFAULT_AGENT_RUN_PATH,
 };
+use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL};
 use genegis_plugin_host::PluginHost;
@@ -141,6 +142,8 @@ async fn main() {
         .route("/api/collab/sync", post(sync_collab))
         .route("/api/agent/runs/latest", get(latest_agent_run))
         .route("/api/agent/run", post(run_agent))
+        .route("/api/agent/plan", post(plan_agent))
+        .route("/api/agent/execute", post(execute_agent))
         .fallback_service(ServeDir::new(static_dir))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -576,18 +579,60 @@ async fn run_agent(
         let mut run = AgentOrchestrator::new()
             .with_config(AgentRunConfig::rule_based_offline().with_link_collab_on_failure(true))
             .run(&prompt)?;
-
-        if !run.verification_passed {
-            link_agent_failure_comment(&mut run, &collab_path)?;
-        }
-
-        run.save_to_path(&agent_run_path)?;
-        let _ = push_agent_run(&server_url, &run);
-        Ok(run)
+        finalize_agent_run(&mut run, &agent_run_path, &collab_path, &server_url)
     })
     .await
     .unwrap_or_else(|err| Err(genegis_agent::AgentError::Message(err.to_string())));
 
+    agent_run_response(result, &state.agent_run_path)
+}
+
+async fn plan_agent(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AgentRunRequest>,
+) -> impl IntoResponse {
+    let prompt = body.prompt.trim().to_string();
+    if prompt.is_empty() {
+        return agent_error_response("prompt is required", None);
+    }
+
+    let agent_run_path = state.agent_run_path.clone();
+    let collab_path = state.collab_path.clone();
+    let server_url = state.server_url.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline().plan_only())
+            .run(&prompt)?;
+        finalize_agent_run(&mut run, &agent_run_path, &collab_path, &server_url)
+    })
+    .await
+    .unwrap_or_else(|err| Err(genegis_agent::AgentError::Message(err.to_string())));
+
+    agent_run_response(result, &state.agent_run_path)
+}
+
+async fn execute_agent(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let agent_run_path = state.agent_run_path.clone();
+    let collab_path = state.collab_path.clone();
+    let server_url = state.server_url.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let plan = PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH)
+            .map_err(|err| genegis_agent::AgentError::Message(err.to_string()))?;
+        let mut run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline().with_link_collab_on_failure(true))
+            .execute_plan(plan)?;
+        finalize_agent_run(&mut run, &agent_run_path, &collab_path, &server_url)
+    })
+    .await
+    .unwrap_or_else(|err| Err(genegis_agent::AgentError::Message(err.to_string())));
+
+    agent_run_response(result, &state.agent_run_path)
+}
+
+fn agent_run_response(
+    result: Result<AgentRun, genegis_agent::AgentError>,
+    agent_run_path: &PathBuf,
+) -> (StatusCode, Json<AgentRunResponse>) {
     match result {
         Ok(run) => (
             StatusCode::OK,
@@ -602,10 +647,53 @@ async fn run_agent(
             Json(AgentRunResponse {
                 ok: false,
                 error: Some(err.to_string()),
-                run: AgentRun::load_from_path(&state.agent_run_path).ok(),
+                run: AgentRun::load_from_path(agent_run_path).ok(),
             }),
         ),
     }
+}
+
+fn agent_error_response(
+    message: &str,
+    run: Option<AgentRun>,
+) -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(AgentRunResponse {
+            ok: false,
+            error: Some(message.into()),
+            run,
+        }),
+    )
+}
+
+fn finalize_agent_run(
+    run: &mut AgentRun,
+    agent_run_path: &PathBuf,
+    collab_path: &PathBuf,
+    server_url: &str,
+) -> Result<AgentRun, genegis_agent::AgentError> {
+    if !run.verification_passed && !run.plan_only {
+        let _ = link_agent_failure_comment(run, collab_path);
+    }
+
+    let mut session = load_collab_from_disk(collab_path);
+    session
+        .record_agent_run_provenance(
+            run.id,
+            run.workflow_id.as_deref(),
+            &run.planner_mode,
+            run.plan_only,
+            run.verification_passed,
+            run.verify_attempts,
+            &run.prompt,
+        )
+        .map_err(|err| genegis_agent::AgentError::Message(err.to_string()))?;
+    save_collab_session(&session, collab_path);
+
+    run.save_to_path(agent_run_path)?;
+    let _ = push_agent_run(server_url, run);
+    Ok(run.clone())
 }
 
 fn link_agent_failure_comment(

@@ -55,6 +55,10 @@ pub struct ProvenanceEntry {
     pub action: String,
     pub target: String,
     pub details: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_run_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -77,6 +81,29 @@ impl ProvenanceStore {
             action: action.into(),
             target: target.into(),
             details,
+            agent_run_id: None,
+            workflow_id: None,
+        });
+    }
+
+    pub fn record_agent_run(
+        &mut self,
+        run_id: Uuid,
+        workflow_id: impl Into<String>,
+        actor: impl Into<String>,
+        action: impl Into<String>,
+        details: serde_json::Value,
+    ) {
+        let workflow_id = workflow_id.into();
+        self.entries.push(ProvenanceEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor: actor.into(),
+            action: action.into(),
+            target: workflow_id.clone(),
+            details,
+            agent_run_id: Some(run_id),
+            workflow_id: Some(workflow_id),
         });
     }
 }

@@ -87,6 +87,40 @@ impl CollabSession {
         self.add_comment(comment)
     }
 
+    pub fn record_agent_run_provenance(
+        &mut self,
+        run_id: Uuid,
+        workflow_id: Option<&str>,
+        planner_mode: &str,
+        plan_only: bool,
+        verification_passed: bool,
+        verify_attempts: u32,
+        prompt: &str,
+    ) -> Result<(), CollabError> {
+        let mut document = self.document()?;
+        let workflow = workflow_id.unwrap_or("unknown");
+        document.project.workspace_mut().provenance.record_agent_run(
+            run_id,
+            workflow,
+            "agent",
+            if verification_passed {
+                "agent_run_verified"
+            } else if plan_only {
+                "agent_plan_pending"
+            } else {
+                "agent_run_failed"
+            },
+            serde_json::json!({
+                "prompt": prompt,
+                "planner_mode": planner_mode,
+                "verify_attempts": verify_attempts,
+                "plan_only": plan_only,
+            }),
+        );
+        self.crdt.apply_document(&document)?;
+        Ok(())
+    }
+
     pub fn create_branch(
         &mut self,
         name: impl Into<String>,
@@ -192,6 +226,29 @@ mod tests {
             .create_branch("experiment-style", Some("main"))
             .expect("branch");
         assert_eq!(session.branches().expect("branches").len(), 2);
+    }
+
+    #[test]
+    fn records_agent_run_provenance() {
+        let mut session = CollabSession::demo_nagoya();
+        let run_id = Uuid::new_v4();
+        session
+            .record_agent_run_provenance(
+                run_id,
+                Some("nagoya-density"),
+                "rule_based_mvp",
+                false,
+                true,
+                1,
+                "名古屋市の人口密度を表示",
+            )
+            .expect("provenance");
+        let document = session.document().expect("document");
+        assert_eq!(document.project.workspace().provenance.entries.len(), 1);
+        assert_eq!(
+            document.project.workspace().provenance.entries[0].agent_run_id,
+            Some(run_id)
+        );
     }
 
     #[test]
