@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Strip Cursor agent co-author trailers added by IDE tooling.
+set -euo pipefail
+
+msg_file=$1
+commit_source=${2:-}
+
+if [[ ! -f "$msg_file" ]]; then
+  exit 0
+fi
+
+sed -i '/^Co-authored-by: Cursor <cursoragent@cursor.com>$/d' "$msg_file"
+
+# Remove trailing blank lines left after stripping trailers.
+sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$msg_file" 2>/dev/null || true
+
+exit 0

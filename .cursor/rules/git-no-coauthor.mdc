@@ -1,0 +1,12 @@
+---
+description: Do not add Cursor co-author trailers to git commits
+alwaysApply: true
+---
+
+# Git commits — no Cursor co-author
+
+When creating git commits for this repository:
+
+- Never append `Co-authored-by: Cursor` or any Cursor/agent co-author trailer.
+- Commit messages must contain only the human-authored title and body.
+- If a hook or tool adds agent attribution, strip it before completing the commit.
