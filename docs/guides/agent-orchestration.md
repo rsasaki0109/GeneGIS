@@ -72,7 +72,7 @@ genegis agent export-audit -o .genegis/audit-bundle.json
 genegis collab provenance list
 ```
 
-Bundle includes collab summary, comments, provenance entries, and agent run index.
+Bundle includes collab summary, comments, provenance entries, and agent run index. Schema: `genegis-audit-bundle-v1` (see `crates/genegis-agent/src/audit.rs`).
 
 ## Provenance
 

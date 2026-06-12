@@ -7,9 +7,9 @@ use genegis_analysis::{
 };
 use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
 use genegis_agent::{
-    get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run, AgentOrchestrator,
-    AgentRun, AgentRunConfig, AgentRole, DEFAULT_AGENT_RUN_PATH,
-    DEFAULT_AGENT_RUNS_DIR, DEFAULT_SERVER_URL,
+    build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
+    AgentOrchestrator, AgentRun, AgentRunConfig, AgentRole, AuditCollabSnapshot,
+    DEFAULT_AGENT_RUN_PATH, DEFAULT_AGENT_RUNS_DIR, DEFAULT_SERVER_URL,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
@@ -876,16 +876,22 @@ fn handle_agent(args: &[String]) {
                 .unwrap_or_else(|| PathBuf::from(".genegis/audit-bundle.json"));
             let session = load_collab_session();
             let runs_dir = agent_runs_dir_from_args(args);
-            let runs = AgentRun::list_from_dir(&runs_dir).unwrap_or_default();
-            let latest = AgentRun::load_from_path(DEFAULT_AGENT_RUN_PATH).ok();
-            let bundle = serde_json::json!({
-                "schema": "genegis-audit-bundle-v1",
-                "collab_summary": session.summary_json().unwrap_or_else(|err| serde_json::json!({ "error": err.to_string() })),
-                "comments": session.comments_json().unwrap_or_else(|_| serde_json::json!([])),
-                "provenance": session.provenance_json().unwrap_or_else(|_| serde_json::json!([])),
-                "agent_runs": runs,
-                "latest_agent_run_id": latest.as_ref().map(|run| run.id),
-            });
+            let collab = AuditCollabSnapshot {
+                summary: session
+                    .summary_json()
+                    .unwrap_or_else(|err| serde_json::json!({ "error": err.to_string() })),
+                comments: session
+                    .comments_json()
+                    .unwrap_or_else(|_| serde_json::json!([])),
+                provenance: session
+                    .provenance_json()
+                    .unwrap_or_else(|_| serde_json::json!([])),
+            };
+            let bundle = build_audit_bundle(&collab, &runs_dir, DEFAULT_AGENT_RUN_PATH)
+                .unwrap_or_else(|err| {
+                    eprintln!("Audit export error: {err}");
+                    process::exit(1);
+                });
             if let Some(parent) = output.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }

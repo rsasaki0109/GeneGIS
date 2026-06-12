@@ -19,3 +19,4 @@ ureq = "3"
 uuid.workspace = true
 
 [dev-dependencies]
+tempfile = "3"

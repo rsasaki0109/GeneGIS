@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[lib]
+name = "genegis_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "genegis-server"
 path = "src/main.rs"
@@ -23,4 +27,7 @@ uuid.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+uuid.workspace = true
 genegis-core = { path = "../genegis-core" }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

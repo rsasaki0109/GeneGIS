@@ -26,3 +26,11 @@ jobs:
         run: cargo run -p genegis-cli -- workflow run nagoya-density --execute
       - name: MVP ask intent pipeline
         run: cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --no-html
+      - name: Agent orchestration smoke (north star)
+        run: cargo run -p genegis-cli -- agent run "名古屋市の人口密度を表示"
+      - name: Agent human gate smoke
+        run: |
+          cargo run -p genegis-cli -- agent plan "名古屋市の人口密度を表示"
+          cargo run -p genegis-cli -- agent execute
+      - name: Agent audit export smoke
+        run: cargo run -p genegis-cli -- agent export-audit -o /tmp/genegis-audit-bundle.json

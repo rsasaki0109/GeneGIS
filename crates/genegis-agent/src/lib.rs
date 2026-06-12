@@ -1,11 +1,15 @@
 //! GeneGIS multi-agent orchestration — plan, execute, verify with trace export.
 
+pub mod audit;
 pub mod error;
 pub mod model;
 pub mod orchestrator;
 pub mod remote;
 pub mod tool_registry;
 
+pub use audit::{
+    build_audit_bundle, AuditCollabSnapshot, AUDIT_BUNDLE_SCHEMA,
+};
 pub use error::AgentError;
 pub use model::{
     AgentRole, AgentRun, AgentRunConfig, AgentRunSummary, AgentStep, ToolCall,

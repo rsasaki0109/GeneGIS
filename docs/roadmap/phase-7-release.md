@@ -34,6 +34,13 @@
 - [x] CLI `genegis agent export-audit` — collab + provenance + run index bundle
 - [x] CLI `genegis collab provenance list`
 
+### Phase 7 gamma (release hardening)
+
+- [x] CI — `genegis agent run` north-star smoke + human gate + export-audit
+- [x] Server E2E — in-process axum tests for agent run list/get/latest POST
+- [x] Audit bundle regression — `build_audit_bundle` schema + run index tests
+- [ ] Workbench hero GIF refresh (manual asset update)
+
 ## Recommended order
 
 1. **AgentRunSummary** — lightweight index for history APIs
@@ -41,6 +48,7 @@
 3. **CLI audit** — list/get with server fallback to `.genegis/agent-runs/`
 4. **Workbench UI** — history + provenance panels
 5. **Phase 7 beta** — Tauri desktop parity, provenance filters, export bundle
+6. **Phase 7 gamma** — CI agent smoke, server E2E tests, audit bundle regression
 
 ## CLI (target)
 

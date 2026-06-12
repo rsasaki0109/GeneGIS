@@ -1,6 +1,7 @@
 //! GeneGIS Server — HTTP sync prototype for collaboration sessions.
 
 pub mod agent_store;
+pub mod api;
 pub mod store;
 
 pub use agent_store::{

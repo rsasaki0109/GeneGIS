@@ -156,7 +156,7 @@ async fn main() {
         .route("/api/collab/comment", post(add_comment))
         .route("/api/collab/sync", post(sync_collab))
         .route("/api/agent/runs/latest", get(latest_agent_run))
-        .route("/api/agent/runs/:id", get(get_agent_run_by_id))
+        .route("/api/agent/runs/{id}", get(get_agent_run_by_id))
         .route("/api/agent/runs", get(list_agent_runs_handler))
         .route("/api/agent/run", post(run_agent))
         .route("/api/agent/plan", post(plan_agent))
