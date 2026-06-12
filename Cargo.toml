@@ -26,6 +26,7 @@ members = [
     "crates/genegis-ffi",
     "crates/genegis-testkit",
     "examples/nagoya-population-density",
+    "examples/copc-metadata",
     "apps/desktop/src-tauri",
     "apps/workbench",
 ]

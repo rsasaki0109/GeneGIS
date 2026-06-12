@@ -8,6 +8,7 @@ const resolutionEl = document.getElementById("resolution");
 const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
 const pluginsEl = document.getElementById("plugins");
+const commentsEl = document.getElementById("comments");
 const verificationEl = document.getElementById("verification");
 const notesEl = document.getElementById("notes");
 
@@ -131,6 +132,59 @@ async function loadPlugins() {
   }
 }
 
+function renderComments(comments) {
+  commentsEl.innerHTML = "";
+  if (!comments.length) {
+    commentsEl.textContent = "No comments yet";
+    return;
+  }
+
+  for (const comment of comments) {
+    const card = document.createElement("article");
+    card.className = "comment-item";
+
+    const header = document.createElement("div");
+    header.className = "comment-meta";
+    header.textContent = `${comment.author} · ${comment.body.slice(0, 40)}${
+      comment.body.length > 40 ? "…" : ""
+    }`;
+    card.appendChild(header);
+
+    const body = document.createElement("p");
+    body.className = "comment-body";
+    body.textContent = comment.body;
+    card.appendChild(body);
+
+    if (comment.map_anchor) {
+      const anchor = document.createElement("div");
+      anchor.className = "comment-anchor";
+      anchor.textContent = `map: ${comment.map_anchor[0].toFixed(3)}, ${comment.map_anchor[1].toFixed(3)}`;
+      card.appendChild(anchor);
+    }
+
+    commentsEl.appendChild(card);
+  }
+}
+
+async function invokeCollab() {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("collab_snapshot");
+  }
+
+  const response = await fetch("/api/collab");
+  return response.json();
+}
+
+async function loadComments() {
+  try {
+    const payload = await invokeCollab();
+    renderComments(payload.comments || []);
+  } catch (err) {
+    console.error(err);
+    commentsEl.textContent = `Error: ${err.message || err}`;
+  }
+}
+
 async function invokeAsk(prompt) {
   if (window.__TAURI__?.core?.invoke) {
     return window.__TAURI__.core.invoke("run_ask", { prompt });
@@ -220,4 +274,5 @@ runBtn.addEventListener("click", runAsk);
 downloadPngBtn.addEventListener("click", downloadPng);
 gpuPreviewBtn.addEventListener("click", openGpuPreview);
 loadPlugins();
+loadComments();
 runAsk();

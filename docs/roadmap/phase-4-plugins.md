@@ -14,6 +14,11 @@
 | **Cloud** | GeoParquet URI streaming polish (reuse `genegis-storage` + `genegis-vector`) |
 | **Docs** | Plugin author guide; COPC example under `examples/` |
 
+## Docs deliverables
+
+- [x] Plugin author guide ([`docs/guides/plugin-author.md`](../guides/plugin-author.md))
+- [x] COPC metadata example ([`examples/copc-metadata`](../../examples/copc-metadata/))
+
 ## Deliverables
 
 - [x] Phase 4 roadmap (this document)
@@ -123,3 +128,5 @@ Keep the north-star Nagoya workflow unchanged. Add a second `DatasetRecord` and 
 - Planner catalog lookup + benchmarks (`genegis-ai`, `genegis-testkit`)
 
 See [`phase-3-beta.md`](phase-3-beta.md).
+
+Continue with [`phase-5-collab.md`](phase-5-collab.md) (comments, branches, GeneGIS Server).

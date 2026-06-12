@@ -6,6 +6,7 @@ use genegis_analysis::{
     run_nagoya_population_density,
 };
 use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
+use genegis_collab::{CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{nagoya_population_density_template, remote_cog_metadata_template};
 use std::env;
@@ -25,6 +26,7 @@ fn main() {
         Some("raster") => handle_raster(&args[2..]),
         Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("plugin") => handle_plugin(&args[2..]),
+        Some("collab") => handle_collab(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
@@ -537,6 +539,151 @@ fn handle_plugin(args: &[String]) {
     }
 }
 
+fn default_collab_path() -> PathBuf {
+    PathBuf::from(".genegis/collab.json")
+}
+
+fn load_collab_session() -> CollabSession {
+    let path = default_collab_path();
+    if path.is_file() {
+        if let Ok(json) = std::fs::read_to_string(&path) {
+            if let Ok(session) = CollabSession::import_json(&json) {
+                return session;
+            }
+        }
+    }
+    CollabSession::demo_nagoya()
+}
+
+fn save_collab_session(session: &CollabSession) {
+    let path = default_collab_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match session.export_json() {
+        Ok(json) => {
+            if let Err(err) = std::fs::write(&path, json) {
+                eprintln!("Warning: failed to write {}: {err}", path.display());
+            }
+        }
+        Err(err) => eprintln!("Warning: failed to export collab session: {err}"),
+    }
+}
+
+fn handle_collab(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("comment") => match args.get(1).map(String::as_str) {
+            Some("list") => {
+                let session = load_collab_session();
+                println!("{}", session.comments_json());
+            }
+            Some("add") => {
+                let Some(body) = args.get(2) else {
+                    eprintln!("Usage: genegis collab comment add \"TEXT\" [--author NAME]");
+                    process::exit(1);
+                };
+                let author = args
+                    .iter()
+                    .position(|a| a == "--author")
+                    .and_then(|i| args.get(i + 1))
+                    .map(String::as_str)
+                    .unwrap_or("cli");
+                let mut session = load_collab_session();
+                match session.add_comment(MapComment::new(author, body)) {
+                    Ok(_) => {
+                        save_collab_session(&session);
+                        println!("{}", session.comments_json());
+                    }
+                    Err(err) => {
+                        eprintln!("Collab error: {err}");
+                        process::exit(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Usage: genegis collab comment list|add");
+                process::exit(1);
+            }
+        },
+        Some("branch") => match args.get(1).map(String::as_str) {
+            Some("list") => {
+                let session = load_collab_session();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(session.branches()).expect("json")
+                );
+            }
+            Some("create") => {
+                let Some(name) = args.get(2) else {
+                    eprintln!("Usage: genegis collab branch create NAME [--from BRANCH]");
+                    process::exit(1);
+                };
+                let from = args
+                    .iter()
+                    .position(|a| a == "--from")
+                    .and_then(|i| args.get(i + 1))
+                    .map(String::as_str);
+                let mut session = load_collab_session();
+                match session.create_branch(name, from) {
+                    Ok(_) => {
+                        save_collab_session(&session);
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(session.branches()).expect("json")
+                        );
+                    }
+                    Err(err) => {
+                        eprintln!("Collab error: {err}");
+                        process::exit(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Usage: genegis collab branch list|create");
+                process::exit(1);
+            }
+        },
+        Some("export") => {
+            let output = args
+                .iter()
+                .position(|a| a == "--output" || a == "-o")
+                .and_then(|i| args.get(i + 1))
+                .map(PathBuf::from)
+                .unwrap_or_else(default_collab_path);
+            let session = load_collab_session();
+            let json = match session.export_json() {
+                Ok(json) => json,
+                Err(err) => {
+                    eprintln!("Collab error: {err}");
+                    process::exit(1);
+                }
+            };
+            if let Some(parent) = output.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(err) = std::fs::write(&output, json) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+            println!("{}", output.display());
+        }
+        Some("summary") => {
+            let session = load_collab_session();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&session.summary_json()).expect("json")
+            );
+        }
+        _ => {
+            eprintln!("Usage: genegis collab comment list|add");
+            eprintln!("       genegis collab branch list|create");
+            eprintln!("       genegis collab export [-o FILE]");
+            eprintln!("       genegis collab summary");
+            process::exit(1);
+        }
+    }
+}
+
 fn handle_workflow(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("run") => {
@@ -599,6 +746,10 @@ Usage:
   genegis plugin list [DIR]                        List plugin manifests (default: ./plugins)
   genegis plugin info BUNDLE_DIR                   Show one plugin manifest + effective caps
   genegis plugin load BUNDLE_DIR                   Capability-gated WASM load smoke
+  genegis collab comment list                      List map-anchored review comments
+  genegis collab comment add "..." [--author NAME] Add a comment
+  genegis collab branch list|create NAME           List or create project branches
+  genegis collab export [-o .genegis/collab.json]  Export collab document JSON
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
@@ -626,15 +777,15 @@ fn print_workflow_json(workflow: &genegis_workflow::GeoWorkflow) {
 }
 
 fn run_remote_cog_execute() {
-    let record = match alpha_catalog().require(REMOTE_COG_DEMO_ID) {
-        Ok(record) => record,
+    let uri = match alpha_catalog().require(REMOTE_COG_DEMO_ID) {
+        Ok(record) => record.uri.clone(),
         Err(err) => {
             eprintln!("Catalog error: {err}");
             process::exit(1);
         }
     };
 
-    match genegis_raster::read_cog_uri(&record.uri) {
+    match genegis_raster::read_cog_uri(&uri) {
         Ok(info) => {
             println!("{}", serde_json::to_string_pretty(&info.summary_json()).expect("json"));
         }

@@ -60,6 +60,16 @@ python3 scripts/build-nagoya-wards.py
 # Full example (writes examples/nagoya-population-density/output/)
 cargo run -p nagoya-population-density
 
+# COPC metadata smoke (local PDAL fixture)
+cargo run -p copc-metadata
+
+# Plugin discovery smoke
+genegis plugin list
+
+# Collaboration smoke
+genegis collab comment list
+genegis collab export -o .genegis/collab.json
+
 # Desktop workbench (Tauri — requires extra patches on Rust 1.94)
 cd apps/desktop && npm install && npm run dev
 
@@ -105,7 +115,7 @@ examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 | 2 | Alpha: GPU choropleth, GeoParquet, catalog | 1,000 → 2,500 |
 | 3 | Beta: STAC, COG, GPU workbench integration | 2,500 → 5,000 |
 | 4 | Plugins & COPC — SDK, WASM host, point cloud alpha | 5,000 → 7,500 | [`docs/roadmap/phase-4-plugins.md`](docs/roadmap/phase-4-plugins.md) |
-| 5 | Figma for GIS | 7,500 → 10,000 |
+| 5 | Figma for GIS — comments, branches, collab sync | 7,500 → 10,000 | [`docs/roadmap/phase-5-collab.md`](docs/roadmap/phase-5-collab.md) |
 | 6 | Autonomous GIS platform | 10,000+ |
 
 ## Tech stack (decisions)

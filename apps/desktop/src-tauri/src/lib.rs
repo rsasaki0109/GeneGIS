@@ -1,4 +1,5 @@
 use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
+use genegis_collab::CollabSession;
 use genegis_plugin_host::PluginHost;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -9,6 +10,13 @@ struct PluginsResponse {
     error: Option<String>,
     plugin_root: String,
     plugins: Vec<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct CollabResponse {
+    ok: bool,
+    summary: serde_json::Value,
+    comments: serde_json::Value,
 }
 
 #[tauri::command]
@@ -49,6 +57,28 @@ fn list_plugins() -> Result<PluginsResponse, String> {
     }
 }
 
+#[tauri::command]
+fn collab_snapshot() -> CollabResponse {
+    let session = load_collab_session();
+    CollabResponse {
+        ok: true,
+        summary: session.summary_json(),
+        comments: session.comments_json(),
+    }
+}
+
+fn load_collab_session() -> CollabSession {
+    let path = PathBuf::from(".genegis/collab.json");
+    if path.is_file() {
+        if let Ok(json) = std::fs::read_to_string(&path) {
+            if let Ok(session) = CollabSession::import_json(&json) {
+                return session;
+            }
+        }
+    }
+    CollabSession::demo_nagoya()
+}
+
 fn resolve_plugin_root() -> PathBuf {
     let cwd_plugins = PathBuf::from("plugins");
     if cwd_plugins.is_dir() {
@@ -71,7 +101,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             run_ask,
             launch_gpu_preview,
-            list_plugins
+            list_plugins,
+            collab_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running GeneGIS desktop");

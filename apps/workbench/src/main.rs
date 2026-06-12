@@ -8,8 +8,10 @@ use axum::{
     Json, Router,
 };
 use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
+use genegis_collab::CollabSession;
 use genegis_plugin_host::PluginHost;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
 
@@ -17,6 +19,14 @@ use tower_http::services::ServeDir;
 struct AppState {
     static_dir: PathBuf,
     plugin_root: PathBuf,
+    collab: Mutex<CollabSession>,
+}
+
+#[derive(Serialize)]
+struct CollabResponse {
+    ok: bool,
+    summary: serde_json::Value,
+    comments: serde_json::Value,
 }
 
 #[derive(Deserialize)]
@@ -51,9 +61,11 @@ async fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let static_dir = manifest_dir.join("../desktop/ui");
     let plugin_root = resolve_plugin_root(&manifest_dir);
+    let collab = load_collab_session();
     let state = Arc::new(AppState {
         static_dir: static_dir.clone(),
         plugin_root: plugin_root.clone(),
+        collab: Mutex::new(collab),
     });
 
     let app = Router::new()
@@ -61,6 +73,7 @@ async fn main() {
         .route("/api/ask", post(ask))
         .route("/api/gpu-preview", post(gpu_preview))
         .route("/api/plugins", get(list_plugins))
+        .route("/api/collab", get(collab_snapshot))
         .fallback_service(ServeDir::new(static_dir))
         .with_state(state);
 
@@ -89,6 +102,33 @@ fn resolve_plugin_root(manifest_dir: &PathBuf) -> PathBuf {
     }
 
     cwd_plugins
+}
+
+fn load_collab_session() -> CollabSession {
+    let path = PathBuf::from(".genegis/collab.json");
+    if path.is_file() {
+        if let Ok(json) = std::fs::read_to_string(&path) {
+            if let Ok(session) = CollabSession::import_json(&json) {
+                return session;
+            }
+        }
+    }
+    CollabSession::demo_nagoya()
+}
+
+async fn collab_snapshot(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let session = state
+        .collab
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    (
+        StatusCode::OK,
+        Json(CollabResponse {
+            ok: true,
+            summary: session.summary_json(),
+            comments: session.comments_json(),
+        }),
+    )
 }
 
 async fn index(State(state): State<Arc<AppState>>) -> Html<String> {

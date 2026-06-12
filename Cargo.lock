@@ -967,6 +967,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "copc-metadata"
+version = "0.1.0"
+dependencies = [
+ "genegis-pointcloud",
+ "serde_json",
+]
+
+[[package]]
 name = "copc-streaming"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2171,6 +2179,8 @@ version = "0.1.0"
 dependencies = [
  "genegis-ai",
  "genegis-analysis",
+ "genegis-catalog",
+ "genegis-collab",
  "genegis-plugin-host",
  "genegis-pointcloud",
  "genegis-query",
@@ -2185,7 +2195,13 @@ dependencies = [
 name = "genegis-collab"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "genegis-core",
  "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -2210,6 +2226,7 @@ name = "genegis-desktop"
 version = "0.1.0"
 dependencies = [
  "genegis-analysis",
+ "genegis-collab",
  "genegis-plugin-host",
  "serde",
  "serde_json",
@@ -2392,6 +2409,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "genegis-analysis",
+ "genegis-collab",
  "genegis-plugin-host",
  "open",
  "serde",

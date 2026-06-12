@@ -1,6 +1,13 @@
-//! GeneGIS collab — Phase 0 skeleton crate.
+//! GeneGIS collaboration — map comments, project branches, CRDT-ready document export.
 
-#![deny(missing_docs)]
+pub mod branch;
+pub mod comment;
+pub mod document;
+pub mod error;
+pub mod session;
 
-/// Placeholder version marker for Phase 0 scaffolding.
-pub const PHASE: &str = "0-foundation";
+pub use branch::ProjectBranch;
+pub use comment::MapComment;
+pub use document::{CollabDocument, COLLAB_SCHEMA_VERSION};
+pub use error::CollabError;
+pub use session::CollabSession;

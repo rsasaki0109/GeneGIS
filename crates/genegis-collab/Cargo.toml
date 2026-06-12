@@ -1,6 +1,6 @@
 [package]
 name = "genegis-collab"
-description = "GeneGIS collab engine (Phase 0 skeleton)"
+description = "GeneGIS collaboration — comments, branches, collab document export"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,4 +8,12 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+chrono.workspace = true
+genegis-core = { path = "../genegis-core" }
 serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

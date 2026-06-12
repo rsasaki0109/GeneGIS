@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 axum = "0.8"
 genegis-analysis = { path = "../../crates/genegis-analysis" }
+genegis-collab = { path = "../../crates/genegis-collab" }
 genegis-plugin-host = { path = "../../crates/genegis-plugin-host" }
 open = "5"
 serde = { workspace = true }

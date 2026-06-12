@@ -77,5 +77,5 @@ See [`rendering.md`](rendering.md).
 
 - [RFC 0001: Master Architecture](../rfcs/0001-master-architecture.md)
 - [Roadmap](../roadmap/phase-0-foundation.md)
-- [Plugins](plugins.md) (planned)
-- [Cloud](cloud.md) (planned)
+- [Plugin author guide](guides/plugin-author.md)
+- [Roadmap](../roadmap/phase-0-foundation.md)

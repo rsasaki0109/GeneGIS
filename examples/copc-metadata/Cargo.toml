@@ -1,0 +1,15 @@
+[package]
+name = "copc-metadata"
+description = "COPC metadata smoke example — local fixture and optional HTTP URI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "copc-metadata"
+path = "src/main.rs"
+
+[dependencies]
+genegis-pointcloud = { path = "../../crates/genegis-pointcloud" }
+serde_json.workspace = true
