@@ -117,3 +117,7 @@ Runs stored under `.genegis/agent-runs/` by default (`GENEGIS_AGENT_RUNS_DIR`).
 - LLM planner optional path (`genegis-ai`, `GENEGIS_LLM_*` env)
 
 See [`phase-5-collab.md`](phase-5-collab.md).
+
+## Next
+
+Phase 7 — audit trail & release workbench: [`phase-7-release.md`](phase-7-release.md)

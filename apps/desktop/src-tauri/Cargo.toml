@@ -18,8 +18,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 genegis-analysis = { path = "../../../crates/genegis-analysis" }
+genegis-agent = { path = "../../../crates/genegis-agent" }
+genegis-ai = { path = "../../../crates/genegis-ai" }
 genegis-collab = { path = "../../../crates/genegis-collab" }
 genegis-plugin-host = { path = "../../../crates/genegis-plugin-host" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
+uuid.workspace = true

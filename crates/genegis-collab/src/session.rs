@@ -204,6 +204,10 @@ impl CollabSession {
     pub fn comments_json(&self) -> Result<serde_json::Value, CollabError> {
         Ok(serde_json::json!(self.document()?.comments))
     }
+
+    pub fn provenance_json(&self) -> Result<serde_json::Value, CollabError> {
+        Ok(serde_json::json!(self.document()?.project.workspace().provenance.entries))
+    }
 }
 
 impl Clone for CollabSession {

@@ -10,6 +10,39 @@ use crate::error::AgentError;
 /// Default path for the latest agent run trace JSON.
 pub const DEFAULT_AGENT_RUN_PATH: &str = ".genegis/agent-run.json";
 
+/// Directory for persisted agent run traces (one JSON file per run id).
+pub const DEFAULT_AGENT_RUNS_DIR: &str = ".genegis/agent-runs";
+
+/// Lightweight agent run index entry for history APIs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRunSummary {
+    pub id: Uuid,
+    pub prompt: String,
+    pub plan_only: bool,
+    pub planner_mode: String,
+    pub workflow_id: Option<String>,
+    pub verification_passed: bool,
+    pub verify_attempts: u32,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: DateTime<Utc>,
+}
+
+impl From<&AgentRun> for AgentRunSummary {
+    fn from(run: &AgentRun) -> Self {
+        Self {
+            id: run.id,
+            prompt: run.prompt.clone(),
+            plan_only: run.plan_only,
+            planner_mode: run.planner_mode.clone(),
+            workflow_id: run.workflow_id.clone(),
+            verification_passed: run.verification_passed,
+            verify_attempts: run.verify_attempts,
+            started_at: run.started_at,
+            finished_at: run.finished_at,
+        }
+    }
+}
+
 /// Agent role in the orchestration graph (Phase 6 alpha).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,6 +120,37 @@ pub struct AgentRun {
 }
 
 impl AgentRun {
+    pub fn summary(&self) -> AgentRunSummary {
+        AgentRunSummary::from(self)
+    }
+
+    pub fn list_from_dir(dir: impl AsRef<Path>) -> Result<Vec<AgentRunSummary>, AgentError> {
+        let dir = dir.as_ref();
+        if !dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut summaries = Vec::new();
+        for entry in std::fs::read_dir(dir).map_err(|err| AgentError::Json(err.to_string()))? {
+            let entry = entry.map_err(|err| AgentError::Json(err.to_string()))?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                continue;
+            }
+            if let Ok(run) = Self::load_from_path(&path) {
+                summaries.push(run.summary());
+            }
+        }
+
+        summaries.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        Ok(summaries)
+    }
+
+    pub fn load_from_runs_dir(dir: impl AsRef<Path>, id: Uuid) -> Result<Self, AgentError> {
+        let path = dir.as_ref().join(format!("{id}.json"));
+        Self::load_from_path(path)
+    }
+
     pub fn trace_json(&self) -> Result<String, AgentError> {
         serde_json::to_string_pretty(self).map_err(|err| AgentError::Json(err.to_string()))
     }

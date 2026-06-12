@@ -1,15 +1,16 @@
 //! Local web workbench — serves GeneGIS UI and runs the ask pipeline via HTTP.
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
 use genegis_agent::{
-    pull_latest_agent_run, push_agent_run, AgentOrchestrator, AgentRun, AgentRunConfig,
-    AgentRole, DEFAULT_AGENT_RUN_PATH,
+    get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run, AgentOrchestrator,
+    AgentRun, AgentRunConfig, AgentRole, AgentRunSummary, DEFAULT_AGENT_RUN_PATH,
+    DEFAULT_AGENT_RUNS_DIR,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
@@ -19,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower_http::{cors::CorsLayer, services::ServeDir};
+use uuid::Uuid;
 
 const DEFAULT_COLLAB_PATH: &str = ".genegis/collab.json";
 const DEFAULT_AGENT_RUN_PATH_LOCAL: &str = DEFAULT_AGENT_RUN_PATH;
@@ -37,6 +39,7 @@ struct AppState {
     plugin_root: PathBuf,
     collab_path: PathBuf,
     agent_run_path: PathBuf,
+    agent_runs_dir: PathBuf,
     server_url: String,
     collab: Arc<Mutex<CollabSession>>,
     sync: Arc<Mutex<SyncStatus>>,
@@ -55,6 +58,7 @@ struct CollabResponse {
     ok: bool,
     summary: serde_json::Value,
     comments: serde_json::Value,
+    provenance: serde_json::Value,
     sync: CollabSyncMeta,
 }
 
@@ -75,6 +79,13 @@ struct AgentRunResponse {
     ok: bool,
     error: Option<String>,
     run: Option<AgentRun>,
+}
+
+#[derive(Serialize)]
+struct AgentRunListResponse {
+    ok: bool,
+    error: Option<String>,
+    runs: Vec<AgentRunSummary>,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +126,9 @@ async fn main() {
     let agent_run_path = std::env::var("GENEGIS_AGENT_RUN_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_AGENT_RUN_PATH_LOCAL));
+    let agent_runs_dir = std::env::var("GENEGIS_AGENT_RUNS_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_AGENT_RUNS_DIR));
     let server_url = std::env::var("GENEGIS_SERVER_URL")
         .unwrap_or_else(|_| DEFAULT_SERVER_URL.into());
 
@@ -127,6 +141,7 @@ async fn main() {
         plugin_root: plugin_root.clone(),
         collab_path,
         agent_run_path,
+        agent_runs_dir,
         server_url: server_url.clone(),
         collab: Arc::new(Mutex::new(collab)),
         sync: Arc::new(Mutex::new(sync)),
@@ -141,9 +156,12 @@ async fn main() {
         .route("/api/collab/comment", post(add_comment))
         .route("/api/collab/sync", post(sync_collab))
         .route("/api/agent/runs/latest", get(latest_agent_run))
+        .route("/api/agent/runs/:id", get(get_agent_run_by_id))
+        .route("/api/agent/runs", get(list_agent_runs_handler))
         .route("/api/agent/run", post(run_agent))
         .route("/api/agent/plan", post(plan_agent))
         .route("/api/agent/execute", post(execute_agent))
+        .route("/api/agent/retry", post(retry_agent))
         .fallback_service(ServeDir::new(static_dir))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -293,6 +311,7 @@ fn collab_response(session: &CollabSession, sync: &SyncStatus) -> CollabResponse
             serde_json::json!({ "error": err.to_string() })
         }),
         comments: session.comments_json().unwrap_or_else(|_| serde_json::json!([])),
+        provenance: session.provenance_json().unwrap_or_else(|_| serde_json::json!([])),
         sync: CollabSyncMeta {
             source: sync.source.clone(),
             server_url: sync.server_url.clone(),
@@ -313,6 +332,10 @@ fn collab_error_response(
         comments: session
             .as_ref()
             .and_then(|value| value.comments_json().ok())
+            .unwrap_or_else(|| serde_json::json!([])),
+        provenance: session
+            .as_ref()
+            .and_then(|value| value.provenance_json().ok())
             .unwrap_or_else(|| serde_json::json!([])),
         sync: CollabSyncMeta {
             source: sync.source.clone(),
@@ -537,23 +560,102 @@ async fn list_plugins(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn latest_agent_run(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match AgentRun::load_from_path(&state.agent_run_path) {
-        Ok(run) => (
+        Ok(run) => agent_run_ok(run),
+        Err(_) => agent_run_ok_empty(),
+    }
+}
+
+async fn list_agent_runs_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let server_url = state.server_url.clone();
+    let runs_dir = state.agent_runs_dir.clone();
+    let result = tokio::task::spawn_blocking(move || list_agent_runs_for_workbench(&server_url, &runs_dir))
+        .await
+        .map_err(|err| err.to_string())
+        .and_then(|inner| inner);
+
+    match result {
+        Ok(runs) => (
             StatusCode::OK,
-            Json(AgentRunResponse {
+            Json(AgentRunListResponse {
                 ok: true,
                 error: None,
-                run: Some(run),
+                runs,
             }),
         ),
-        Err(_) => (
-            StatusCode::OK,
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(AgentRunListResponse {
+                ok: false,
+                error: Some(err),
+                runs: Vec::new(),
+            }),
+        ),
+    }
+}
+
+async fn get_agent_run_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let server_url = state.server_url.clone();
+    let runs_dir = state.agent_runs_dir.clone();
+    let result = tokio::task::spawn_blocking(move || get_agent_run_for_workbench(&server_url, &runs_dir, id))
+        .await
+        .map_err(|err| err.to_string())
+        .and_then(|inner| inner);
+
+    match result {
+        Ok(run) => agent_run_ok(run),
+        Err(err) => (
+            StatusCode::NOT_FOUND,
             Json(AgentRunResponse {
-                ok: true,
-                error: None,
+                ok: false,
+                error: Some(err),
                 run: None,
             }),
         ),
     }
+}
+
+fn list_agent_runs_for_workbench(
+    server_url: &str,
+    runs_dir: &PathBuf,
+) -> Result<Vec<AgentRunSummary>, String> {
+    list_agent_runs(server_url)
+        .or_else(|_| {
+            AgentRun::list_from_dir(runs_dir).map_err(|err| err.to_string())
+        })
+}
+
+fn get_agent_run_for_workbench(
+    server_url: &str,
+    runs_dir: &PathBuf,
+    id: Uuid,
+) -> Result<AgentRun, String> {
+    get_agent_run(server_url, id)
+        .or_else(|_| AgentRun::load_from_runs_dir(runs_dir, id).map_err(|err| err.to_string()))
+}
+
+fn agent_run_ok(run: AgentRun) -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::OK,
+        Json(AgentRunResponse {
+            ok: true,
+            error: None,
+            run: Some(run),
+        }),
+    )
+}
+
+fn agent_run_ok_empty() -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::OK,
+        Json(AgentRunResponse {
+            ok: true,
+            error: None,
+            run: None,
+        }),
+    )
 }
 
 async fn run_agent(
@@ -627,6 +729,41 @@ async fn execute_agent(State(state): State<Arc<AppState>>) -> impl IntoResponse 
     .unwrap_or_else(|err| Err(genegis_agent::AgentError::Message(err.to_string())));
 
     agent_run_response(result, &state.agent_run_path)
+}
+
+async fn retry_agent(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let agent_run_path = state.agent_run_path.clone();
+    let collab_path = state.collab_path.clone();
+    let server_url = state.server_url.clone();
+    let result = tokio::task::spawn_blocking(move || retry_agent_run(
+        &agent_run_path,
+        &collab_path,
+        &server_url,
+    ))
+    .await
+    .map_err(|err| genegis_agent::AgentError::Message(err.to_string()))
+    .and_then(|inner| inner);
+
+    agent_run_response(result, &state.agent_run_path)
+}
+
+fn retry_agent_run(
+    agent_run_path: &PathBuf,
+    collab_path: &PathBuf,
+    server_url: &str,
+) -> Result<AgentRun, genegis_agent::AgentError> {
+    if let Ok(plan) = PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH) {
+        let mut run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline().with_link_collab_on_failure(true))
+            .execute_plan(plan)?;
+        return finalize_agent_run(&mut run, agent_run_path, collab_path, server_url);
+    }
+
+    let latest = AgentRun::load_from_path(agent_run_path)?;
+    let mut run = AgentOrchestrator::new()
+        .with_config(AgentRunConfig::rule_based_offline().with_link_collab_on_failure(true))
+        .run(&latest.prompt)?;
+    finalize_agent_run(&mut run, agent_run_path, collab_path, server_url)
 }
 
 fn agent_run_response(

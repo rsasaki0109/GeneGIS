@@ -19,6 +19,7 @@ serde = { workspace = true }
 serde_json.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tower-http = { version = "0.6", features = ["cors"] }
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

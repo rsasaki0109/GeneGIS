@@ -7,8 +7,9 @@ use genegis_analysis::{
 };
 use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
 use genegis_agent::{
-    pull_latest_agent_run, push_agent_run, AgentOrchestrator, AgentRun, AgentRunConfig,
-    AgentRole, DEFAULT_AGENT_RUN_PATH, DEFAULT_SERVER_URL,
+    get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run, AgentOrchestrator,
+    AgentRun, AgentRunConfig, AgentRole, DEFAULT_AGENT_RUN_PATH,
+    DEFAULT_AGENT_RUNS_DIR, DEFAULT_SERVER_URL,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
@@ -849,10 +850,80 @@ fn handle_agent(args: &[String]) {
                 process::exit(1);
             }
         }
+        Some("list") => {
+            let server_url = collab_server_url(args);
+            let runs_dir = agent_runs_dir_from_args(args);
+            let runs = list_agent_runs(&server_url)
+                .or_else(|_| AgentRun::list_from_dir(&runs_dir))
+                .unwrap_or_else(|err| {
+                    eprintln!("Agent list error: {err}");
+                    process::exit(1);
+                });
+            match serde_json::to_string_pretty(&runs) {
+                Ok(json) => println!("{json}"),
+                Err(err) => {
+                    eprintln!("Failed to serialize runs: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        Some("export-audit") => {
+            let output = args
+                .iter()
+                .position(|a| a == "--output" || a == "-o")
+                .and_then(|i| args.get(i + 1))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(".genegis/audit-bundle.json"));
+            let session = load_collab_session();
+            let runs_dir = agent_runs_dir_from_args(args);
+            let runs = AgentRun::list_from_dir(&runs_dir).unwrap_or_default();
+            let latest = AgentRun::load_from_path(DEFAULT_AGENT_RUN_PATH).ok();
+            let bundle = serde_json::json!({
+                "schema": "genegis-audit-bundle-v1",
+                "collab_summary": session.summary_json().unwrap_or_else(|err| serde_json::json!({ "error": err.to_string() })),
+                "comments": session.comments_json().unwrap_or_else(|_| serde_json::json!([])),
+                "provenance": session.provenance_json().unwrap_or_else(|_| serde_json::json!([])),
+                "agent_runs": runs,
+                "latest_agent_run_id": latest.as_ref().map(|run| run.id),
+            });
+            if let Some(parent) = output.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let json = serde_json::to_string_pretty(&bundle).expect("json");
+            if let Err(err) = std::fs::write(&output, json) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+            eprintln!("Audit bundle written to {}", output.display());
+        }
+        Some("get") => {
+            let server_url = collab_server_url(args);
+            let runs_dir = agent_runs_dir_from_args(args);
+            let Some(id) = args.get(1).and_then(|value| uuid::Uuid::parse_str(value).ok()) else {
+                eprintln!("Usage: genegis agent get RUN_ID [--url URL]");
+                process::exit(1);
+            };
+            let run = get_agent_run(&server_url, id)
+                .or_else(|_| AgentRun::load_from_runs_dir(&runs_dir, id))
+                .unwrap_or_else(|err| {
+                    eprintln!("Agent get error: {err}");
+                    process::exit(1);
+                });
+            match run.trace_json() {
+                Ok(json) => println!("{json}"),
+                Err(err) => {
+                    eprintln!("Failed to serialize run: {err}");
+                    process::exit(1);
+                }
+            }
+        }
         _ => {
             eprintln!("Usage: genegis agent run \"PROMPT\" [--plan-only] [--planner rule|llm] [--verify-retries N] [--push] [--link-collab] [--json] [-o FILE]");
             eprintln!("       genegis agent plan \"PROMPT\" [--planner rule|llm]");
             eprintln!("       genegis agent execute [--push] [--link-collab] [--verify-retries N] [-o FILE]");
+            eprintln!("       genegis agent list [--url URL]");
+            eprintln!("       genegis agent get RUN_ID [--url URL]");
+            eprintln!("       genegis agent export-audit [-o .genegis/audit-bundle.json]");
             eprintln!("       genegis agent pull [--url URL] [-o FILE]");
             eprintln!("       genegis agent push [--url URL] [-i FILE]");
             process::exit(1);
@@ -874,6 +945,14 @@ fn agent_output_path(args: &[String]) -> PathBuf {
         .and_then(|i| args.get(i + 1))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUN_PATH))
+}
+
+fn agent_runs_dir_from_args(args: &[String]) -> PathBuf {
+    args.iter()
+        .position(|a| a == "--runs-dir")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUNS_DIR))
 }
 
 fn link_agent_failure_comment(run: &mut AgentRun) -> bool {
@@ -1008,6 +1087,16 @@ fn handle_collab(args: &[String]) {
                 serde_json::to_string_pretty(&session.summary_json().expect("summary")).expect("json")
             );
         }
+        Some("provenance") => match args.get(1).map(String::as_str) {
+            Some("list") => {
+                let session = load_collab_session();
+                println!("{}", session.provenance_json().expect("provenance"));
+            }
+            _ => {
+                eprintln!("Usage: genegis collab provenance list");
+                process::exit(1);
+            }
+        },
         Some("pull") => {
             let url = collab_server_url(args);
             let output = collab_output_path(args);
@@ -1073,6 +1162,7 @@ fn handle_collab(args: &[String]) {
         _ => {
             eprintln!("Usage: genegis collab comment list|add");
             eprintln!("       genegis collab branch list|create");
+            eprintln!("       genegis collab provenance list");
             eprintln!("       genegis collab export [-o FILE]");
             eprintln!("       genegis collab summary");
             eprintln!("       genegis collab pull [--url URL] [-o FILE]");
@@ -1147,6 +1237,7 @@ Usage:
   genegis collab comment list                      List map-anchored review comments
   genegis collab comment add "..." [--author NAME] Add a comment
   genegis collab branch list|create NAME           List or create project branches
+  genegis collab provenance list                   List workspace provenance entries
   genegis collab export [-o .genegis/collab.json]  Export collab document JSON
   genegis collab pull [--url URL] [-o FILE]        Pull session from GeneGIS Server
   genegis collab push [--url URL] [-i FILE]        Push session to GeneGIS Server
@@ -1157,6 +1248,9 @@ Usage:
   genegis agent run "..." --json -o .genegis/agent-run.json  Export trace JSON
   genegis agent plan "名古屋市の人口密度を表示"         Human gate — save pending plan JSON
   genegis agent execute [--push] [--link-collab]   Approve pending plan → execute → verify
+  genegis agent list [--url URL]                   List agent run history
+  genegis agent get RUN_ID [--url URL]             Fetch one agent run trace
+  genegis agent export-audit [-o FILE]             Export collab provenance + agent run index
   genegis agent pull [--url URL] [-o FILE]         Pull latest run from GeneGIS Server
   genegis agent push [--url URL] [-i FILE]         Push run trace to GeneGIS Server
   genegis workflow run nagoya-density              Print workflow graph JSON

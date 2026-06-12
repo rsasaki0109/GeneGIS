@@ -25,3 +25,4 @@ genegis-storage = { path = "../genegis-storage" }
 genegis-workflow = { path = "../genegis-workflow" }
 genegis-testkit = { path = "../genegis-testkit" }
 serde_json.workspace = true
+uuid.workspace = true

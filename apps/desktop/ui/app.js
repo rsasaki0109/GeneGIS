@@ -13,6 +13,11 @@ const agentMetaEl = document.getElementById("agent-meta");
 const agentStepsEl = document.getElementById("agent-steps");
 const agentPlanBtn = document.getElementById("agent-plan-btn");
 const agentExecuteBtn = document.getElementById("agent-execute-btn");
+const agentRetryBtn = document.getElementById("agent-retry-btn");
+const agentHistoryEl = document.getElementById("agent-history");
+const provenanceEl = document.getElementById("provenance");
+
+let activeProvenanceFilter = null;
 const commentFormEl = document.getElementById("comment-form");
 const commentAuthorEl = document.getElementById("comment-author");
 const commentBodyEl = document.getElementById("comment-body");
@@ -145,7 +150,14 @@ function renderAgentRun(run) {
   if (!run) {
     agentMetaEl.textContent = "No agent run yet — try: genegis agent run";
     agentStepsEl.textContent = "Run the north-star prompt to populate trace.";
+    if (agentRetryBtn) {
+      agentRetryBtn.hidden = true;
+    }
     return;
+  }
+
+  if (agentRetryBtn) {
+    agentRetryBtn.hidden = !(run.verification_passed === false && run.plan_only === false);
   }
 
   agentMetaEl.textContent = [
@@ -183,17 +195,38 @@ function renderAgentRun(run) {
 
 async function loadAgentTrace() {
   try {
-    const response = await fetch("/api/agent/runs/latest");
-    const payload = await response.json();
-    renderAgentRun(payload.run);
+    let latestPayload;
+    let historyPayload;
+
+    if (window.__TAURI__?.core?.invoke) {
+      latestPayload = await window.__TAURI__.core.invoke("agent_runs_latest");
+      historyPayload = await window.__TAURI__.core.invoke("agent_runs_list");
+    } else {
+      [latestPayload, historyPayload] = await Promise.all([
+        fetch("/api/agent/runs/latest").then((response) => response.json()),
+        loadAgentHistory(),
+      ]);
+    }
+
+    renderAgentRun(latestPayload.run);
+    if (historyPayload.ok) {
+      renderAgentHistory(historyPayload.runs || []);
+    } else {
+      agentHistoryEl.textContent = historyPayload.error || "History unavailable";
+    }
   } catch (err) {
     console.error(err);
     agentMetaEl.textContent = `Error: ${err.message || err}`;
     agentStepsEl.textContent = "";
+    agentHistoryEl.textContent = "";
   }
 }
 
 async function invokeAgentPlan(prompt) {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("agent_plan", { prompt });
+  }
+
   const response = await fetch("/api/agent/plan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -203,8 +236,110 @@ async function invokeAgentPlan(prompt) {
 }
 
 async function invokeAgentExecute() {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("agent_execute");
+  }
+
   const response = await fetch("/api/agent/execute", { method: "POST" });
   return response.json();
+}
+
+async function invokeAgentRetry() {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("agent_retry");
+  }
+
+  const response = await fetch("/api/agent/retry", { method: "POST" });
+  return response.json();
+}
+
+async function loadAgentHistory() {
+  const response = await fetch("/api/agent/runs");
+  return response.json();
+}
+
+async function loadAgentRunById(id) {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("agent_run_get", { id });
+  }
+
+  const response = await fetch(`/api/agent/runs/${id}`);
+  return response.json();
+}
+
+function renderAgentHistory(runs) {
+  agentHistoryEl.innerHTML = "";
+  if (!runs?.length) {
+    agentHistoryEl.textContent = "No agent runs yet";
+    return;
+  }
+
+  for (const run of runs.slice(0, 8)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `agent-history-item ${run.verification_passed ? "ok" : "bad"}`;
+    button.textContent = `${run.id.slice(0, 8)}… · ${run.workflow_id || "plan-only"} · ${
+      run.verification_passed ? "passed" : run.plan_only ? "plan" : "failed"
+    }`;
+    button.addEventListener("click", async () => {
+      try {
+        const payload = await loadAgentRunById(run.id);
+        if (!payload.ok || !payload.run) {
+          throw new Error(payload.error || "Run not found");
+        }
+        renderAgentRun(payload.run);
+        activeProvenanceFilter = run.id;
+        renderProvenance(window.__lastProvenanceEntries || [], activeProvenanceFilter);
+      } catch (err) {
+        console.error(err);
+        agentMetaEl.textContent = `Error: ${err.message || err}`;
+      }
+    });
+    agentHistoryEl.appendChild(button);
+  }
+}
+
+function renderProvenance(entries, filterRunId = activeProvenanceFilter) {
+  window.__lastProvenanceEntries = entries || [];
+  provenanceEl.innerHTML = "";
+  const filtered = filterRunId
+    ? (entries || []).filter((entry) => entry.agent_run_id === filterRunId)
+    : entries || [];
+
+  if (!filtered?.length) {
+    provenanceEl.textContent = filterRunId
+      ? "No provenance entries for selected agent run"
+      : "No provenance entries yet";
+    return;
+  }
+
+  if (filterRunId) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "secondary provenance-clear";
+    clear.textContent = "Show all provenance";
+    clear.addEventListener("click", () => {
+      activeProvenanceFilter = null;
+      renderProvenance(window.__lastProvenanceEntries || [], null);
+    });
+    provenanceEl.appendChild(clear);
+  }
+
+  for (const entry of filtered.slice().reverse().slice(0, 10)) {
+    const card = document.createElement("article");
+    card.className = "provenance-item";
+    const header = document.createElement("div");
+    header.className = "provenance-meta";
+    header.textContent = `${entry.action} · ${entry.target} · ${entry.actor}`;
+    card.appendChild(header);
+    if (entry.agent_run_id) {
+      const link = document.createElement("div");
+      link.className = "provenance-agent";
+      link.textContent = `agent run: ${entry.agent_run_id.slice(0, 8)}…`;
+      card.appendChild(link);
+    }
+    provenanceEl.appendChild(card);
+  }
 }
 
 function renderCollabSync(sync) {
@@ -298,6 +433,7 @@ async function loadComments() {
     const payload = await invokeCollab();
     renderCollabSync(payload.sync);
     renderComments(payload.comments || []);
+    renderProvenance(payload.provenance || []);
   } catch (err) {
     console.error(err);
     collabSyncEl.textContent = `Error: ${err.message || err}`;
@@ -313,6 +449,7 @@ async function syncComments() {
     const payload = await invokeCollabSync();
     renderCollabSync(payload.sync);
     renderComments(payload.comments || []);
+    renderProvenance(payload.provenance || []);
   } catch (err) {
     console.error(err);
     collabSyncEl.textContent = `Sync error: ${err.message || err}`;
@@ -338,6 +475,7 @@ async function submitComment(event) {
     }
     renderCollabSync(payload.sync);
     renderComments(payload.comments || []);
+    renderProvenance(payload.provenance || []);
     commentBodyEl.value = "";
   } catch (err) {
     console.error(err);
@@ -480,6 +618,26 @@ agentExecuteBtn?.addEventListener("click", async () => {
     setStatus(`Execute error: ${err.message || err}`);
   } finally {
     agentExecuteBtn.disabled = false;
+  }
+});
+
+agentRetryBtn?.addEventListener("click", async () => {
+  agentRetryBtn.disabled = true;
+  setStatus("Retrying agent verify…");
+  try {
+    const payload = await invokeAgentRetry();
+    if (!payload.ok || !payload.run) {
+      throw new Error(payload.error || "Agent retry failed");
+    }
+    renderAgentRun(payload.run);
+    await loadComments();
+    await loadAgentTrace();
+    setStatus(payload.run.verification_passed ? "Verification passed" : "Verification still failed");
+  } catch (err) {
+    console.error(err);
+    setStatus(`Retry error: ${err.message || err}`);
+  } finally {
+    agentRetryBtn.disabled = false;
   }
 });
 

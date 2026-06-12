@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use genegis_agent::{AgentError, AgentRun};
+use genegis_agent::{AgentError, AgentRun, AgentRunSummary};
+use uuid::Uuid;
 
 /// Directory for persisted agent run traces (one JSON file per run id).
 pub const DEFAULT_AGENT_RUNS_DIR: &str = ".genegis/agent-runs";
@@ -44,6 +45,18 @@ impl AgentRunStore {
         Ok(latest.clone())
     }
 
+    pub fn list(&self) -> Result<Vec<AgentRunSummary>, AgentError> {
+        AgentRun::list_from_dir(&self.runs_dir)
+    }
+
+    pub fn get(&self, id: Uuid) -> Result<Option<AgentRun>, AgentError> {
+        let path = self.runs_dir.join(format!("{id}.json"));
+        if !path.is_file() {
+            return Ok(None);
+        }
+        AgentRun::load_from_path(path).map(Some)
+    }
+
     pub fn save(&self, run: &AgentRun) -> Result<AgentRun, AgentError> {
         std::fs::create_dir_all(&self.runs_dir)
             .map_err(|err| AgentError::Json(err.to_string()))?;
@@ -68,32 +81,10 @@ fn load_latest(latest_path: &Path, runs_dir: &Path) -> Option<AgentRun> {
         }
     }
 
-    if !runs_dir.is_dir() {
-        return None;
-    }
-
-    let mut newest: Option<(std::time::SystemTime, AgentRun)> = None;
-    if let Ok(entries) = std::fs::read_dir(runs_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
-                continue;
-            }
-            let Ok(run) = AgentRun::load_from_path(&path) else {
-                continue;
-            };
-            let modified = entry
-                .metadata()
-                .and_then(|meta| meta.modified())
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-            match &newest {
-                Some((best_time, _)) if modified <= *best_time => {}
-                _ => newest = Some((modified, run)),
-            }
-        }
-    }
-
-    newest.map(|(_, run)| run)
+    AgentRun::list_from_dir(runs_dir)
+        .ok()
+        .and_then(|summaries| summaries.first().map(|summary| summary.id))
+        .and_then(|id| AgentRun::load_from_runs_dir(runs_dir, id).ok())
 }
 
 #[cfg(test)]
@@ -102,7 +93,7 @@ mod tests {
     use genegis_agent::{AgentOrchestrator, AgentRunConfig};
 
     #[test]
-    fn saves_and_loads_latest_run() {
+    fn saves_lists_and_gets_runs() {
         let temp = tempfile::tempdir().expect("tempdir");
         let runs_dir = temp.path().join("agent-runs");
         let latest_path = temp.path().join("agent-run.json");
@@ -114,10 +105,10 @@ mod tests {
             .expect("run");
 
         store.save(&run).expect("save");
-        assert!(runs_dir.join(format!("{}.json", run.id)).is_file());
-        assert!(latest_path.is_file());
-
-        let loaded = store.latest().expect("latest").expect("some run");
-        assert_eq!(loaded.id, run.id);
+        assert_eq!(store.list().expect("list").len(), 1);
+        assert_eq!(
+            store.get(run.id).expect("get").expect("run").id,
+            run.id
+        );
     }
 }

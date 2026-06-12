@@ -138,6 +138,7 @@ examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 | 4 | Plugins & COPC — SDK, WASM host, point cloud alpha | 5,000 → 7,500 | [`docs/roadmap/phase-4-plugins.md`](docs/roadmap/phase-4-plugins.md) |
 | 5 | Figma for GIS — comments, branches, collab sync | 7,500 → 10,000 | [`docs/roadmap/phase-5-collab.md`](docs/roadmap/phase-5-collab.md) |
 | 6 | Autonomous GIS platform — multi-agent orchestration | 10,000 → 15,000 | [`docs/roadmap/phase-6-autonomous.md`](docs/roadmap/phase-6-autonomous.md) |
+| 7 | Audit trail & release workbench — run history + provenance UI | 15,000 → 20,000 | [`docs/roadmap/phase-7-release.md`](docs/roadmap/phase-7-release.md) |
 
 ## Tech stack (decisions)
 

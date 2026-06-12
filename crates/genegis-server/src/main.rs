@@ -1,16 +1,16 @@
-//! GeneGIS Server — collab session + agent run sync prototype (Phase 5–6 beta).
+//! GeneGIS Server — collab session + agent run sync prototype (Phase 5–7 alpha).
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
-use genegis_agent::AgentRun;
+use genegis_agent::{AgentRun, AgentRunSummary};
 use genegis_collab::{CollabApiPayload, CollabUpload};
 use genegis_server::agent_store::{
     AgentRunStore, DEFAULT_AGENT_LATEST_PATH, DEFAULT_AGENT_RUNS_DIR,
@@ -18,6 +18,7 @@ use genegis_server::agent_store::{
 use genegis_server::store::{CollabStore, DEFAULT_COLLAB_PATH};
 use serde::Serialize;
 use tower_http::cors::CorsLayer;
+use uuid::Uuid;
 
 #[derive(Clone)]
 struct AppState {
@@ -42,6 +43,13 @@ struct AgentRunResponse {
     run: Option<AgentRun>,
 }
 
+#[derive(Serialize)]
+struct AgentRunListResponse {
+    ok: bool,
+    error: Option<String>,
+    runs: Vec<AgentRunSummary>,
+}
+
 #[tokio::main]
 async fn main() {
     let collab_path = std::env::var("GENEGIS_COLLAB_PATH")
@@ -62,7 +70,11 @@ async fn main() {
         .route("/health", get(health))
         .route("/api/collab", get(get_collab).put(put_collab))
         .route("/api/agent/runs/latest", get(get_latest_agent_run))
-        .route("/api/agent/runs", get(get_latest_agent_run).post(post_agent_run))
+        .route("/api/agent/runs/:id", get(get_agent_run_by_id))
+        .route(
+            "/api/agent/runs",
+            get(list_agent_runs).post(post_agent_run),
+        )
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -115,32 +127,50 @@ async fn put_collab(
     }
 }
 
-async fn get_latest_agent_run(State(state): State<AppState>) -> impl IntoResponse {
-    match state.agent_runs.latest() {
-        Ok(Some(run)) => (
+async fn list_agent_runs(State(state): State<AppState>) -> impl IntoResponse {
+    match state.agent_runs.list() {
+        Ok(runs) => (
             StatusCode::OK,
-            Json(AgentRunResponse {
+            Json(AgentRunListResponse {
                 ok: true,
                 error: None,
-                run: Some(run),
-            }),
-        ),
-        Ok(None) => (
-            StatusCode::OK,
-            Json(AgentRunResponse {
-                ok: true,
-                error: None,
-                run: None,
+                runs,
             }),
         ),
         Err(err) => (
             StatusCode::BAD_REQUEST,
-            Json(AgentRunResponse {
+            Json(AgentRunListResponse {
                 ok: false,
                 error: Some(err.to_string()),
+                runs: Vec::new(),
+            }),
+        ),
+    }
+}
+
+async fn get_latest_agent_run(State(state): State<AppState>) -> impl IntoResponse {
+    match state.agent_runs.latest() {
+        Ok(Some(run)) => agent_run_ok(run),
+        Ok(None) => agent_run_ok_empty(),
+        Err(err) => agent_run_err(err.to_string()),
+    }
+}
+
+async fn get_agent_run_by_id(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.agent_runs.get(id) {
+        Ok(Some(run)) => agent_run_ok(run),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(AgentRunResponse {
+                ok: false,
+                error: Some(format!("agent run not found: {id}")),
                 run: None,
             }),
         ),
+        Err(err) => agent_run_err(err.to_string()),
     }
 }
 
@@ -149,23 +179,42 @@ async fn post_agent_run(
     Json(body): Json<AgentRun>,
 ) -> impl IntoResponse {
     match state.agent_runs.save(&body) {
-        Ok(run) => (
-            StatusCode::OK,
-            Json(AgentRunResponse {
-                ok: true,
-                error: None,
-                run: Some(run),
-            }),
-        ),
-        Err(err) => (
-            StatusCode::BAD_REQUEST,
-            Json(AgentRunResponse {
-                ok: false,
-                error: Some(err.to_string()),
-                run: None,
-            }),
-        ),
+        Ok(run) => agent_run_ok(run),
+        Err(err) => agent_run_err(err.to_string()),
     }
+}
+
+fn agent_run_ok(run: AgentRun) -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::OK,
+        Json(AgentRunResponse {
+            ok: true,
+            error: None,
+            run: Some(run),
+        }),
+    )
+}
+
+fn agent_run_ok_empty() -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::OK,
+        Json(AgentRunResponse {
+            ok: true,
+            error: None,
+            run: None,
+        }),
+    )
+}
+
+fn agent_run_err(message: String) -> (StatusCode, Json<AgentRunResponse>) {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(AgentRunResponse {
+            ok: false,
+            error: Some(message),
+            run: None,
+        }),
+    )
 }
 
 fn collab_error(message: String) -> (StatusCode, Json<CollabApiPayload>) {

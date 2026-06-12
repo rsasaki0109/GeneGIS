@@ -2237,6 +2237,7 @@ dependencies = [
  "genegis-testkit",
  "genegis-workflow",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -2276,6 +2277,8 @@ dependencies = [
 name = "genegis-desktop"
 version = "0.1.0"
 dependencies = [
+ "genegis-agent",
+ "genegis-ai",
  "genegis-analysis",
  "genegis-collab",
  "genegis-plugin-host",
@@ -2283,6 +2286,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "uuid",
 ]
 
 [[package]]
@@ -2388,6 +2392,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower-http",
+ "uuid",
 ]
 
 [[package]]
@@ -2477,6 +2482,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-http",
+ "uuid",
 ]
 
 [[package]]

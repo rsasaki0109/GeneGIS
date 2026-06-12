@@ -47,6 +47,7 @@ impl CollabDocument {
             "project_name": self.project.workspace().name,
             "comment_count": self.comments.len(),
             "branch_count": self.branches.len(),
+            "provenance_count": self.project.workspace().provenance.entries.len(),
             "branches": self.branches.iter().map(|b| &b.name).collect::<Vec<_>>(),
         })
     }

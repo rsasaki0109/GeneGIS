@@ -29,6 +29,8 @@ genegis agent run "名古屋市の人口密度を表示" --plan-only
 # Sync trace to GeneGIS Server
 genegis agent run "名古屋市の人口密度を表示" --push
 genegis agent pull
+genegis agent list
+genegis agent get RUN_ID
 ```
 
 Pending plans are stored at `.genegis/agent-plan.json`. Runs are stored at `.genegis/agent-run.json` and `.genegis/agent-runs/{id}.json`.
@@ -54,10 +56,23 @@ Unknown tools are rejected before execution (see `crates/genegis-agent/src/tool_
 
 ```bash
 curl http://127.0.0.1:7813/api/agent/runs/latest
+curl http://127.0.0.1:7813/api/agent/runs
+curl http://127.0.0.1:7813/api/agent/runs/5bcfb044-7170-4aa1-b652-8f774d8cb28f
 curl -X POST http://127.0.0.1:7813/api/agent/runs -H 'Content-Type: application/json' -d @.genegis/agent-run.json
 ```
 
-Workbench proxies the same flow at `/api/agent/plan`, `/api/agent/execute`, and `/api/agent/runs/latest`.
+Workbench proxies the same flow at `/api/agent/plan`, `/api/agent/execute`, `/api/agent/retry`, and `/api/agent/runs/latest`.
+
+Tauri desktop uses the same UI with `invoke` commands (`agent_plan`, `agent_execute`, `agent_retry`, `agent_runs_list`, …).
+
+## Audit export
+
+```bash
+genegis agent export-audit -o .genegis/audit-bundle.json
+genegis collab provenance list
+```
+
+Bundle includes collab summary, comments, provenance entries, and agent run index.
 
 ## Provenance
 
