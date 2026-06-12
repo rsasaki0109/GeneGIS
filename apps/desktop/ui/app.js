@@ -7,6 +7,7 @@ const mapFrame = document.getElementById("map-frame");
 const resolutionEl = document.getElementById("resolution");
 const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
+const pluginsEl = document.getElementById("plugins");
 const verificationEl = document.getElementById("verification");
 const notesEl = document.getElementById("notes");
 
@@ -59,6 +60,74 @@ function renderNotes(notes) {
     li.className = "note";
     li.textContent = note;
     notesEl.appendChild(li);
+  }
+}
+
+function renderPlugins(plugins, pluginRoot) {
+  pluginsEl.innerHTML = "";
+
+  if (!plugins.length) {
+    const empty = document.createElement("p");
+    empty.className = "plugin-empty";
+    empty.textContent = pluginRoot
+      ? `No plugins found in ${pluginRoot}`
+      : "No plugins discovered";
+    pluginsEl.appendChild(empty);
+    return;
+  }
+
+  for (const plugin of plugins) {
+    const card = document.createElement("article");
+    card.className = "plugin-item";
+
+    const title = document.createElement("strong");
+    title.textContent = plugin.name || plugin.id;
+    card.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "plugin-meta";
+    meta.textContent = `${plugin.id} · v${plugin.version}`;
+    card.appendChild(meta);
+
+    if (plugin.description) {
+      const description = document.createElement("p");
+      description.className = "plugin-description";
+      description.textContent = plugin.description;
+      card.appendChild(description);
+    }
+
+    const caps = document.createElement("div");
+    caps.className = "plugin-caps";
+    const effective = plugin.effective_capabilities || plugin.capabilities || [];
+    caps.textContent = effective.length
+      ? `caps: ${effective.join(", ")}`
+      : "caps: —";
+    card.appendChild(caps);
+
+    pluginsEl.appendChild(card);
+  }
+}
+
+async function invokePlugins() {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("list_plugins");
+  }
+
+  const response = await fetch("/api/plugins");
+  const payload = await response.json();
+  if (!payload.ok) {
+    throw new Error(payload.error || "Failed to load plugins");
+  }
+  return payload;
+}
+
+async function loadPlugins() {
+  try {
+    const payload = await invokePlugins();
+    renderPlugins(payload.plugins || [], payload.plugin_root || "");
+  } catch (err) {
+    console.error(err);
+    pluginsEl.textContent = `Error: ${err.message || err}`;
   }
 }
 
@@ -150,4 +219,5 @@ async function runAsk() {
 runBtn.addEventListener("click", runAsk);
 downloadPngBtn.addEventListener("click", downloadPng);
 gpuPreviewBtn.addEventListener("click", openGpuPreview);
+loadPlugins();
 runAsk();

@@ -23,6 +23,7 @@ fn main() {
         Some("storage") => handle_storage(&args[2..]),
         Some("raster") => handle_raster(&args[2..]),
         Some("pointcloud") => handle_pointcloud(&args[2..]),
+        Some("plugin") => handle_plugin(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
@@ -443,6 +444,98 @@ fn handle_raster(args: &[String]) {
     }
 }
 
+fn default_plugin_root() -> PathBuf {
+    let cwd_plugins = PathBuf::from("plugins");
+    if cwd_plugins.is_dir() {
+        return cwd_plugins;
+    }
+
+    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let repo_plugins = Path::new(&manifest_dir)
+            .join("../../plugins");
+        if repo_plugins.is_dir() {
+            return repo_plugins;
+        }
+    }
+
+    cwd_plugins
+}
+
+fn handle_plugin(args: &[String]) {
+    let host = genegis_plugin_host::PluginHost::new();
+    match args.first().map(String::as_str) {
+        Some("list") => {
+            let root = args
+                .get(1)
+                .map(PathBuf::from)
+                .unwrap_or_else(default_plugin_root);
+            match host.discover_plugins(&root) {
+                Ok(entries) => {
+                    let summaries: Vec<_> =
+                        entries.iter().map(|entry| entry.summary_json()).collect();
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&summaries).expect("json")
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Plugin error: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        Some("info") => {
+            let Some(bundle) = args.get(1) else {
+                eprintln!("Usage: genegis plugin info BUNDLE_DIR");
+                process::exit(1);
+            };
+            match host.discover_bundle(bundle) {
+                Ok(entry) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&entry.summary_json()).expect("json")
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Plugin error: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        Some("load") => {
+            let Some(bundle) = args.get(1) else {
+                eprintln!("Usage: genegis plugin load BUNDLE_DIR");
+                process::exit(1);
+            };
+            match host.load_bundle(bundle) {
+                Ok(loaded) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "id": loaded.entry.manifest.id,
+                            "bundle_dir": loaded.entry.bundle_dir,
+                            "wasm_bytes": loaded.wasm_bytes.len(),
+                            "effective_capabilities": loaded.entry.effective_capabilities,
+                            "status": "loaded",
+                        }))
+                        .expect("json")
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Plugin error: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        _ => {
+            eprintln!("Usage: genegis plugin list [DIR]");
+            eprintln!("       genegis plugin info BUNDLE_DIR");
+            eprintln!("       genegis plugin load BUNDLE_DIR");
+            process::exit(1);
+        }
+    }
+}
+
 fn handle_workflow(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("run") => {
@@ -490,6 +583,9 @@ Usage:
   genegis storage fetch URL [--range START-END]    HTTP range-read smoke fetch
   genegis raster info PATH                         COG / GeoTIFF metadata JSON (local or URL)
   genegis pointcloud info PATH|URL                 COPC metadata JSON (local or HTTP range-read)
+  genegis plugin list [DIR]                        List plugin manifests (default: ./plugins)
+  genegis plugin info BUNDLE_DIR                   Show one plugin manifest + effective caps
+  genegis plugin load BUNDLE_DIR                   Capability-gated WASM load smoke
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run nagoya-density -x --html    Execute + write HTML map

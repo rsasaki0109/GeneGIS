@@ -19,9 +19,9 @@
 - [x] Phase 4 roadmap (this document)
 - [x] COPC metadata smoke read (`genegis-pointcloud`, `copc-streaming`, CLI `genegis pointcloud info`)
 - [x] COPC HTTP range-read (`read_copc_uri` + `HttpByteSource`, `read_mode: "http_range"`)
-- [ ] Plugin capability model (`genegis-plugin-api`)
-- [ ] WASM plugin host prototype (`genegis-plugin-host`)
-- [ ] Workbench plugin panel stub (`apps/workbench`)
+- [x] Plugin capability model (`genegis-plugin-api`: `PluginManifest`, `PluginCapability`, `CapabilityPolicy`)
+- [x] WASM plugin host prototype (`genegis-plugin-host`, Wasmtime loader, CLI `genegis plugin list|info|load`)
+- [x] Workbench plugin panel stub (`apps/workbench` `/api/plugins`, shared desktop UI sidebar)
 - [ ] Second catalog dataset + planner workflow (optional stretch)
 
 ## Recommended order
@@ -48,23 +48,43 @@ assert!(info.point_count > 0);
 
 HTTP range-read should reuse `genegis-storage` probes and chunked fetch patterns established for COG (`read_mode: "http_range"`).
 
-## Plugin SDK (target)
+## Plugin SDK (Phase 4 alpha)
 
 ```rust
-use genegis_plugin_api::{PluginManifest, PluginCapability};
+use genegis_plugin_api::{
+    CapabilityPolicy, PluginCapability, PluginManifest, PLUGIN_API_VERSION,
+};
 
 let manifest = PluginManifest {
-    id: "demo-filter",
-    version: "0.1.0",
-    capabilities: &[PluginCapability::AnalysisStep],
+    id: "demo-filter".into(),
+    version: "0.1.0".into(),
+    api_version: PLUGIN_API_VERSION.into(),
+    capabilities: vec![PluginCapability::AnalysisStep],
     ..Default::default()
 };
+manifest.validate()?;
+
+let policy = CapabilityPolicy::read_only();
+policy.validate_manifest(&manifest)?;
+```
+
+Manifest files use `genegis.plugin.json` beside the plugin bundle:
+
+```json
+{
+  "id": "demo-filter",
+  "name": "Demo Filter",
+  "version": "0.1.0",
+  "api_version": "0.1.0",
+  "capabilities": ["analysis_step"],
+  "wasm": { "entry": "demo_filter.wasm" }
+}
 ```
 
 ```bash
-# Future CLI smoke
 genegis plugin list
-genegis plugin run demo-filter --help
+genegis plugin info plugins/demo-filter
+genegis plugin load plugins/demo-filter
 ```
 
 Host loads WASM modules with an explicit capability allow-list (RFC D7). TS UI extensions and Python sandboxes remain out of scope for Phase 4 alpha.

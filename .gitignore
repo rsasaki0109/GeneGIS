@@ -4,6 +4,7 @@ node_modules/
 apps/desktop/node_modules/
 dist/
 *.wasm
+!plugins/demo-filter/*.wasm
 .env
 .env.*
 .DS_Store

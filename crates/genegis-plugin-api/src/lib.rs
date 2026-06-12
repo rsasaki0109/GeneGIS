@@ -1,6 +1,17 @@
-//! GeneGIS plugin api — Phase 0 skeleton crate.
+//! GeneGIS plugin SDK — manifest schema, capability model, and version contract.
+//!
+//! WASM hosts load [`PluginManifest`] files, intersect declared
+//! [`PluginCapability`] values with a [`CapabilityPolicy`], and only then
+//! instantiate plugin modules (RFC D7).
 
-#![deny(missing_docs)]
+pub mod capability;
+pub mod error;
+pub mod manifest;
+pub mod policy;
+pub mod version;
 
-/// Placeholder version marker for Phase 0 scaffolding.
-pub const PHASE: &str = "0-foundation";
+pub use capability::PluginCapability;
+pub use error::PluginApiError;
+pub use manifest::{demo_manifest, PluginManifest, WasmModuleSpec};
+pub use policy::CapabilityPolicy;
+pub use version::{is_api_compatible, MANIFEST_FILENAME, PLUGIN_API_VERSION};

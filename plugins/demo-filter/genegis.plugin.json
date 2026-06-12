@@ -1,0 +1,10 @@
+{
+  "id": "demo-filter",
+  "name": "Demo Filter",
+  "version": "0.1.0",
+  "api_version": "0.1.0",
+  "description": "Example analysis filter plugin (manifest-only smoke bundle)",
+  "author": "GeneGIS",
+  "capabilities": ["analysis_step"],
+  "wasm": { "entry": "demo_filter.wasm" }
+}
