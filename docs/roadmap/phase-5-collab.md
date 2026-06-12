@@ -20,8 +20,8 @@
 - [x] Collab document model (`genegis-collab`: comments + branches + JSON export)
 - [x] CLI collab smoke (`genegis collab comment|branch|export`)
 - [x] Workbench comments panel stub (`GET /api/collab`)
-- [ ] GeneGIS Server sync prototype (`genegis-server` — optional stretch)
-- [ ] CRDT backend ADR (`docs/adrs/` — Automerge vs Yjs)
+- [x] GeneGIS Server sync prototype (`genegis-server` GET/PUT `/api/collab` on `:7813`)
+- [x] CRDT backend ADR ([`docs/adrs/0002-crdt-backend.md`](../adrs/0002-crdt-backend.md) — Automerge for metadata)
 
 ## Recommended order
 
@@ -55,6 +55,19 @@ cargo run -p genegis-workbench
 # Sidebar → Comments panel lists map-anchored threads
 curl http://127.0.0.1:7812/api/collab
 ```
+
+## GeneGIS Server (target)
+
+```bash
+cargo run -p genegis-server
+curl http://127.0.0.1:7813/health
+curl http://127.0.0.1:7813/api/collab
+curl -X PUT http://127.0.0.1:7813/api/collab \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg session "$(cat .genegis/collab.json)" '{session:$session}')"
+```
+
+Persists to `.genegis/collab.json` by default (`GENEGIS_COLLAB_PATH`, `GENEGIS_SERVER_PORT=7813`).
 
 ## Out of scope
 

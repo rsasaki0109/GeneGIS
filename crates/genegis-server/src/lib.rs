@@ -1,6 +1,5 @@
-//! GeneGIS server — Phase 0 skeleton crate.
+//! GeneGIS Server — HTTP sync prototype for collaboration sessions.
 
-#![deny(missing_docs)]
+pub mod store;
 
-/// Placeholder version marker for Phase 0 scaffolding.
-pub const PHASE: &str = "0-foundation";
+pub use store::{CollabStore, DEFAULT_COLLAB_PATH};

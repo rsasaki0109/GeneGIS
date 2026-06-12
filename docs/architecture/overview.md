@@ -78,4 +78,5 @@ See [`rendering.md`](rendering.md).
 - [RFC 0001: Master Architecture](../rfcs/0001-master-architecture.md)
 - [Roadmap](../roadmap/phase-0-foundation.md)
 - [Plugin author guide](guides/plugin-author.md)
+- [ADR 0002: CRDT backend (Automerge)](adrs/0002-crdt-backend.md)
 - [Roadmap](../roadmap/phase-0-foundation.md)

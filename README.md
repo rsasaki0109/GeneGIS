@@ -76,6 +76,9 @@ cd apps/desktop && npm install && npm run dev
 # Local web workbench (recommended MVP launcher; no Tauri deps)
 cargo run -p genegis-workbench
 
+# Collab sync server (GET/PUT session JSON)
+cargo run -p genegis-server
+
 # WebGPU canvas prototype (requires GPU + display)
 cargo run -p genegis-render --example canvas_prototype
 
