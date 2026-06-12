@@ -38,11 +38,27 @@
 
       <aside class="sidebar">
         <section class="panel">
+          <h2>Agent trace</h2>
+          <div id="agent-meta" class="agent-meta">Loading…</div>
+          <div id="agent-steps" class="agent-list">Loading…</div>
+        </section>
+        <section class="panel">
           <h2>Resolution</h2>
           <pre id="resolution" class="mono">—</pre>
         </section>
         <section class="panel">
           <h2>Comments</h2>
+          <div id="collab-sync" class="collab-sync">Loading sync…</div>
+          <form id="comment-form" class="comment-form">
+            <label for="comment-author">Author</label>
+            <input id="comment-author" type="text" value="reviewer" autocomplete="username" />
+            <label for="comment-body">Comment</label>
+            <textarea id="comment-body" rows="2" placeholder="Add a map review note…"></textarea>
+            <div class="comment-actions">
+              <button id="comment-add-btn" type="submit">Add comment</button>
+              <button id="comment-sync-btn" type="button" class="secondary">Sync</button>
+            </div>
+          </form>
           <div id="comments" class="comment-list">Loading…</div>
         </section>
         <section class="panel">

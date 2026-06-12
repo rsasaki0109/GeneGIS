@@ -16,6 +16,7 @@ genegis-ai = { path = "../genegis-ai" }
 genegis-analysis = { path = "../genegis-analysis" }
 genegis-catalog = { path = "../genegis-catalog" }
 genegis-query = { path = "../genegis-query" }
+genegis-agent = { path = "../genegis-agent" }
 genegis-collab = { path = "../genegis-collab" }
 genegis-plugin-host = { path = "../genegis-plugin-host" }
 genegis-pointcloud = { path = "../genegis-pointcloud" }

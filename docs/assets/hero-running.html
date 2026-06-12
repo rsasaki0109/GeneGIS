@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>GeneGIS Hero Running</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1218;
+        --panel: #121c27;
+        --border: #243041;
+        --text: #e8eef5;
+        --muted: #8aa0b5;
+        --accent: #5eb3ff;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1440px;
+        height: 900px;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--border);
+        background: #0f1720;
+      }
+
+      .brand {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .brand strong {
+        font-size: 18px;
+      }
+
+      .brand span,
+      .topbar-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        grid-template-rows: auto 1fr;
+        gap: 12px;
+        padding: 12px;
+        height: calc(900px - 58px);
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .prompt-panel {
+        grid-column: 1 / -1;
+      }
+
+      .prompt-box {
+        margin-top: 6px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #0b1218;
+        font-size: 15px;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: #041018;
+        background: var(--accent);
+      }
+
+      button.secondary {
+        color: var(--text);
+        background: #1a2735;
+        border: 1px solid var(--border);
+        opacity: 0.55;
+      }
+
+      .status {
+        margin-left: auto;
+        color: var(--accent);
+        font-size: 13px;
+      }
+
+      .map-panel {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .map-frame {
+        flex: 1;
+        min-height: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background:
+          radial-gradient(circle at 50% 35%, rgba(94, 179, 255, 0.08), transparent 55%),
+          #081018;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .sidebar .panel {
+        opacity: 0.72;
+      }
+
+      .sidebar {
+        grid-column: 2;
+        grid-row: 2;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .mono {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.45;
+        color: #8aa0b5;
+      }
+
+      .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid rgba(94, 179, 255, 0.18);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        margin-bottom: 12px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <strong>GeneGIS</strong>
+        <span>AI-native GIS Workbench · verified spatial workflows</span>
+      </div>
+      <div class="topbar-meta">Planning workflow graph…</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel prompt-panel">
+        <h2>Intent</h2>
+        <div class="prompt-box">名古屋市の人口密度を表示</div>
+        <div class="actions">
+          <button type="button">Run Ask Pipeline</button>
+          <button type="button" class="secondary" disabled>Download PNG</button>
+          <button type="button" class="secondary" disabled>Open GPU Map</button>
+          <span class="status">Running pipeline…</span>
+        </div>
+      </section>
+
+      <section class="panel map-panel">
+        <h2>Map</h2>
+        <div class="map-frame">
+          <div style="text-align: center">
+            <div class="spinner"></div>
+            <div>Discover dataset · normalize CRS · compute density</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Resolution</h2>
+          <pre class="mono">workflow: —
+confidence: —
+steps: —
+duckdb: pending</pre>
+        </section>
+        <section class="panel">
+          <h2>Dataset</h2>
+          <pre class="mono">resolving catalog match…</pre>
+        </section>
+        <section class="panel">
+          <h2>Verification</h2>
+          <pre class="mono">waiting for execution…</pre>
+        </section>
+      </aside>
+    </main>
+  </body>
+</html>

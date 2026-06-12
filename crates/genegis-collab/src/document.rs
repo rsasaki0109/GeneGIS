@@ -16,6 +16,8 @@ pub struct CollabDocument {
     pub project: Project,
     pub comments: Vec<MapComment>,
     pub branches: Vec<ProjectBranch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub automerge_snapshot: Option<String>,
 }
 
 impl CollabDocument {
@@ -26,6 +28,7 @@ impl CollabDocument {
             project,
             comments: Vec::new(),
             branches: vec![ProjectBranch::main()],
+            automerge_snapshot: None,
         }
     }
 

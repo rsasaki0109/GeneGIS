@@ -9,6 +9,12 @@ const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
 const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
+const agentMetaEl = document.getElementById("agent-meta");
+const agentStepsEl = document.getElementById("agent-steps");
+const commentFormEl = document.getElementById("comment-form");
+const commentAuthorEl = document.getElementById("comment-author");
+const commentBodyEl = document.getElementById("comment-body");
+const commentSyncBtn = document.getElementById("comment-sync-btn");
 const verificationEl = document.getElementById("verification");
 const notesEl = document.getElementById("notes");
 
@@ -132,6 +138,72 @@ async function loadPlugins() {
   }
 }
 
+function renderAgentRun(run) {
+  agentStepsEl.innerHTML = "";
+  if (!run) {
+    agentMetaEl.textContent = "No agent run yet — try: genegis agent run";
+    agentStepsEl.textContent = "Run the north-star prompt to populate trace.";
+    return;
+  }
+
+  agentMetaEl.textContent = [
+    `run: ${run.id.slice(0, 8)}…`,
+    run.workflow_id ? `workflow: ${run.workflow_id}` : "plan-only",
+    run.verification_passed ? "verification: passed" : "verification: pending/failed",
+    run.verify_attempts ? `attempts: ${run.verify_attempts}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  for (const step of run.steps || []) {
+    const card = document.createElement("article");
+    card.className = `agent-item ${step.tool_calls?.every((call) => call.ok) ? "ok" : "bad"}`;
+
+    const role = document.createElement("div");
+    role.className = "agent-role";
+    role.textContent = `${step.role} · ${step.agent}`;
+    card.appendChild(role);
+
+    const detail = document.createElement("div");
+    detail.className = "agent-detail";
+    detail.textContent = step.detail;
+    card.appendChild(detail);
+
+    const tools = document.createElement("div");
+    tools.className = "agent-tools";
+    const toolNames = (step.tool_calls || []).map((call) => call.tool).join(", ");
+    tools.textContent = toolNames ? `tools: ${toolNames}` : "tools: —";
+    card.appendChild(tools);
+
+    agentStepsEl.appendChild(card);
+  }
+}
+
+async function loadAgentTrace() {
+  try {
+    const response = await fetch("/api/agent/runs/latest");
+    const payload = await response.json();
+    renderAgentRun(payload.run);
+  } catch (err) {
+    console.error(err);
+    agentMetaEl.textContent = `Error: ${err.message || err}`;
+    agentStepsEl.textContent = "";
+  }
+}
+
+function renderCollabSync(sync) {
+  if (!sync) {
+    collabSyncEl.textContent = "Collab sync unavailable";
+    collabSyncEl.className = "collab-sync warn";
+    return;
+  }
+
+  const status = sync.synced ? "synced" : "offline";
+  const detail = sync.error ? ` · ${sync.error}` : "";
+  collabSyncEl.textContent = `${status} · source: ${sync.source} · ${sync.server_url}${detail}`;
+  collabSyncEl.className = sync.synced ? "collab-sync ok" : "collab-sync warn";
+}
+
 function renderComments(comments) {
   commentsEl.innerHTML = "";
   if (!comments.length) {
@@ -162,6 +234,14 @@ function renderComments(comments) {
       card.appendChild(anchor);
     }
 
+    if (comment.agent_run_id) {
+      const agentLink = document.createElement("div");
+      agentLink.className = "comment-agent";
+      const step = comment.agent_step_id ? ` · step ${comment.agent_step_id.slice(0, 8)}…` : "";
+      agentLink.textContent = `agent run: ${comment.agent_run_id.slice(0, 8)}…${step}`;
+      card.appendChild(agentLink);
+    }
+
     commentsEl.appendChild(card);
   }
 }
@@ -175,13 +255,80 @@ async function invokeCollab() {
   return response.json();
 }
 
+async function invokeCollabSync() {
+  if (window.__TAURI__?.core?.invoke) {
+    return invokeCollab();
+  }
+
+  const response = await fetch("/api/collab/sync", { method: "POST" });
+  return response.json();
+}
+
+async function invokeAddComment(author, body) {
+  if (window.__TAURI__?.core?.invoke) {
+    return window.__TAURI__.core.invoke("collab_add_comment", { author, body });
+  }
+
+  const response = await fetch("/api/collab/comment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ author, body }),
+  });
+  return response.json();
+}
+
 async function loadComments() {
   try {
     const payload = await invokeCollab();
+    renderCollabSync(payload.sync);
     renderComments(payload.comments || []);
   } catch (err) {
     console.error(err);
+    collabSyncEl.textContent = `Error: ${err.message || err}`;
+    collabSyncEl.className = "collab-sync warn";
     commentsEl.textContent = `Error: ${err.message || err}`;
+  }
+}
+
+async function syncComments() {
+  commentSyncBtn.disabled = true;
+  collabSyncEl.textContent = "Syncing…";
+  try {
+    const payload = await invokeCollabSync();
+    renderCollabSync(payload.sync);
+    renderComments(payload.comments || []);
+  } catch (err) {
+    console.error(err);
+    collabSyncEl.textContent = `Sync error: ${err.message || err}`;
+    collabSyncEl.className = "collab-sync warn";
+  } finally {
+    commentSyncBtn.disabled = false;
+  }
+}
+
+async function submitComment(event) {
+  event.preventDefault();
+  const author = commentAuthorEl.value.trim();
+  const body = commentBodyEl.value.trim();
+  if (!author || !body) {
+    return;
+  }
+
+  commentFormEl.querySelector("button[type='submit']").disabled = true;
+  try {
+    const payload = await invokeAddComment(author, body);
+    if (!payload.ok) {
+      throw new Error(payload.sync?.error || payload.summary?.error || "Failed to add comment");
+    }
+    renderCollabSync(payload.sync);
+    renderComments(payload.comments || []);
+    commentBodyEl.value = "";
+  } catch (err) {
+    console.error(err);
+    collabSyncEl.textContent = `Error: ${err.message || err}`;
+    collabSyncEl.className = "collab-sync warn";
+  } finally {
+    commentFormEl.querySelector("button[type='submit']").disabled = false;
   }
 }
 
@@ -264,6 +411,7 @@ async function runAsk() {
     setPngExport(result.png_base64);
     setPipelineReady(true);
     setStatus("Done");
+    loadAgentTrace();
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message || err}`);
@@ -273,6 +421,9 @@ async function runAsk() {
 runBtn.addEventListener("click", runAsk);
 downloadPngBtn.addEventListener("click", downloadPng);
 gpuPreviewBtn.addEventListener("click", openGpuPreview);
+commentFormEl.addEventListener("submit", submitComment);
+commentSyncBtn.addEventListener("click", syncComments);
 loadPlugins();
 loadComments();
+loadAgentTrace();
 runAsk();

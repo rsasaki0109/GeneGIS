@@ -427,6 +427,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "automerge"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f0dae93622d3c6850d196503480004576249e0e391bddb3f54600974d92a790"
+dependencies = [
+ "cfg-if",
+ "flate2",
+ "fxhash",
+ "hex",
+ "im",
+ "itertools 0.13.0",
+ "leb128",
+ "serde",
+ "sha2",
+ "smol_str",
+ "thiserror 1.0.69",
+ "tinyvec",
+ "tracing",
+ "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
 name = "axum"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2020,6 +2043,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fxhash"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "fxprof-processed-profile"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2133,6 +2165,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "genegis-agent"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "genegis-ai",
+ "genegis-analysis",
+ "genegis-catalog",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "ureq",
+ "uuid",
+]
+
+[[package]]
 name = "genegis-ai"
 version = "0.1.0"
 dependencies = [
@@ -2177,6 +2224,7 @@ dependencies = [
 name = "genegis-cli"
 version = "0.1.0"
 dependencies = [
+ "genegis-agent",
  "genegis-ai",
  "genegis-analysis",
  "genegis-catalog",
@@ -2195,12 +2243,15 @@ dependencies = [
 name = "genegis-collab"
 version = "0.1.0"
 dependencies = [
+ "automerge",
+ "base64 0.22.1",
  "chrono",
  "genegis-core",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "ureq",
  "uuid",
 ]
 
@@ -2329,7 +2380,9 @@ name = "genegis-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "genegis-agent",
  "genegis-collab",
+ "genegis-core",
  "serde",
  "serde_json",
  "tempfile",
@@ -2414,6 +2467,7 @@ name = "genegis-workbench"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "genegis-agent",
  "genegis-analysis",
  "genegis-collab",
  "genegis-plugin-host",
@@ -3310,6 +3364,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "im"
+version = "15.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0acd33ff0285af998aaf9b57342af478078f53492322fafc47450e09397e0e9"
+dependencies = [
+ "bitmaps",
+ "rand_core 0.6.4",
+ "rand_xoshiro",
+ "sized-chunks",
+ "typenum",
+ "version_check",
+]
+
+[[package]]
 name = "im-rc"
 version = "15.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3407,6 +3475,15 @@ name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -3665,6 +3742,12 @@ dependencies = [
  "byteorder",
  "num-traits",
 ]
+
+[[package]]
+name = "leb128"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cc46bac87ef8093eed6f272babb833b6443374399985ac8ed28471ee0918545"
 
 [[package]]
 name = "leb128fmt"
@@ -5215,7 +5298,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

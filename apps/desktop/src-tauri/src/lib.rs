@@ -58,13 +58,13 @@ fn list_plugins() -> Result<PluginsResponse, String> {
 }
 
 #[tauri::command]
-fn collab_snapshot() -> CollabResponse {
+fn collab_snapshot() -> Result<CollabResponse, String> {
     let session = load_collab_session();
-    CollabResponse {
+    Ok(CollabResponse {
         ok: true,
-        summary: session.summary_json(),
-        comments: session.comments_json(),
-    }
+        summary: session.summary_json().map_err(|err| err.to_string())?,
+        comments: session.comments_json().map_err(|err| err.to_string())?,
+    })
 }
 
 fn load_collab_session() -> CollabSession {

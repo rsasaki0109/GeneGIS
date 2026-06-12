@@ -1,5 +1,11 @@
 # GeneGIS
 
+<p align="center">
+  <img src="docs/assets/workbench-hero.gif" alt="GeneGIS workbench — natural language intent to verified Nagoya population density map" width="960" />
+</p>
+
+<p align="center"><sub>North-star prompt <code>名古屋市の人口密度を表示</code> · real pipeline output · DuckDB verified</sub></p>
+
 **AI-native · Cloud-native · GPU-native open geospatial workbench**
 
 > If GIS were invented in 2026, it would not look like a 2000s desktop app.
@@ -70,6 +76,18 @@ genegis plugin list
 genegis collab comment list
 genegis collab export -o .genegis/collab.json
 
+# Agent orchestration smoke (offline rule planner + DuckDB verify)
+genegis agent run "名古屋市の人口密度を表示"
+genegis agent run "名古屋市の人口密度を表示" --json -o .genegis/agent-run.json
+
+# Multi-client collab demo (terminal 1: server, terminal 2: workbench)
+cargo run -p genegis-server
+cargo run -p genegis-workbench
+# CLI sync against server
+genegis collab pull
+genegis collab comment add "Check 中区 density" --author reviewer
+genegis collab push
+
 # Desktop workbench (Tauri — requires extra patches on Rust 1.94)
 cd apps/desktop && npm install && npm run dev
 
@@ -119,7 +137,7 @@ examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 | 3 | Beta: STAC, COG, GPU workbench integration | 2,500 → 5,000 |
 | 4 | Plugins & COPC — SDK, WASM host, point cloud alpha | 5,000 → 7,500 | [`docs/roadmap/phase-4-plugins.md`](docs/roadmap/phase-4-plugins.md) |
 | 5 | Figma for GIS — comments, branches, collab sync | 7,500 → 10,000 | [`docs/roadmap/phase-5-collab.md`](docs/roadmap/phase-5-collab.md) |
-| 6 | Autonomous GIS platform | 10,000+ |
+| 6 | Autonomous GIS platform — multi-agent orchestration | 10,000 → 15,000 | [`docs/roadmap/phase-6-autonomous.md`](docs/roadmap/phase-6-autonomous.md) |
 
 ## Tech stack (decisions)
 

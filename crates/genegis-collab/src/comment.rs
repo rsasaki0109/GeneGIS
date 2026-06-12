@@ -16,6 +16,10 @@ pub struct MapComment {
     pub layer_id: Option<uuid::Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map_anchor: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_run_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_step_id: Option<Uuid>,
 }
 
 impl MapComment {
@@ -30,7 +34,16 @@ impl MapComment {
             created_at: Utc::now(),
             layer_id: None,
             map_anchor: None,
+            agent_run_id: None,
+            agent_step_id: None,
         }
+    }
+
+    /// Link this comment to an agent orchestration run / step.
+    pub fn with_agent_context(mut self, run_id: Uuid, step_id: Uuid) -> Self {
+        self.agent_run_id = Some(run_id);
+        self.agent_step_id = Some(step_id);
+        self
     }
 
     /// Attach WGS84 map coordinates to the comment.

@@ -21,6 +21,9 @@
 - [x] CLI collab smoke (`genegis collab comment|branch|export`)
 - [x] Workbench comments panel stub (`GET /api/collab`)
 - [x] GeneGIS Server sync prototype (`genegis-server` GET/PUT `/api/collab` on `:7813`)
+- [x] Workbench ↔ Server collab sync (startup pull, comment push, `POST /api/collab/sync`)
+- [x] CLI collab pull/push (`genegis collab pull|push`)
+- [x] Automerge CRDT merge for comments/branches (`genegis-collab` + `.genegis/collab.json.automerge`)
 - [x] CRDT backend ADR ([`docs/adrs/0002-crdt-backend.md`](../adrs/0002-crdt-backend.md) — Automerge for metadata)
 
 ## Recommended order
@@ -51,9 +54,14 @@ genegis collab export -o .genegis/collab.json
 ## Workbench (target)
 
 ```bash
-cargo run -p genegis-workbench
-# Sidebar → Comments panel lists map-anchored threads
+cargo run -p genegis-server    # terminal 1
+cargo run -p genegis-workbench # terminal 2
+# Sidebar → Comments panel lists map-anchored threads; Add comment + Sync
 curl http://127.0.0.1:7812/api/collab
+curl -X POST http://127.0.0.1:7812/api/collab/comment \
+  -H 'Content-Type: application/json' \
+  -d '{"author":"reviewer","body":"Check ward density"}'
+curl -X POST http://127.0.0.1:7812/api/collab/sync
 ```
 
 ## GeneGIS Server (target)
@@ -67,14 +75,16 @@ curl -X PUT http://127.0.0.1:7813/api/collab \
   -d "$(jq -n --arg session "$(cat .genegis/collab.json)" '{session:$session}')"
 ```
 
-Persists to `.genegis/collab.json` by default (`GENEGIS_COLLAB_PATH`, `GENEGIS_SERVER_PORT=7813`).
+Persists to `.genegis/collab.json` and `.genegis/collab.json.automerge` by default (`GENEGIS_COLLAB_PATH`, `GENEGIS_SERVER_PORT=7813`).
+
+PUT merges incoming JSON + optional `automerge_snapshot` (base64) via Automerge — concurrent comments from multiple clients are preserved.
 
 ## Out of scope
 
 - Real-time cursor presence / Figma-style live cursors
 - Full geometry CRDT (only project metadata + comments in Phase 5 alpha)
 - Billing, org SSO, enterprise ACLs
-- Autonomous multi-agent GIS (Phase 6)
+- Autonomous multi-agent GIS (Phase 6 — see [`phase-6-autonomous.md`](phase-6-autonomous.md))
 
 ## North star (unchanged)
 

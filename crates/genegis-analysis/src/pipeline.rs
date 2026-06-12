@@ -1,8 +1,8 @@
 //! Shared MVP ask → analyze → verify → export pipeline.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use genegis_ai::{PlanResult, PlannerConfig, plan_with_config};
 use genegis_catalog::{alpha_catalog, DatasetRecord};
-use genegis_ai::{PlannerConfig, plan_with_config};
 use genegis_query::verify_nagoya_densities;
 
 use crate::error::AnalysisError;
@@ -38,15 +38,22 @@ pub fn run_ask_pipeline_with_config(
 ) -> Result<AskPipelineResult, AnalysisError> {
     let plan =
         plan_with_config(prompt, config).map_err(|e| AnalysisError::Message(e.to_string()))?;
+    execute_from_plan(prompt, &plan)
+}
 
+pub fn run_analysis_for_plan(
+    plan: &PlanResult,
+) -> Result<(AnalysisResult, DatasetRecord), AnalysisError> {
     let catalog = alpha_catalog();
     let dataset_record = catalog
         .require(&plan.resolved.dataset_id)
         .map_err(|e| AnalysisError::Message(e.to_string()))?
         .clone();
-
     let analysis = run_nagoya_population_density_for_dataset(&plan.resolved.dataset_id)?;
+    Ok((analysis, dataset_record))
+}
 
+pub fn verify_analysis_densities(analysis: &AnalysisResult) -> Result<bool, AnalysisError> {
     let rows: Vec<(String, u64, f64, f64)> = analysis
         .features
         .iter()
@@ -60,16 +67,17 @@ pub fn run_ask_pipeline_with_config(
         })
         .collect();
 
-    let duckdb_verified = verify_nagoya_densities(&rows)
-        .map_err(|e| AnalysisError::Message(e.to_string()))?;
+    verify_nagoya_densities(&rows).map_err(|e| AnalysisError::Message(e.to_string()))
+}
 
-    if !duckdb_verified {
-        return Err(AnalysisError::Message(
-            "DuckDB density verification failed".into(),
-        ));
-    }
-
-    let summary = build_summary(&analysis, &dataset_record);
+pub fn build_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: AnalysisResult,
+    dataset: DatasetRecord,
+    duckdb_verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let summary = build_summary(&analysis, &dataset);
     let html = export_html_map(&analysis, "名古屋市 人口密度");
     let png = export_png_map(&analysis, "名古屋市 人口密度")?;
     let png_base64 = STANDARD.encode(&png);
@@ -78,7 +86,7 @@ pub fn run_ask_pipeline_with_config(
         prompt: prompt.to_string(),
         workflow_id: plan.resolved.workflow_id.as_str().to_string(),
         confidence: plan.resolved.confidence,
-        ambiguities: plan.resolved.ambiguities,
+        ambiguities: plan.resolved.ambiguities.clone(),
         workflow_steps: plan.workflow.steps.len(),
         verification: analysis.verification.clone(),
         summary,
@@ -86,9 +94,25 @@ pub fn run_ask_pipeline_with_config(
         png,
         png_base64,
         duckdb_verified,
-        dataset: dataset_record.clone(),
-        stac_item: dataset_record.to_stac_item(),
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
     })
+}
+
+pub fn execute_from_plan(
+    prompt: &str,
+    plan: &PlanResult,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let (analysis, dataset) = run_analysis_for_plan(plan)?;
+    let duckdb_verified = verify_analysis_densities(&analysis)?;
+
+    if !duckdb_verified {
+        return Err(AnalysisError::Message(
+            "DuckDB density verification failed".into(),
+        ));
+    }
+
+    build_ask_result(prompt, plan, analysis, dataset, duckdb_verified)
 }
 
 fn build_summary(result: &AnalysisResult, dataset: &DatasetRecord) -> serde_json::Value {

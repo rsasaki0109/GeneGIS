@@ -33,11 +33,11 @@ GeneGIS core is Rust-first (D1). Server and CLI already export `CollabDocument` 
 - HTTP **GET/PUT** `/api/collab` on `genegis-server` with whole-document replace (no CRDT merge yet).
 - `CollabDocument.schema_version` remains the compatibility gate.
 
-### Phase 5 beta (next)
+### Phase 5 beta (now)
 
-- Introduce `CollabDocument.automerge_snapshot` optional field.
-- Server stores Automerge binary + projects JSON view for clients without CRDT support.
-- Workbench reads merged view via `/api/collab`.
+- `CollabDocument.automerge_snapshot` optional field (base64 in JSON export).
+- Server stores Automerge binary (`.genegis/collab.json.automerge`) + projects JSON view.
+- PUT merges `automerge_snapshot` and unions comments by id; GET returns both views.
 
 ### Explicit non-goals
 

@@ -207,6 +207,103 @@ li.note {
   gap: 10px;
 }
 
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.agent-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: #0b1218;
+}
+
+.agent-item.ok {
+  border-color: rgba(109, 213, 140, 0.35);
+}
+
+.agent-item.bad {
+  border-color: rgba(255, 123, 123, 0.35);
+}
+
+.agent-role {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.agent-detail {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #c9d7e5;
+}
+
+.agent-tools {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.collab-sync {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.collab-sync.ok {
+  color: #7fd4a8;
+}
+
+.collab-sync.warn {
+  color: #e6c27a;
+}
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.comment-form label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.comment-form input,
+.comment-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b1218;
+  color: #c9d7e5;
+  padding: 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.comment-actions button {
+  flex: 1;
+}
+
 .comment-item {
   border: 1px solid var(--border);
   border-radius: 8px;

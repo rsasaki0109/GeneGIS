@@ -15,4 +15,10 @@ pub enum CollabError {
     /// Comment validation failed.
     #[error("invalid comment: {0}")]
     InvalidComment(String),
+    /// Remote sync over HTTP failed.
+    #[error("collab remote error: {0}")]
+    Remote(String),
+    /// Automerge CRDT operation failed.
+    #[error("collab automerge error: {0}")]
+    Automerge(String),
 }

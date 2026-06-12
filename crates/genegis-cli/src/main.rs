@@ -6,7 +6,11 @@ use genegis_analysis::{
     run_nagoya_population_density,
 };
 use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
-use genegis_collab::{CollabSession, MapComment};
+use genegis_agent::{
+    pull_latest_agent_run, push_agent_run, AgentOrchestrator, AgentRun, AgentRunConfig,
+    AgentRole, DEFAULT_AGENT_RUN_PATH, DEFAULT_SERVER_URL,
+};
+use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{nagoya_population_density_template, remote_cog_metadata_template};
 use std::env;
@@ -27,6 +31,7 @@ fn main() {
         Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("plugin") => handle_plugin(&args[2..]),
         Some("collab") => handle_collab(&args[2..]),
+        Some("agent") => handle_agent(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
@@ -543,6 +548,34 @@ fn default_collab_path() -> PathBuf {
     PathBuf::from(".genegis/collab.json")
 }
 
+fn default_server_url() -> String {
+    std::env::var("GENEGIS_SERVER_URL").unwrap_or_else(|_| DEFAULT_SERVER_URL.into())
+}
+
+fn collab_input_path(args: &[String]) -> PathBuf {
+    args.iter()
+        .position(|a| a == "--input" || a == "-i")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .unwrap_or_else(default_collab_path)
+}
+
+fn collab_output_path(args: &[String]) -> PathBuf {
+    args.iter()
+        .position(|a| a == "--output" || a == "-o")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .unwrap_or_else(default_collab_path)
+}
+
+fn collab_server_url(args: &[String]) -> String {
+    args.iter()
+        .position(|a| a == "--url")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(default_server_url)
+}
+
 fn load_collab_session() -> CollabSession {
     let path = default_collab_path();
     if path.is_file() {
@@ -570,12 +603,200 @@ fn save_collab_session(session: &CollabSession) {
     }
 }
 
+fn handle_agent(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("run") => {
+            let plan_only = args.iter().any(|a| a == "--plan-only" || a == "--plan");
+            let json_output = args.iter().any(|a| a == "--json");
+            let push_to_server = args.iter().any(|a| a == "--push");
+            let link_collab = args.iter().any(|a| a == "--link-collab");
+            let planner_config = planner_config_from_args(args);
+            let verify_retries = args
+                .iter()
+                .position(|a| a == "--verify-retries")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(2);
+            let output = args
+                .iter()
+                .position(|a| a == "--output" || a == "-o")
+                .and_then(|i| args.get(i + 1))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUN_PATH));
+
+            let prompt = collect_prompt(args);
+            if prompt.is_empty() {
+                eprintln!(
+                    "Usage: genegis agent run \"名古屋市の人口密度を表示\" [--plan-only] [--planner rule|llm] [--verify-retries N] [--push] [--link-collab] [--json] [-o FILE]"
+                );
+                process::exit(1);
+            }
+
+            let mut config = AgentRunConfig::rule_based_offline()
+                .with_planner(planner_config)
+                .with_verify_retries(verify_retries)
+                .with_link_collab_on_failure(link_collab);
+            if plan_only {
+                config = config.plan_only();
+            }
+
+            let mut run = match AgentOrchestrator::new().with_config(config).run(&prompt) {
+                Ok(run) => run,
+                Err(err) => {
+                    eprintln!("Agent error: {err}");
+                    process::exit(1);
+                }
+            };
+
+            if link_collab && !run.verification_passed && !run.plan_only {
+                if link_agent_failure_comment(&mut run) {
+                    eprintln!("Collab comment linked to agent run {}", run.id);
+                }
+            }
+
+            if let Err(err) = run.save_to_path(&output) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+
+            if push_to_server {
+                let server_url = collab_server_url(args);
+                match push_agent_run(&server_url, &run) {
+                    Ok(_) => eprintln!("Pushed agent run to {server_url}"),
+                    Err(err) => {
+                        eprintln!("Failed to push agent run: {err}");
+                        process::exit(1);
+                    }
+                }
+            }
+
+            eprintln!(
+                "Agent run {} · {} steps · verification {} · attempts {}",
+                run.id,
+                run.steps.len(),
+                if run.verification_passed {
+                    "passed"
+                } else if run.plan_only {
+                    "skipped (plan-only)"
+                } else {
+                    "failed"
+                },
+                run.verify_attempts
+            );
+            eprintln!("Trace: {}", output.display());
+
+            if json_output {
+                match run.trace_json() {
+                    Ok(json) => println!("{json}"),
+                    Err(err) => {
+                        eprintln!("Failed to serialize trace: {err}");
+                        process::exit(1);
+                    }
+                }
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&run.summary).expect("json")
+                );
+            }
+
+            if !run.verification_passed && !run.plan_only {
+                process::exit(1);
+            }
+        }
+        Some("pull") => {
+            let server_url = collab_server_url(args);
+            let output = agent_output_path(args);
+            let run = match pull_latest_agent_run(&server_url) {
+                Ok(run) => run,
+                Err(err) => {
+                    eprintln!("Agent pull error: {err}");
+                    process::exit(1);
+                }
+            };
+            if let Err(err) = run.save_to_path(&output) {
+                eprintln!("Failed to write {}: {err}", output.display());
+                process::exit(1);
+            }
+            eprintln!("Pulled agent run {} to {}", run.id, output.display());
+        }
+        Some("push") => {
+            let server_url = collab_server_url(args);
+            let input = agent_input_path(args);
+            let run = match AgentRun::load_from_path(&input) {
+                Ok(run) => run,
+                Err(err) => {
+                    eprintln!("Failed to read {}: {err}", input.display());
+                    process::exit(1);
+                }
+            };
+            match push_agent_run(&server_url, &run) {
+                Ok(saved) => eprintln!("Pushed agent run {} to {server_url}", saved.id),
+                Err(err) => {
+                    eprintln!("Agent push error: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        _ => {
+            eprintln!("Usage: genegis agent run \"PROMPT\" [--plan-only] [--planner rule|llm] [--verify-retries N] [--push] [--link-collab] [--json] [-o FILE]");
+            eprintln!("       genegis agent pull [--url URL] [-o FILE]");
+            eprintln!("       genegis agent push [--url URL] [-i FILE]");
+            process::exit(1);
+        }
+    }
+}
+
+fn agent_input_path(args: &[String]) -> PathBuf {
+    args.iter()
+        .position(|a| a == "--input" || a == "-i")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUN_PATH))
+}
+
+fn agent_output_path(args: &[String]) -> PathBuf {
+    args.iter()
+        .position(|a| a == "--output" || a == "-o")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUN_PATH))
+}
+
+fn link_agent_failure_comment(run: &mut AgentRun) -> bool {
+    let Some(verify_step) = run
+        .steps
+        .iter()
+        .rev()
+        .find(|step| step.role == AgentRole::Verifier)
+    else {
+        return false;
+    };
+    let body = format!(
+        "Agent verification failed after {} attempt(s) for prompt: {}",
+        run.verify_attempts.max(1),
+        run.prompt
+    );
+    let mut session = load_collab_session();
+    match session.add_agent_comment(run.id, verify_step.id, "agent", body) {
+        Ok(comment) => {
+            save_collab_session(&session);
+            run.collab_comment_ids.push(comment.id);
+            true
+        }
+        Err(err) => {
+            eprintln!("Collab link error: {err}");
+            false
+        }
+    }
+}
+
 fn handle_collab(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("comment") => match args.get(1).map(String::as_str) {
             Some("list") => {
                 let session = load_collab_session();
-                println!("{}", session.comments_json());
+                println!("{}", session.comments_json().expect("comments"));
             }
             Some("add") => {
                 let Some(body) = args.get(2) else {
@@ -592,7 +813,7 @@ fn handle_collab(args: &[String]) {
                 match session.add_comment(MapComment::new(author, body)) {
                     Ok(_) => {
                         save_collab_session(&session);
-                        println!("{}", session.comments_json());
+                        println!("{}", session.comments_json().expect("comments"));
                     }
                     Err(err) => {
                         eprintln!("Collab error: {err}");
@@ -610,7 +831,7 @@ fn handle_collab(args: &[String]) {
                 let session = load_collab_session();
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(session.branches()).expect("json")
+                    serde_json::to_string_pretty(&session.branches().expect("branches")).expect("json")
                 );
             }
             Some("create") => {
@@ -629,7 +850,7 @@ fn handle_collab(args: &[String]) {
                         save_collab_session(&session);
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(session.branches()).expect("json")
+                            serde_json::to_string_pretty(&session.branches().expect("branches")).expect("json")
                         );
                     }
                     Err(err) => {
@@ -671,14 +892,78 @@ fn handle_collab(args: &[String]) {
             let session = load_collab_session();
             println!(
                 "{}",
-                serde_json::to_string_pretty(&session.summary_json()).expect("json")
+                serde_json::to_string_pretty(&session.summary_json().expect("summary")).expect("json")
             );
+        }
+        Some("pull") => {
+            let url = collab_server_url(args);
+            let output = collab_output_path(args);
+            match pull_session(&url) {
+                Ok(session) => {
+                    let json = match session.export_json() {
+                        Ok(json) => json,
+                        Err(err) => {
+                            eprintln!("Collab error: {err}");
+                            process::exit(1);
+                        }
+                    };
+                    if let Some(parent) = output.parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    if let Err(err) = std::fs::write(&output, json) {
+                        eprintln!("Failed to write {}: {err}", output.display());
+                        process::exit(1);
+                    }
+                    println!(
+                        "pulled from {url} -> {} ({} comments)",
+                        output.display(),
+                        session.comments().expect("comments").len()
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Collab pull failed: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        Some("push") => {
+            let url = collab_server_url(args);
+            let input = collab_input_path(args);
+            let json = match std::fs::read_to_string(&input) {
+                Ok(json) => json,
+                Err(err) => {
+                    eprintln!("Failed to read {}: {err}", input.display());
+                    process::exit(1);
+                }
+            };
+            let session = match CollabSession::import_json(&json) {
+                Ok(session) => session,
+                Err(err) => {
+                    eprintln!("Collab error: {err}");
+                    process::exit(1);
+                }
+            };
+            match push_session(&url, &session) {
+                Ok(updated) => {
+                    println!(
+                        "pushed {} -> {url} ({} comments)",
+                        input.display(),
+                        updated.comments().expect("comments").len()
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Collab push failed: {err}");
+                    process::exit(1);
+                }
+            }
         }
         _ => {
             eprintln!("Usage: genegis collab comment list|add");
             eprintln!("       genegis collab branch list|create");
             eprintln!("       genegis collab export [-o FILE]");
             eprintln!("       genegis collab summary");
+            eprintln!("       genegis collab pull [--url URL] [-o FILE]");
+            eprintln!("       genegis collab push [--url URL] [-i FILE]");
             process::exit(1);
         }
     }
@@ -750,6 +1035,15 @@ Usage:
   genegis collab comment add "..." [--author NAME] Add a comment
   genegis collab branch list|create NAME           List or create project branches
   genegis collab export [-o .genegis/collab.json]  Export collab document JSON
+  genegis collab pull [--url URL] [-o FILE]        Pull session from GeneGIS Server
+  genegis collab push [--url URL] [-i FILE]        Push session to GeneGIS Server
+  genegis agent run "名古屋市の人口密度を表示"       Plan → execute → verify with agent trace
+  genegis agent run "..." --plan-only              Planner step only (human gate)
+  genegis agent run "..." --verify-retries 2       DuckDB verify retry policy
+  genegis agent run "..." --push --link-collab     Push trace + link collab on failure
+  genegis agent run "..." --json -o .genegis/agent-run.json  Export trace JSON
+  genegis agent pull [--url URL] [-o FILE]         Pull latest run from GeneGIS Server
+  genegis agent push [--url URL] [-i FILE]         Push run trace to GeneGIS Server
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
