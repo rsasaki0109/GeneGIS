@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/genegis-core",
+    "crates/genegis-geometry",
+    "crates/genegis-crs",
+    "crates/genegis-spatial-index",
+    "crates/genegis-vector",
+    "crates/genegis-raster",
+    "crates/genegis-pointcloud",
+    "crates/genegis-tile",
+    "crates/genegis-render",
+    "crates/genegis-style",
+    "crates/genegis-query",
+    "crates/genegis-analysis",
+    "crates/genegis-workflow",
+    "crates/genegis-ai",
+    "crates/genegis-storage",
+    "crates/genegis-catalog",
+    "crates/genegis-collab",
+    "crates/genegis-plugin-api",
+    "crates/genegis-plugin-host",
+    "crates/genegis-wasm",
+    "crates/genegis-server",
+    "crates/genegis-cli",
+    "crates/genegis-ffi",
+    "crates/genegis-testkit",
+    "examples/nagoya-population-density",
+    "apps/desktop/src-tauri",
+    "apps/workbench",
+]
+default-members = ["crates/genegis-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/genegis/genegis"
+rust-version = "1.75"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+geojson = "0.24"
+earcutr = "0.4"
+duckdb = { version = "1.2", features = ["bundled"] }
+anyhow = "1"
+
+[patch.crates-io]
+# Patches for Tauri desktop build on Rust 1.94 (optional; workbench does not need these).
+cookie = { path = "third-party/cookie" }
+tauri = { path = "third-party/tauri" }
+tauri-utils = { path = "third-party/tauri-utils" }

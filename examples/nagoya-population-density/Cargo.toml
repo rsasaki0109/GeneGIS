@@ -1,0 +1,16 @@
+[package]
+name = "nagoya-population-density"
+description = "MVP north-star demo: Nagoya population density workflow"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "nagoya-density"
+path = "src/main.rs"
+
+[dependencies]
+genegis-analysis = { path = "../../crates/genegis-analysis" }
+genegis-query = { path = "../../crates/genegis-query" }
+serde_json.workspace = true

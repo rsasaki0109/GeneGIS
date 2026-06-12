@@ -1,0 +1,23 @@
+{
+  "census_year": 2020,
+  "source": "e-Stat 2020 Population Census — Table for Nagoya city wards",
+  "source_url": "https://www.e-stat.go.jp/",
+  "wards": [
+    { "ward_code": "23101", "ward_name": "千種区", "ward_name_en": "Chikusa", "population": 165243 },
+    { "ward_code": "23102", "ward_name": "東区", "ward_name_en": "Higashi", "population": 81906 },
+    { "ward_code": "23103", "ward_name": "北区", "ward_name_en": "Kita", "population": 181039 },
+    { "ward_code": "23104", "ward_name": "西区", "ward_name_en": "Nishi", "population": 145837 },
+    { "ward_code": "23105", "ward_name": "中村区", "ward_name_en": "Nakamura", "population": 92945 },
+    { "ward_code": "23106", "ward_name": "中区", "ward_name_en": "Naka", "population": 92045 },
+    { "ward_code": "23107", "ward_name": "昭和区", "ward_name_en": "Showa", "population": 113555 },
+    { "ward_code": "23108", "ward_name": "瑞穂区", "ward_name_en": "Mizuho", "population": 108248 },
+    { "ward_code": "23109", "ward_name": "熱田区", "ward_name_en": "Atsuta", "population": 69233 },
+    { "ward_code": "23110", "ward_name": "中川区", "ward_name_en": "Nakagawa", "population": 228925 },
+    { "ward_code": "23111", "ward_name": "港区", "ward_name_en": "Minato", "population": 144304 },
+    { "ward_code": "23112", "ward_name": "南区", "ward_name_en": "Minami", "population": 132426 },
+    { "ward_code": "23113", "ward_name": "守山区", "ward_name_en": "Moriyama", "population": 169755 },
+    { "ward_code": "23114", "ward_name": "緑区", "ward_name_en": "Midori", "population": 117754 },
+    { "ward_code": "23115", "ward_name": "名東区", "ward_name_en": "Meito", "population": 166817 },
+    { "ward_code": "23116", "ward_name": "天白区", "ward_name_en": "Tenpaku", "population": 165833 }
+  ]
+}

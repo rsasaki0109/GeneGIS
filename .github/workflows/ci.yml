@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build workspace
+        run: cargo build --workspace
+      - name: Test workspace
+        run: cargo test --workspace
+      - name: MVP workflow smoke
+        run: cargo run -p genegis-cli -- workflow run nagoya-density
+      - name: MVP execute pipeline
+        run: cargo run -p genegis-cli -- workflow run nagoya-density --execute
+      - name: MVP ask intent pipeline
+        run: cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --no-html

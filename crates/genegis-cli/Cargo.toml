@@ -1,0 +1,22 @@
+[package]
+name = "genegis-cli"
+description = "GeneGIS command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "genegis"
+path = "src/main.rs"
+
+[dependencies]
+genegis-ai = { path = "../genegis-ai" }
+genegis-analysis = { path = "../genegis-analysis" }
+genegis-query = { path = "../genegis-query" }
+genegis-raster = { path = "../genegis-raster" }
+genegis-storage = { path = "../genegis-storage" }
+genegis-workflow = { path = "../genegis-workflow" }
+genegis-testkit = { path = "../genegis-testkit" }
+serde_json.workspace = true

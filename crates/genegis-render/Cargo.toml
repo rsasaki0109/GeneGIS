@@ -1,0 +1,31 @@
+[package]
+name = "genegis-render"
+description = "WebGPU/wgpu rendering engine for GeneGIS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+genegis-geometry = { path = "../genegis-geometry" }
+genegis-style = { path = "../genegis-style" }
+bytemuck = { version = "1", features = ["derive"] }
+earcutr.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+wgpu = { version = "24", features = ["wgsl"] }
+winit = "0.30"
+pollster = "0.4"
+tracing.workspace = true
+
+[dev-dependencies]
+genegis-analysis = { path = "../genegis-analysis" }
+
+[[example]]
+name = "canvas_prototype"
+path = "examples/canvas_prototype.rs"
+
+[[example]]
+name = "choropleth_nagoya"
+path = "examples/choropleth_nagoya.rs"

@@ -1,0 +1,89 @@
+use std::collections::HashMap;
+
+use genegis_geometry::BoundingBox;
+
+use crate::dataset::{DatasetFormat, DatasetRecord};
+use crate::error::CatalogError;
+
+/// Well-known dataset id for the Nagoya north-star demo.
+pub const NAGOYA_WARDS_DENSITY_ID: &str = "nagoya-wards-density";
+
+/// Path to the bundled Nagoya wards GeoJSON asset.
+pub fn nagoya_wards_geojson_path() -> &'static str {
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/nagoya-population-density/data/nagoya-wards.geojson"
+    )
+}
+
+/// In-memory dataset registry (Phase 2 alpha).
+#[derive(Debug, Clone, Default)]
+pub struct Catalog {
+    datasets: HashMap<String, DatasetRecord>,
+}
+
+impl Catalog {
+    pub fn new() -> Self {
+        Self {
+            datasets: HashMap::new(),
+        }
+    }
+
+    pub fn register(&mut self, record: DatasetRecord) {
+        self.datasets.insert(record.id.clone(), record);
+    }
+
+    pub fn get(&self, id: &str) -> Option<&DatasetRecord> {
+        self.datasets.get(id)
+    }
+
+    pub fn require(&self, id: &str) -> Result<&DatasetRecord, CatalogError> {
+        self.get(id)
+            .ok_or_else(|| CatalogError::NotFound(id.to_string()))
+    }
+
+    pub fn list(&self) -> Vec<&DatasetRecord> {
+        let mut records: Vec<_> = self.datasets.values().collect();
+        records.sort_by(|a, b| a.id.cmp(&b.id));
+        records
+    }
+}
+
+/// Default alpha catalog — Nagoya wards population density (GeoJSON + GeoParquet-ready).
+pub fn alpha_catalog() -> Catalog {
+    let mut catalog = Catalog::new();
+    catalog.register(nagoya_wards_density_record());
+    catalog
+}
+
+fn nagoya_wards_density_record() -> DatasetRecord {
+    DatasetRecord {
+        id: NAGOYA_WARDS_DENSITY_ID.into(),
+        title: "Nagoya city wards — population density".into(),
+        description: "16 Nagoya wards with 2020 census population and N03-derived boundaries.".into(),
+        format: DatasetFormat::geojson(),
+        crs: "EPSG:4326".into(),
+        bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
+        uri: nagoya_wards_geojson_path().into(),
+        license: "Government open data (Japan) + MLIT N03".into(),
+        tags: vec![
+            "nagoya".into(),
+            "population".into(),
+            "density".into(),
+            "wards".into(),
+        ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alpha_catalog_lists_nagoya_demo() {
+        let catalog = alpha_catalog();
+        let record = catalog.require(NAGOYA_WARDS_DENSITY_ID).expect("record");
+        assert_eq!(record.format.kind, "geojson");
+        assert!(std::path::Path::new(&record.uri).exists());
+    }
+}

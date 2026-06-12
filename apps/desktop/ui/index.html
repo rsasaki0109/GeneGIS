@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeneGIS Workbench</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <strong>GeneGIS</strong>
+        <span>AI-native GIS Workbench · Phase 3 beta</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel prompt-panel">
+        <h2>Intent</h2>
+        <label for="prompt">自然言語プロンプト</label>
+        <textarea id="prompt" rows="3">名古屋市の人口密度を表示</textarea>
+        <div class="actions">
+          <button id="run-btn" type="button">Run Ask Pipeline</button>
+          <button id="download-png-btn" type="button" class="secondary" disabled>
+            Download PNG
+          </button>
+          <button id="gpu-preview-btn" type="button" class="secondary" disabled>
+            Open GPU Map
+          </button>
+          <span id="status" class="status">Ready</span>
+        </div>
+      </section>
+
+      <section class="panel map-panel">
+        <h2>Map</h2>
+        <iframe id="map-frame" title="Choropleth map"></iframe>
+      </section>
+
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Resolution</h2>
+          <pre id="resolution" class="mono">—</pre>
+        </section>
+        <section class="panel">
+          <h2>Dataset</h2>
+          <pre id="dataset" class="mono">—</pre>
+        </section>
+        <section class="panel">
+          <h2>Summary</h2>
+          <pre id="summary" class="mono">—</pre>
+        </section>
+        <section class="panel">
+          <h2>Verification</h2>
+          <ul id="verification"></ul>
+        </section>
+        <section class="panel">
+          <h2>Notes</h2>
+          <ul id="notes"></ul>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,11 @@
+[package]
+name = "genegis-plugin-host"
+description = "GeneGIS plugin host engine (Phase 0 skeleton)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true

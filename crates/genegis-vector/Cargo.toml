@@ -1,0 +1,28 @@
+[package]
+name = "genegis-vector"
+description = "GeneGIS vector engine: GeoJSON, GeoParquet, feature model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+genegis-geometry = { path = "../genegis-geometry" }
+genegis-storage = { path = "../genegis-storage" }
+arrow-array = "58"
+arrow-schema = "58"
+geo-traits = "0.3"
+geo-types = "0.7"
+geojson.workspace = true
+geoparquet = "0.8"
+parquet = { version = "58", default-features = false, features = ["arrow"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+bytes = "1"
+wkb = "0.9"
+
+[dev-dependencies]
+geoarrow-array = "0.8"
+geoarrow-schema = "0.8"

@@ -1,0 +1,25 @@
+[package]
+name = "genegis-analysis"
+description = "GeneGIS analysis engine: workflow execution"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+genegis-geometry = { path = "../genegis-geometry" }
+genegis-ai = { path = "../genegis-ai" }
+genegis-catalog = { path = "../genegis-catalog" }
+genegis-query = { path = "../genegis-query" }
+genegis-render = { path = "../genegis-render" }
+genegis-style = { path = "../genegis-style" }
+genegis-vector = { path = "../genegis-vector" }
+genegis-workflow = { path = "../genegis-workflow" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+resvg = "0.47"
+base64 = "0.22"
+
+[dev-dependencies]

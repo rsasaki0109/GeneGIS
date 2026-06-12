@@ -1,0 +1,23 @@
+[package]
+name = "genegis-desktop"
+version = "0.1.0"
+description = "GeneGIS Desktop Workbench"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[lib]
+name = "genegis_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "genegis-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+genegis-analysis = { path = "../../../crates/genegis-analysis" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = [] }
