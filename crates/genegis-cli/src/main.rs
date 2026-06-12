@@ -5,8 +5,9 @@ use genegis_analysis::{
     default_nagoya_data_path, export_html_map, export_png_map, run_ask_pipeline_with_config,
     run_nagoya_population_density,
 };
+use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
 use genegis_query::verify_nagoya_densities;
-use genegis_workflow::nagoya_population_density_template;
+use genegis_workflow::{nagoya_population_density_template, remote_cog_metadata_template};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -549,19 +550,31 @@ fn handle_workflow(args: &[String]) {
                 .and_then(|i| args.get(i + 1))
                 .map(PathBuf::from);
 
-            if name != "nagoya-density" {
-                eprintln!("Unknown workflow: {name}");
-                process::exit(1);
-            }
-
-            if execute {
-                run_nagoya_execute(export_html, export_png, output.as_deref());
-            } else {
-                print_workflow_template();
+            match name {
+                "nagoya-density" => {
+                    if execute {
+                        run_nagoya_execute(export_html, export_png, output.as_deref());
+                    } else {
+                        print_workflow_json(&nagoya_population_density_template());
+                    }
+                }
+                "remote-cog-demo" => {
+                    if execute {
+                        run_remote_cog_execute();
+                    } else {
+                        print_workflow_json(&remote_cog_metadata_template());
+                    }
+                }
+                _ => {
+                    eprintln!("Unknown workflow: {name}");
+                    process::exit(1);
+                }
             }
         }
         _ => {
-            eprintln!("Usage: genegis workflow run [nagoya-density] [--execute] [--html] [--png] [-o FILE]");
+            eprintln!(
+                "Usage: genegis workflow run [nagoya-density|remote-cog-demo] [--execute] [--html] [--png] [-o FILE]"
+            );
             process::exit(1);
         }
     }
@@ -588,6 +601,8 @@ Usage:
   genegis plugin load BUNDLE_DIR                   Capability-gated WASM load smoke
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
+  genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
+  genegis workflow run remote-cog-demo --execute   Probe catalog COG over HTTP range-read
   genegis workflow run nagoya-density -x --html    Execute + write HTML map
   genegis workflow run nagoya-density -x --png     Execute + write PNG map
   genegis version
@@ -600,12 +615,31 @@ North star: 「名古屋市の人口密度を表示」
     );
 }
 
-fn print_workflow_template() {
-    let workflow = nagoya_population_density_template();
-    match serde_json::to_string_pretty(&workflow) {
+fn print_workflow_json(workflow: &genegis_workflow::GeoWorkflow) {
+    match serde_json::to_string_pretty(workflow) {
         Ok(json) => println!("{json}"),
         Err(err) => {
             eprintln!("Failed to serialize workflow: {err}");
+            process::exit(1);
+        }
+    }
+}
+
+fn run_remote_cog_execute() {
+    let record = match alpha_catalog().require(REMOTE_COG_DEMO_ID) {
+        Ok(record) => record,
+        Err(err) => {
+            eprintln!("Catalog error: {err}");
+            process::exit(1);
+        }
+    };
+
+    match genegis_raster::read_cog_uri(&record.uri) {
+        Ok(info) => {
+            println!("{}", serde_json::to_string_pretty(&info.summary_json()).expect("json"));
+        }
+        Err(err) => {
+            eprintln!("Raster error: {err}");
             process::exit(1);
         }
     }

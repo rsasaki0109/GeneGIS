@@ -8,6 +8,9 @@ use crate::error::CatalogError;
 /// Well-known dataset id for the Nagoya north-star demo.
 pub const NAGOYA_WARDS_DENSITY_ID: &str = "nagoya-wards-density";
 
+/// Well-known dataset id for the remote COG metadata demo.
+pub const REMOTE_COG_DEMO_ID: &str = "remote-cog-demo";
+
 /// Path to the bundled Nagoya wards GeoJSON asset.
 pub fn nagoya_wards_geojson_path() -> &'static str {
     concat!(
@@ -53,6 +56,7 @@ impl Catalog {
 pub fn alpha_catalog() -> Catalog {
     let mut catalog = Catalog::new();
     catalog.register(nagoya_wards_density_record());
+    catalog.register(remote_cog_demo_record());
     catalog
 }
 
@@ -75,6 +79,26 @@ fn nagoya_wards_density_record() -> DatasetRecord {
     }
 }
 
+fn remote_cog_demo_record() -> DatasetRecord {
+    DatasetRecord {
+        id: REMOTE_COG_DEMO_ID.into(),
+        title: "Remote GeoTIFF / COG metadata demo".into(),
+        description: "Public OSGeo GeoTIFF sample for HTTP range-read and raster metadata smoke tests."
+            .into(),
+        format: DatasetFormat::cog(),
+        crs: "EPSG:26718".into(),
+        bbox: BoundingBox::new(-79.05, 42.02, -78.98, 42.08),
+        uri: "https://download.osgeo.org/geotiff/samples/gcp.tif".into(),
+        license: "Public domain (OSGeo sample data)".into(),
+        tags: vec![
+            "cog".into(),
+            "remote".into(),
+            "demo".into(),
+            "raster".into(),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +109,14 @@ mod tests {
         let record = catalog.require(NAGOYA_WARDS_DENSITY_ID).expect("record");
         assert_eq!(record.format.kind, "geojson");
         assert!(std::path::Path::new(&record.uri).exists());
+    }
+
+    #[test]
+    fn alpha_catalog_lists_remote_cog_demo() {
+        let catalog = alpha_catalog();
+        let record = catalog.require(REMOTE_COG_DEMO_ID).expect("record");
+        assert_eq!(record.format.kind, "cog");
+        assert!(record.uri.starts_with("https://"));
+        assert_eq!(catalog.list().len(), 2);
     }
 }

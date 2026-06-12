@@ -1,5 +1,7 @@
 use genegis_catalog::alpha_catalog;
-use genegis_workflow::{GeoWorkflow, nagoya_population_density_template};
+use genegis_workflow::{
+    nagoya_population_density_template, remote_cog_metadata_template, GeoWorkflow,
+};
 
 use crate::backend::{PlannerBackend, PlannerConfig};
 use crate::error::AiError;
@@ -70,6 +72,7 @@ fn build_plan(
 fn workflow_for(id: WorkflowId) -> GeoWorkflow {
     match id {
         WorkflowId::NagoyaDensity => nagoya_population_density_template(),
+        WorkflowId::RemoteCogDemo => remote_cog_metadata_template(),
     }
 }
 
@@ -77,7 +80,7 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
 mod tests {
     use super::*;
 
-    use genegis_catalog::NAGOYA_WARDS_DENSITY_ID;
+    use genegis_catalog::{NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn plans_north_star() {
@@ -86,6 +89,14 @@ mod tests {
         assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_DENSITY_ID);
         assert_eq!(plan.workflow.steps.len(), 14);
         assert_eq!(plan.mode, "rule_based_mvp");
+    }
+
+    #[test]
+    fn plans_remote_cog_demo() {
+        let plan = plan_from_prompt("リモートCOGデモのメタデータを表示").expect("plan");
+        assert_eq!(plan.resolved.workflow_id, WorkflowId::RemoteCogDemo);
+        assert_eq!(plan.resolved.dataset_id, REMOTE_COG_DEMO_ID);
+        assert_eq!(plan.workflow.steps.len(), 4);
     }
 
     #[test]

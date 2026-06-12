@@ -18,11 +18,12 @@ const SYSTEM_PROMPT: &str = r#"You are the GeneGIS workflow planner. Map the use
 
 Available workflows:
 - nagoya-density — population density choropleth for Nagoya city wards (16 wards, 2020 census, N03 boundaries)
+- remote-cog-demo — fetch remote GeoTIFF/COG metadata via catalog + HTTP range-read
 
 Respond with JSON only (no markdown):
-{"workflow_id":"nagoya-density","goal":"<user goal>","confidence":0.0,"rationale":["..."],"ambiguities":["..."]}
+{"workflow_id":"nagoya-density|remote-cog-demo","goal":"<user goal>","confidence":0.0,"rationale":["..."],"ambiguities":["..."]}
 
-If the request is unsupported, set workflow_id to nagoya-density only when Nagoya + population density is clearly intended; otherwise respond with confidence 0 and explain in ambiguities."#;
+If the request is unsupported, set workflow_id to nagoya-density only when Nagoya + population density is clearly intended, or remote-cog-demo when remote COG metadata is clearly intended; otherwise respond with confidence 0 and explain in ambiguities."#;
 
 pub fn plan_with_llm(prompt: &str, config: &PlannerConfig) -> Result<ResolvedWorkflow, AiError> {
     let api_key = config

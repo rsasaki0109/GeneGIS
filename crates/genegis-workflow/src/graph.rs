@@ -77,3 +77,22 @@ pub fn nagoya_population_density_template() -> GeoWorkflow {
     ];
     workflow
 }
+
+/// Remote COG / GeoTIFF metadata probe workflow (catalog + HTTP range-read demo).
+pub fn remote_cog_metadata_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("リモートCOGデモのメタデータを表示");
+    workflow.assumptions.push("Asset is fetched over HTTP range-read when remote".into());
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "FindDataset",
+            serde_json::json!({ "tags": ["cog", "remote", "demo"] }),
+        ),
+        WorkflowStep::new(
+            "ProbeRasterMetadata",
+            serde_json::json!({ "read_mode": "http_range" }),
+        ),
+        WorkflowStep::new("SummarizeCogInfo", serde_json::json!({})),
+        WorkflowStep::new("AttachSources", serde_json::json!({})),
+    ];
+    workflow
+}

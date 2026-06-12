@@ -8,6 +8,7 @@ pub mod stac;
 
 pub use catalog::{
     alpha_catalog, nagoya_wards_geojson_path, Catalog, NAGOYA_WARDS_DENSITY_ID,
+    REMOTE_COG_DEMO_ID,
 };
 pub use dataset::{DatasetFormat, DatasetRecord};
 pub use error::CatalogError;

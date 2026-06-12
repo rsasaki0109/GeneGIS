@@ -9,18 +9,21 @@ use crate::intent::ParsedIntent;
 #[serde(rename_all = "kebab-case")]
 pub enum WorkflowId {
     NagoyaDensity,
+    RemoteCogDemo,
 }
 
 impl WorkflowId {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NagoyaDensity => "nagoya-density",
+            Self::RemoteCogDemo => "remote-cog-demo",
         }
     }
 
     fn dataset_tags(self) -> &'static [&'static str] {
         match self {
             Self::NagoyaDensity => &["nagoya", "density"],
+            Self::RemoteCogDemo => &["cog", "remote", "demo"],
         }
     }
 }
@@ -50,6 +53,7 @@ pub fn resolve_workflow_with_catalog(
 
     let nagoya = intent.signals.place.as_deref() == Some("名古屋市");
     let density = intent.signals.metric.as_deref() == Some("population_density");
+    let remote_cog = intent.signals.metric.as_deref() == Some("remote_cog");
 
     if nagoya && density {
         let mut resolved = ResolvedWorkflow {
@@ -59,6 +63,22 @@ pub fn resolve_workflow_with_catalog(
             confidence: intent.confidence,
             rationale: intent.signals.matched_tokens.clone(),
             ambiguities: default_ambiguities(),
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if remote_cog {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::RemoteCogDemo,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Execution is metadata-only in Phase 4 alpha".into(),
+                "Asset URI comes from catalog registry".into(),
+            ],
         };
         bind_catalog_dataset(catalog, &mut resolved)?;
         return Ok(resolved);
@@ -121,7 +141,7 @@ fn default_ambiguities() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::intent::ParsedIntent;
-    use genegis_catalog::NAGOYA_WARDS_DENSITY_ID;
+    use genegis_catalog::{NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn resolves_nagoya_density() {
@@ -133,5 +153,13 @@ mod tests {
             .rationale
             .iter()
             .any(|token| token.starts_with("catalog:")));
+    }
+
+    #[test]
+    fn resolves_remote_cog_demo() {
+        let intent = ParsedIntent::parse("リモートCOGデモのメタデータを表示");
+        let resolved = resolve_workflow(&intent).expect("resolve");
+        assert_eq!(resolved.workflow_id, WorkflowId::RemoteCogDemo);
+        assert_eq!(resolved.dataset_id, REMOTE_COG_DEMO_ID);
     }
 }

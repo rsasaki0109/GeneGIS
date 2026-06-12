@@ -22,6 +22,13 @@ impl DatasetFormat {
             media_type: "application/vnd.apache.parquet".into(),
         }
     }
+
+    pub fn cog() -> Self {
+        Self {
+            kind: "cog".into(),
+            media_type: "image/tiff".into(),
+        }
+    }
 }
 
 /// Catalog entry describing a discoverable dataset.

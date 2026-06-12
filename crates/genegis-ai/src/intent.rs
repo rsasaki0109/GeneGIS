@@ -37,6 +37,14 @@ impl ParsedIntent {
             score += 0.35;
         }
 
+        if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
+            && contains_any(&normalized, &["リモート", "remote", "デモ", "demo", "http"])
+        {
+            signals.metric = Some("remote_cog".into());
+            signals.matched_tokens.push("metric:remote_cog".into());
+            score += 0.40;
+        }
+
         if contains_any(
             &normalized,
             &["表示", "見せ", "地図", "map", "choropleth", "コロプレス"],
@@ -77,5 +85,12 @@ mod tests {
         assert_eq!(intent.signals.place.as_deref(), Some("名古屋市"));
         assert_eq!(intent.signals.metric.as_deref(), Some("population_density"));
         assert!(intent.confidence >= 0.8);
+    }
+
+    #[test]
+    fn parses_remote_cog_demo_prompt() {
+        let intent = ParsedIntent::parse("リモートCOGデモのメタデータを表示");
+        assert_eq!(intent.signals.metric.as_deref(), Some("remote_cog"));
+        assert!(intent.confidence >= 0.5);
     }
 }

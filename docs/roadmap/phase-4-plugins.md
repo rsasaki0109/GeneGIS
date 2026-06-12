@@ -22,7 +22,7 @@
 - [x] Plugin capability model (`genegis-plugin-api`: `PluginManifest`, `PluginCapability`, `CapabilityPolicy`)
 - [x] WASM plugin host prototype (`genegis-plugin-host`, Wasmtime loader, CLI `genegis plugin list|info|load`)
 - [x] Workbench plugin panel stub (`apps/workbench` `/api/plugins`, shared desktop UI sidebar)
-- [ ] Second catalog dataset + planner workflow (optional stretch)
+- [x] Second catalog dataset + planner workflow (`remote-cog-demo`, OSGeo HTTP GeoTIFF)
 
 ## Recommended order
 
@@ -30,7 +30,17 @@
 2. **Plugin API** — define `PluginManifest`, capabilities (`ReadCatalog`, `AnalysisStep`, …), version contract
 3. **WASM host** — load `.wasm` plugin, capability gate, smoke invoke from CLI
 4. **Workbench hook** — list loaded plugins; no marketplace yet
-5. **Second dataset** — e.g. prefecture-level density or remote COG demo entry in catalog
+5. **Second dataset** — `remote-cog-demo` catalog entry + planner tag wiring (`cog`, `remote`, `demo`)
+
+## Second catalog workflow
+
+```bash
+genegis ask "リモートCOGデモのメタデータを表示" --plan-only
+genegis workflow run remote-cog-demo
+genegis workflow run remote-cog-demo --execute
+```
+
+Catalog id: `remote-cog-demo` → OSGeo sample GeoTIFF over HTTP range-read.
 
 ## COPC read (target)
 

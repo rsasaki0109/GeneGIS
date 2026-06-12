@@ -64,7 +64,7 @@ fn score_record(record: &DatasetRecord, required_tags: &[&str]) -> Option<Catalo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::{alpha_catalog, NAGOYA_WARDS_DENSITY_ID};
+    use crate::catalog::{alpha_catalog, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn matches_nagoya_density_tags() {
@@ -74,6 +74,15 @@ mod tests {
             .expect("match");
         assert_eq!(matched.dataset_id, NAGOYA_WARDS_DENSITY_ID);
         assert_eq!(matched.score, 1.0);
+    }
+
+    #[test]
+    fn matches_remote_cog_demo_tags() {
+        let catalog = alpha_catalog();
+        let matched = catalog
+            .match_dataset(&["cog", "remote", "demo"])
+            .expect("match");
+        assert_eq!(matched.dataset_id, REMOTE_COG_DEMO_ID);
     }
 
     #[test]
