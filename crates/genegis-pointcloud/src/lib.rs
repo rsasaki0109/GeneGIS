@@ -1,6 +1,10 @@
-//! GeneGIS pointcloud — Phase 0 skeleton crate.
+//! GeneGIS point cloud engine — COPC read (Phase 4 alpha).
 
-#![deny(missing_docs)]
+pub mod copc;
+pub mod error;
 
-/// Placeholder version marker for Phase 0 scaffolding.
-pub const PHASE: &str = "0-foundation";
+mod http_source;
+mod runtime;
+
+pub use copc::{read_copc_bytes, read_copc_path, read_copc_uri, CopcInfo};
+pub use error::PointcloudError;

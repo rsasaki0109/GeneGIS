@@ -13,6 +13,7 @@ dist/
 *.laz
 *.las
 *.copc.laz
+!crates/genegis-pointcloud/testdata/*.copc.laz
 datasets/cache/
 .genegis/cache/
 examples/nagoya-population-density/output/

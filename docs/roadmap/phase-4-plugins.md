@@ -17,8 +17,8 @@
 ## Deliverables
 
 - [x] Phase 4 roadmap (this document)
-- [ ] COPC metadata smoke read (`genegis-pointcloud`)
-- [ ] COPC HTTP range-read (`genegis-pointcloud` + `genegis-storage`)
+- [x] COPC metadata smoke read (`genegis-pointcloud`, `copc-streaming`, CLI `genegis pointcloud info`)
+- [x] COPC HTTP range-read (`read_copc_uri` + `HttpByteSource`, `read_mode: "http_range"`)
 - [ ] Plugin capability model (`genegis-plugin-api`)
 - [ ] WASM plugin host prototype (`genegis-plugin-host`)
 - [ ] Workbench plugin panel stub (`apps/workbench`)

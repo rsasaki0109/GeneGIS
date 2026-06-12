@@ -22,6 +22,7 @@ fn main() {
         Some("bench") => handle_bench(&args[2..]),
         Some("storage") => handle_storage(&args[2..]),
         Some("raster") => handle_raster(&args[2..]),
+        Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
@@ -391,6 +392,33 @@ Examples:
     );
 }
 
+fn handle_pointcloud(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("info") => {
+            let Some(path) = args.get(1) else {
+                eprintln!("Usage: genegis pointcloud info PATH|URL");
+                process::exit(1);
+            };
+            match genegis_pointcloud::read_copc_uri(path) {
+                Ok(info) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&info.summary_json()).expect("json")
+                    );
+                }
+                Err(err) => {
+                    eprintln!("Point cloud error: {err}");
+                    process::exit(1);
+                }
+            }
+        }
+        _ => {
+            eprintln!("Usage: genegis pointcloud info PATH|URL");
+            process::exit(1);
+        }
+    }
+}
+
 fn handle_raster(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("info") => {
@@ -461,6 +489,7 @@ Usage:
   genegis bench pipeline --iterations 20 --json    JSON benchmark report
   genegis storage fetch URL [--range START-END]    HTTP range-read smoke fetch
   genegis raster info PATH                         COG / GeoTIFF metadata JSON (local or URL)
+  genegis pointcloud info PATH|URL                 COPC metadata JSON (local or HTTP range-read)
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run nagoya-density -x --html    Execute + write HTML map

@@ -15,6 +15,7 @@ path = "src/main.rs"
 genegis-ai = { path = "../genegis-ai" }
 genegis-analysis = { path = "../genegis-analysis" }
 genegis-query = { path = "../genegis-query" }
+genegis-pointcloud = { path = "../genegis-pointcloud" }
 genegis-raster = { path = "../genegis-raster" }
 genegis-storage = { path = "../genegis-storage" }
 genegis-workflow = { path = "../genegis-workflow" }

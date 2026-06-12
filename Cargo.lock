@@ -926,6 +926,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "copc-streaming"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77dc2d974a4249167c4e42e5af2220d0f3ce907e117cec0f8747bcfe7fb154ac"
+dependencies = [
+ "byteorder",
+ "las",
+ "laz",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1885,6 +1897,7 @@ version = "0.1.0"
 dependencies = [
  "genegis-ai",
  "genegis-analysis",
+ "genegis-pointcloud",
  "genegis-query",
  "genegis-raster",
  "genegis-storage",
@@ -1960,7 +1973,14 @@ dependencies = [
 name = "genegis-pointcloud"
 version = "0.1.0"
 dependencies = [
+ "copc-streaming",
+ "genegis-storage",
+ "las",
  "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -3254,6 +3274,31 @@ dependencies = [
  "euclid",
  "polycool",
  "smallvec",
+]
+
+[[package]]
+name = "las"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c2594be0d2ec4f04c944f5cb5160625cd1a69451db14de73b990065f97fb84"
+dependencies = [
+ "byteorder",
+ "chrono",
+ "laz",
+ "log",
+ "num-traits",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "laz"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efb1d9809cf87aa6500b6010e1164c6b6cd3cc15202ba79d6bb1dfb84c555a9b"
+dependencies = [
+ "byteorder",
+ "num-traits",
 ]
 
 [[package]]

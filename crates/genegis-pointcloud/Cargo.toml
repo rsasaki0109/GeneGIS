@@ -1,6 +1,6 @@
 [package]
 name = "genegis-pointcloud"
-description = "GeneGIS pointcloud engine (Phase 0 skeleton)"
+description = "GeneGIS point cloud engine — COPC read"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,4 +8,13 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+copc-streaming = "0.1.5"
+genegis-storage = { path = "../genegis-storage" }
+las = "0.9.11"
 serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt"] }
+
+[dev-dependencies]
+tempfile = "3"
