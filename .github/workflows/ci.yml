@@ -26,17 +26,26 @@ jobs:
         run: cargo run -p genegis-cli -- workflow run nagoya-density --execute
       - name: MVP ask intent pipeline
         run: cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --no-html
-      - name: Agent orchestration smoke (north star)
-        run: cargo run -p genegis-cli -- agent run "名古屋市の人口密度を表示"
+      - name: Phase 8 gamma — agent workflow matrix
+        run: |
+          cargo run -p genegis-cli -- agent run "名古屋市の人口密度を表示"
+          cargo run -p genegis-cli -- agent run "ローカルCOGデモのメタデータを表示"
+          cargo run -p genegis-cli -- agent run "リモートCOGデモのメタデータを表示"
       - name: Agent human gate smoke
         run: |
           cargo run -p genegis-cli -- agent plan "名古屋市の人口密度を表示"
           cargo run -p genegis-cli -- agent execute
-      - name: Agent audit export smoke
-        run: cargo run -p genegis-cli -- agent export-audit -o /tmp/genegis-audit-bundle.json
-      - name: Remote COG agent smoke (network)
-        run: cargo run -p genegis-cli -- agent run "リモートCOGデモのメタデータを表示"
-      - name: Local COG agent smoke (offline)
-        run: cargo run -p genegis-cli -- agent run "ローカルCOGデモのメタデータを表示"
+      - name: Agent audit export smoke (STAC bundle v2)
+        run: |
+          cargo run -p genegis-cli -- agent export-audit -o /tmp/genegis-audit-bundle.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          bundle = json.loads(Path("/tmp/genegis-audit-bundle.json").read_text())
+          assert bundle["schema"] == "genegis-audit-bundle-v2", bundle["schema"]
+          stac = bundle["stac"]
+          assert stac["collection"]["item_count"] == 3
+          assert len(stac["items"]) == 3
+          PY
       - name: STAC collection smoke
         run: cargo run -p genegis-cli -- catalog stac list

@@ -227,6 +227,27 @@ li.note {
   margin-bottom: 10px;
 }
 
+.stac-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.stac-item {
+  font-size: 11px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1218;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stac-item:hover {
+  border-color: var(--accent);
+}
+
 .agent-history {
   display: flex;
   flex-direction: column;

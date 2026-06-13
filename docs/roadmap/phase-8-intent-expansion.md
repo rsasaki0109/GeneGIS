@@ -35,12 +35,20 @@
 - [x] CLI `genegis catalog stac list|get`
 - [x] Workbench `/api/stac/collection` + workflow-aware `/api/gpu-preview`
 
+### Phase 8 gamma (release hardening)
+
+- [x] CI agent workflow matrix — nagoya-density + local-cog-demo + remote-cog-demo
+- [x] Audit bundle v2 — includes STAC collection + item snapshots
+- [x] Workbench STAC catalog panel (browse + click item → summary)
+- [ ] GitHub Release v0.8.0
+
 ## Recommended order
 
 1. **Workflow dispatch** — analysis + agent branch on `WorkflowId`
 2. **Remote COG path** — metadata verify (HTTP range-read, no DuckDB)
 3. **CI / docs** — second verified prompt in smoke suite
 4. **Phase 8 beta** — STAC + additional workflows
+5. **Phase 8 gamma** — 3-workflow CI matrix, audit bundle v2, STAC UI
 
 ## CLI (target)
 
@@ -70,5 +78,9 @@ genegis workflow run remote-cog-demo --execute
 ## North star (unchanged)
 
 「名古屋市の人口密度を表示」 — offline rule planner + DuckDB verification must keep passing in CI.
+
+## Next
+
+Phase 9 — external STAC discovery and GeoParquet workflows (TBD): draft `docs/roadmap/phase-9-external-data.md`
 
 See [`phase-7-release.md`](phase-7-release.md) and [`docs/guides/agent-orchestration.md`](../guides/agent-orchestration.md).

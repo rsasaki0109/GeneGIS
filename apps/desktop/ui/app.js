@@ -7,6 +7,8 @@ const mapFrame = document.getElementById("map-frame");
 const resolutionEl = document.getElementById("resolution");
 const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
+const stacCollectionEl = document.getElementById("stac-collection");
+const stacItemsEl = document.getElementById("stac-items");
 const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
 const agentMetaEl = document.getElementById("agent-meta");
@@ -165,6 +167,56 @@ async function invokePlugins() {
     throw new Error(payload.error || "Failed to load plugins");
   }
   return payload;
+}
+
+async function loadStacCollection() {
+  try {
+    const response = await fetch("/api/stac/collection");
+    const payload = await response.json();
+    if (!payload.ok || !payload.collection) {
+      throw new Error(payload.error || "Failed to load STAC collection");
+    }
+
+    const collection = payload.collection;
+    stacCollectionEl.textContent = [
+      `id: ${collection.id}`,
+      `title: ${collection.title}`,
+      `items: ${collection.item_count ?? "—"}`,
+      `license: ${collection.license ?? "—"}`,
+    ].join("\n");
+
+    stacItemsEl.innerHTML = "";
+    const itemIds = collection.item_ids || [];
+    if (!itemIds.length) {
+      stacItemsEl.textContent = "No STAC items in collection";
+      return;
+    }
+
+    for (const itemId of itemIds) {
+      const card = document.createElement("article");
+      card.className = "stac-item";
+      card.textContent = itemId;
+      card.addEventListener("click", async () => {
+        try {
+          const itemResponse = await fetch(`/api/stac/items/${encodeURIComponent(itemId)}`);
+          const itemPayload = await itemResponse.json();
+          if (!itemPayload.ok || !itemPayload.item) {
+            throw new Error(itemPayload.error || "Failed to load STAC item");
+          }
+          summaryEl.textContent = JSON.stringify(itemPayload.item, null, 2);
+          setStatus(`STAC item loaded: ${itemId}`);
+        } catch (err) {
+          console.error(err);
+          setStatus(`STAC item error: ${err.message || err}`);
+        }
+      });
+      stacItemsEl.appendChild(card);
+    }
+  } catch (err) {
+    console.error(err);
+    stacCollectionEl.textContent = `Error: ${err.message || err}`;
+    stacItemsEl.textContent = "";
+  }
 }
 
 async function loadPlugins() {
@@ -693,6 +745,7 @@ agentRetryBtn?.addEventListener("click", async () => {
 });
 
 loadPlugins();
+loadStacCollection();
 loadComments();
 loadAgentTrace();
 runAsk();

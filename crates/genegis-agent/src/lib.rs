@@ -8,7 +8,7 @@ pub mod remote;
 pub mod tool_registry;
 
 pub use audit::{
-    build_audit_bundle, AuditCollabSnapshot, AUDIT_BUNDLE_SCHEMA,
+    build_audit_bundle, build_audit_stac_snapshot, AuditCollabSnapshot, AUDIT_BUNDLE_SCHEMA,
 };
 pub use error::AgentError;
 pub use model::{
