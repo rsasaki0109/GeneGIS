@@ -25,7 +25,7 @@
 - [x] Allowlist: `run_remote_cog_metadata`, `cog_metadata_verify`
 - [x] Plan-only agent test for remote COG intent (offline resolver smoke)
 - [x] CI network smoke — `genegis agent run "リモートCOGデモのメタデータを表示"`
-- [ ] Workbench UI — show workflow-specific verification labels
+- [x] Workbench UI — show workflow-specific verification labels
 
 ### Phase 8 beta (catalog expansion)
 

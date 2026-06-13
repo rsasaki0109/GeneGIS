@@ -27,6 +27,37 @@ const notesEl = document.getElementById("notes");
 
 let lastPngBase64 = null;
 
+function verificationProfile(workflowId) {
+  if (workflowId === "remote-cog-demo") {
+    return {
+      label: "cog metadata",
+      verifier: "cog_metadata_verify",
+      status: (passed) => (passed ? "COG metadata verified" : "COG metadata failed"),
+    };
+  }
+
+  return {
+    label: "duckdb",
+    verifier: "duckdb_verify",
+    status: (passed) => (passed ? "DuckDB verified" : "DuckDB failed"),
+  };
+}
+
+function verificationLine(workflowId, passed) {
+  const profile = verificationProfile(workflowId);
+  return `${profile.label}: ${passed ? "passed" : "failed"}`;
+}
+
+function agentVerificationLine(run) {
+  if (run.plan_only) {
+    return "verification: plan-only";
+  }
+  const profile = verificationProfile(run.workflow_id);
+  return run.verification_passed
+    ? `verification: ${profile.status(true)}`
+    : `verification: ${profile.status(false)}`;
+}
+
 function setStatus(text, busy = false) {
   statusEl.textContent = text;
   runBtn.disabled = busy;
@@ -163,7 +194,7 @@ function renderAgentRun(run) {
   agentMetaEl.textContent = [
     `run: ${run.id.slice(0, 8)}…`,
     run.workflow_id ? `workflow: ${run.workflow_id}` : "plan-only",
-    run.verification_passed ? "verification: passed" : "verification: pending/failed",
+    agentVerificationLine(run),
     run.verify_attempts ? `attempts: ${run.verify_attempts}` : "",
   ]
     .filter(Boolean)
@@ -279,7 +310,11 @@ function renderAgentHistory(runs) {
     button.type = "button";
     button.className = `agent-history-item ${run.verification_passed ? "ok" : "bad"}`;
     button.textContent = `${run.id.slice(0, 8)}… · ${run.workflow_id || "plan-only"} · ${
-      run.verification_passed ? "passed" : run.plan_only ? "plan" : "failed"
+      run.verification_passed
+        ? verificationProfile(run.workflow_id).label
+        : run.plan_only
+          ? "plan"
+          : "failed"
     }`;
     button.addEventListener("click", async () => {
       try {
@@ -544,7 +579,7 @@ async function runAsk() {
       `workflow: ${result.workflow_id}`,
       `confidence: ${(result.confidence * 100).toFixed(0)}%`,
       `steps: ${result.workflow_steps}`,
-      `duckdb: ${result.duckdb_verified ? "passed" : "failed"}`,
+      verificationLine(result.workflow_id, result.duckdb_verified),
     ].join("\n");
 
     datasetEl.textContent = result.dataset
@@ -612,7 +647,8 @@ agentExecuteBtn?.addEventListener("click", async () => {
     }
     renderAgentRun(payload.run);
     await loadComments();
-    setStatus("Agent run verified");
+    const profile = verificationProfile(payload.run?.workflow_id);
+    setStatus(payload.run?.verification_passed ? profile.status(true) : profile.status(false));
   } catch (err) {
     console.error(err);
     setStatus(`Execute error: ${err.message || err}`);
@@ -632,7 +668,11 @@ agentRetryBtn?.addEventListener("click", async () => {
     renderAgentRun(payload.run);
     await loadComments();
     await loadAgentTrace();
-    setStatus(payload.run.verification_passed ? "Verification passed" : "Verification still failed");
+    setStatus(
+      payload.run.verification_passed
+        ? verificationProfile(payload.run.workflow_id).status(true)
+        : verificationProfile(payload.run.workflow_id).status(false),
+    );
   } catch (err) {
     console.error(err);
     setStatus(`Retry error: ${err.message || err}`);
