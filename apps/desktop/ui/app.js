@@ -26,9 +26,10 @@ const verificationEl = document.getElementById("verification");
 const notesEl = document.getElementById("notes");
 
 let lastPngBase64 = null;
+let lastWorkflowId = "nagoya-density";
 
 function verificationProfile(workflowId) {
-  if (workflowId === "remote-cog-demo") {
+  if (workflowId === "remote-cog-demo" || workflowId === "local-cog-demo") {
     return {
       label: "cog metadata",
       verifier: "cog_metadata_verify",
@@ -540,15 +541,21 @@ async function invokeAsk(prompt) {
 
 async function invokeGpuPreview() {
   if (window.__TAURI__?.core?.invoke) {
-    return window.__TAURI__.core.invoke("launch_gpu_preview");
+    return window.__TAURI__.core.invoke("launch_gpu_preview", {
+      workflowId: lastWorkflowId,
+    });
   }
 
-  const response = await fetch("/api/gpu-preview", { method: "POST" });
+  const response = await fetch("/api/gpu-preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workflow_id: lastWorkflowId }),
+  });
   const payload = await response.json();
   if (!payload.ok) {
     throw new Error(payload.error || "GPU preview failed");
   }
-  return payload.message || "WebGPU choropleth preview launched";
+  return payload.message || "GPU preview launched";
 }
 
 async function openGpuPreview() {
@@ -574,6 +581,7 @@ async function runAsk() {
   setPipelineReady(false);
   try {
     const result = await invokeAsk(prompt);
+    lastWorkflowId = result.workflow_id;
 
     resolutionEl.textContent = [
       `workflow: ${result.workflow_id}`,
@@ -590,7 +598,10 @@ async function runAsk() {
           `crs: ${result.dataset.crs}`,
           `uri: ${result.dataset.uri}`,
           `license: ${result.dataset.license}`,
-        ].join("\n")
+          result.stac_item ? `stac: ${result.stac_item.id}` : "",
+        ]
+            .filter(Boolean)
+            .join("\n")
       : "—";
 
     summaryEl.textContent = JSON.stringify(result.summary, null, 2);

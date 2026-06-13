@@ -17,7 +17,7 @@
 
 ## Deliverables
 
-### Phase 8 alpha (multi-workflow agent)
+### Phase 8 alpha (multi-workflow agent) — complete
 
 - [x] Phase 8 roadmap (this document)
 - [x] `ExecutedWorkflow` dispatch in `genegis-analysis` (`nagoya-density`, `remote-cog-demo`)
@@ -29,9 +29,11 @@
 
 ### Phase 8 beta (catalog expansion)
 
-- [ ] STAC collection browse + bind in planner
-- [ ] Third workflow template (GeoParquet regional density or local COG)
-- [ ] GPU workbench preview for non-Nagoya rasters
+- [x] STAC collection browse + bind in planner (`stac_browse`, `stac_bind`)
+- [x] Third workflow template — `local-cog-demo` (bundled smoke GeoTIFF)
+- [x] GPU workbench preview for non-Nagoya rasters (COG raster grid window)
+- [x] CLI `genegis catalog stac list|get`
+- [x] Workbench `/api/stac/collection` + workflow-aware `/api/gpu-preview`
 
 ## Recommended order
 
@@ -57,6 +59,7 @@ genegis workflow run remote-cog-demo --execute
 |----------|--------------|----------|----------|
 | `nagoya-density` | `run_nagoya_density` | `duckdb_verify` | Yes |
 | `remote-cog-demo` | `run_remote_cog_metadata` | `cog_metadata_verify` | Needs HTTP to catalog URI |
+| `local-cog-demo` | `run_local_cog_metadata` | `cog_metadata_verify` | Yes (bundled fixture) |
 
 ## Out of scope
 

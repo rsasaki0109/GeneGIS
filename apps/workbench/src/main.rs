@@ -13,8 +13,8 @@ use genegis_agent::{
     DEFAULT_AGENT_RUNS_DIR,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
-use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
-use genegis_collab::{pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL};
+use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
+use genegis_catalog::{alpha_catalog, bind_stac_item, browse_alpha_stac_collection};
 use genegis_plugin_host::PluginHost;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -100,6 +100,25 @@ struct AskResponse {
     result: Option<genegis_analysis::AskPipelineResult>,
 }
 
+#[derive(Deserialize)]
+struct GpuPreviewRequest {
+    workflow_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct StacCollectionResponse {
+    ok: bool,
+    error: Option<String>,
+    collection: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct StacItemResponse {
+    ok: bool,
+    error: Option<String>,
+    item: Option<genegis_catalog::StacItem>,
+}
+
 #[derive(Serialize)]
 struct GpuPreviewResponse {
     ok: bool,
@@ -151,6 +170,8 @@ async fn main() {
         .route("/", get(index))
         .route("/api/ask", post(ask))
         .route("/api/gpu-preview", post(gpu_preview))
+        .route("/api/stac/collection", get(stac_collection))
+        .route("/api/stac/items/{id}", get(stac_item))
         .route("/api/plugins", get(list_plugins))
         .route("/api/collab", get(collab_snapshot))
         .route("/api/collab/comment", post(add_comment))
@@ -507,14 +528,18 @@ async fn ask(Json(body): Json<AskRequest>) -> impl IntoResponse {
     }
 }
 
-async fn gpu_preview() -> impl IntoResponse {
-    match spawn_nagoya_gpu_preview() {
-        Ok(()) => (
+async fn gpu_preview(Json(body): Json<GpuPreviewRequest>) -> impl IntoResponse {
+    let workflow_id = body
+        .workflow_id
+        .as_deref()
+        .unwrap_or("nagoya-density");
+    match spawn_gpu_preview_for_workflow(workflow_id) {
+        Ok(message) => (
             StatusCode::OK,
             Json(GpuPreviewResponse {
                 ok: true,
                 error: None,
-                message: Some("WebGPU choropleth preview launched".into()),
+                message: Some(message),
             }),
         ),
         Err(err) => (
@@ -523,6 +548,39 @@ async fn gpu_preview() -> impl IntoResponse {
                 ok: false,
                 error: Some(err.to_string()),
                 message: None,
+            }),
+        ),
+    }
+}
+
+async fn stac_collection() -> impl IntoResponse {
+    let collection = browse_alpha_stac_collection(&alpha_catalog());
+    (
+        StatusCode::OK,
+        Json(StacCollectionResponse {
+            ok: true,
+            error: None,
+            collection: Some(collection.summary_json()),
+        }),
+    )
+}
+
+async fn stac_item(Path(id): Path<String>) -> impl IntoResponse {
+    match bind_stac_item(&alpha_catalog(), &id) {
+        Ok(item) => (
+            StatusCode::OK,
+            Json(StacItemResponse {
+                ok: true,
+                error: None,
+                item: Some(item),
+            }),
+        ),
+        Err(err) => (
+            StatusCode::NOT_FOUND,
+            Json(StacItemResponse {
+                ok: false,
+                error: Some(err.to_string()),
+                item: None,
             }),
         ),
     }

@@ -128,7 +128,7 @@ impl AgentOrchestrator {
                     .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
-            ExecutedWorkflow::RemoteCogMetadata(info) => {
+            ExecutedWorkflow::CogMetadata(info) => {
                 let ask = build_remote_cog_ask_result(prompt, &plan, info, dataset, verified)
                     .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
@@ -272,10 +272,16 @@ fn record_execute_step(
             format!("Run Nagoya density analysis (attempt {attempt})"),
             serde_json::json!({ "ward_count": analysis.features.len() }),
         ),
-        (WorkflowId::RemoteCogDemo, ExecutedWorkflow::RemoteCogMetadata(info)) => (
+        (WorkflowId::RemoteCogDemo, ExecutedWorkflow::CogMetadata(info)) => (
             "run_remote_cog_metadata",
             "raster_executor",
             format!("Fetch remote COG metadata (attempt {attempt})"),
+            info.summary_json(),
+        ),
+        (WorkflowId::LocalCogDemo, ExecutedWorkflow::CogMetadata(info)) => (
+            "run_local_cog_metadata",
+            "raster_executor",
+            format!("Read local COG metadata (attempt {attempt})"),
             info.summary_json(),
         ),
         _ => {
@@ -314,7 +320,7 @@ fn record_verify_step(
             "duckdb_verifier",
             format!("Cross-check ward densities with DuckDB (attempt {attempt})"),
         ),
-        WorkflowId::RemoteCogDemo => (
+        WorkflowId::RemoteCogDemo | WorkflowId::LocalCogDemo => (
             "cog_metadata_verify",
             "raster_verifier",
             format!("Validate COG metadata fields (attempt {attempt})"),
@@ -365,7 +371,7 @@ mod tests {
         assert_eq!(run.verify_attempts, 1);
         assert_eq!(run.steps.len(), 4);
         assert_eq!(run.steps[0].role, AgentRole::Planner);
-        assert_eq!(run.steps[0].tool_calls.len(), 3);
+        assert_eq!(run.steps[0].tool_calls.len(), 4);
         assert_eq!(run.steps[0].tool_calls[0].tool, "parse_intent");
         assert_eq!(run.steps[1].agent, "catalog_agent");
         assert_eq!(run.steps[3].role, AgentRole::Verifier);
@@ -405,6 +411,30 @@ mod tests {
         assert_eq!(run.workflow_id.as_deref(), Some("remote-cog-demo"));
         assert_eq!(run.steps.len(), 1);
         assert_eq!(run.steps[0].role, AgentRole::Planner);
+    }
+
+    #[test]
+    fn local_cog_plan_only_resolves_workflow() {
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline().plan_only())
+            .run("ローカルCOGデモのメタデータを表示")
+            .expect("run");
+
+        assert_eq!(run.workflow_id.as_deref(), Some("local-cog-demo"));
+        assert_eq!(run.steps.len(), 1);
+    }
+
+    #[test]
+    fn runs_local_cog_agent_trace() {
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .run("ローカルCOGデモのメタデータを表示")
+            .expect("run");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.workflow_id.as_deref(), Some("local-cog-demo"));
+        assert_eq!(run.steps[2].tool_calls[0].tool, "run_local_cog_metadata");
+        assert_eq!(run.steps[3].tool_calls[0].tool, "cog_metadata_verify");
     }
 
     #[test]

@@ -96,3 +96,22 @@ pub fn remote_cog_metadata_template() -> GeoWorkflow {
     ];
     workflow
 }
+
+/// Local bundled COG metadata probe workflow (offline fixture).
+pub fn local_cog_metadata_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("ローカルCOGデモのメタデータを表示");
+    workflow.assumptions.push("Asset is read from bundled smoke GeoTIFF fixture".into());
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "FindDataset",
+            serde_json::json!({ "tags": ["cog", "local", "demo"] }),
+        ),
+        WorkflowStep::new(
+            "ProbeRasterMetadata",
+            serde_json::json!({ "read_mode": "local" }),
+        ),
+        WorkflowStep::new("SummarizeCogInfo", serde_json::json!({})),
+        WorkflowStep::new("AttachSources", serde_json::json!({})),
+    ];
+    workflow
+}

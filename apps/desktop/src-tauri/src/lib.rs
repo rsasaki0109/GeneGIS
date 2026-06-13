@@ -3,7 +3,7 @@ use genegis_agent::{
     DEFAULT_AGENT_RUNS_DIR,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
-use genegis_analysis::{run_ask_pipeline, spawn_nagoya_gpu_preview};
+use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
 use genegis_collab::{CollabSession, MapComment};
 use genegis_plugin_host::PluginHost;
 use serde::Serialize;
@@ -54,9 +54,8 @@ fn run_ask(prompt: String) -> Result<genegis_analysis::AskPipelineResult, String
 }
 
 #[tauri::command]
-fn launch_gpu_preview() -> Result<String, String> {
-    spawn_nagoya_gpu_preview()
-        .map(|()| "WebGPU choropleth preview launched".into())
+fn launch_gpu_preview(workflow_id: Option<String>) -> Result<String, String> {
+    spawn_gpu_preview_for_workflow(workflow_id.as_deref().unwrap_or("nagoya-density"))
         .map_err(|e| e.to_string())
 }
 

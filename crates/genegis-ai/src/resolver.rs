@@ -10,6 +10,7 @@ use crate::intent::ParsedIntent;
 pub enum WorkflowId {
     NagoyaDensity,
     RemoteCogDemo,
+    LocalCogDemo,
 }
 
 impl WorkflowId {
@@ -17,6 +18,7 @@ impl WorkflowId {
         match self {
             Self::NagoyaDensity => "nagoya-density",
             Self::RemoteCogDemo => "remote-cog-demo",
+            Self::LocalCogDemo => "local-cog-demo",
         }
     }
 
@@ -24,6 +26,7 @@ impl WorkflowId {
         match self {
             Self::NagoyaDensity => &["nagoya", "density"],
             Self::RemoteCogDemo => &["cog", "remote", "demo"],
+            Self::LocalCogDemo => &["cog", "local", "demo"],
         }
     }
 }
@@ -54,6 +57,7 @@ pub fn resolve_workflow_with_catalog(
     let nagoya = intent.signals.place.as_deref() == Some("名古屋市");
     let density = intent.signals.metric.as_deref() == Some("population_density");
     let remote_cog = intent.signals.metric.as_deref() == Some("remote_cog");
+    let local_cog = intent.signals.metric.as_deref() == Some("local_cog");
 
     if nagoya && density {
         let mut resolved = ResolvedWorkflow {
@@ -78,6 +82,22 @@ pub fn resolve_workflow_with_catalog(
             ambiguities: vec![
                 "Execution is metadata-only in Phase 4 alpha".into(),
                 "Asset URI comes from catalog registry".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if local_cog {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::LocalCogDemo,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Execution reads bundled smoke GeoTIFF fixture".into(),
+                "Offline metadata verify only (no map export)".into(),
             ],
         };
         bind_catalog_dataset(catalog, &mut resolved)?;
@@ -141,7 +161,7 @@ fn default_ambiguities() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::intent::ParsedIntent;
-    use genegis_catalog::{NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
+    use genegis_catalog::{LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn resolves_nagoya_density() {
@@ -161,5 +181,13 @@ mod tests {
         let resolved = resolve_workflow(&intent).expect("resolve");
         assert_eq!(resolved.workflow_id, WorkflowId::RemoteCogDemo);
         assert_eq!(resolved.dataset_id, REMOTE_COG_DEMO_ID);
+    }
+
+    #[test]
+    fn resolves_local_cog_demo() {
+        let intent = ParsedIntent::parse("ローカルCOGデモのメタデータを表示");
+        let resolved = resolve_workflow(&intent).expect("resolve");
+        assert_eq!(resolved.workflow_id, WorkflowId::LocalCogDemo);
+        assert_eq!(resolved.dataset_id, LOCAL_COG_DEMO_ID);
     }
 }

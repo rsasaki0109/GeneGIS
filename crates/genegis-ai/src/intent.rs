@@ -45,6 +45,14 @@ impl ParsedIntent {
             score += 0.40;
         }
 
+        if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
+            && contains_any(&normalized, &["ローカル", "local", "同梱", "bundled"])
+        {
+            signals.metric = Some("local_cog".into());
+            signals.matched_tokens.push("metric:local_cog".into());
+            score += 0.40;
+        }
+
         if contains_any(
             &normalized,
             &["表示", "見せ", "地図", "map", "choropleth", "コロプレス"],
@@ -88,9 +96,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_remote_cog_demo_prompt() {
-        let intent = ParsedIntent::parse("リモートCOGデモのメタデータを表示");
-        assert_eq!(intent.signals.metric.as_deref(), Some("remote_cog"));
+    fn parses_local_cog_demo_prompt() {
+        let intent = ParsedIntent::parse("ローカルCOGデモのメタデータを表示");
+        assert_eq!(intent.signals.metric.as_deref(), Some("local_cog"));
         assert!(intent.confidence >= 0.5);
     }
 }

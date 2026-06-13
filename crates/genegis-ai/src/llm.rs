@@ -22,10 +22,11 @@ const SYSTEM_PROMPT: &str = r#"You are the GeneGIS workflow planner. Map the use
 Available workflows:
 - nagoya-density — population density choropleth for Nagoya city wards (16 wards, 2020 census, N03 boundaries)
 - remote-cog-demo — fetch remote GeoTIFF/COG metadata via catalog + HTTP range-read
+- local-cog-demo — read bundled local COG metadata fixture (offline)
 
 Respond with JSON only (no markdown):
 {
-  "workflow_id":"nagoya-density|remote-cog-demo",
+  "workflow_id":"nagoya-density|remote-cog-demo|local-cog-demo",
   "goal":"<user goal>",
   "confidence":0.0,
   "rationale":["..."],

@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 genegis-geometry = { path = "../genegis-geometry" }
+genegis-raster = { path = "../genegis-raster" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

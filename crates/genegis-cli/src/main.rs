@@ -5,7 +5,10 @@ use genegis_analysis::{
     default_nagoya_data_path, export_html_map, export_png_map, run_ask_pipeline_with_config,
     run_nagoya_population_density,
 };
-use genegis_catalog::{alpha_catalog, REMOTE_COG_DEMO_ID};
+use genegis_catalog::{
+    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, LOCAL_COG_DEMO_ID,
+    REMOTE_COG_DEMO_ID,
+};
 use genegis_agent::{
     build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
     AgentOrchestrator, AgentRun, AgentRunConfig, AgentRole, AuditCollabSnapshot,
@@ -14,7 +17,9 @@ use genegis_agent::{
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
-use genegis_workflow::{nagoya_population_density_template, remote_cog_metadata_template};
+use genegis_workflow::{
+    local_cog_metadata_template, nagoya_population_density_template, remote_cog_metadata_template,
+};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -32,6 +37,7 @@ fn main() {
         Some("raster") => handle_raster(&args[2..]),
         Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("plugin") => handle_plugin(&args[2..]),
+        Some("catalog") => handle_catalog(&args[2..]),
         Some("collab") => handle_collab(&args[2..]),
         Some("agent") => handle_agent(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
@@ -1178,6 +1184,41 @@ fn handle_collab(args: &[String]) {
     }
 }
 
+fn handle_catalog(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("stac") => match args.get(1).map(String::as_str) {
+            Some("list") => {
+                let collection = browse_alpha_stac_collection(&alpha_catalog());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&collection.summary_json()).expect("json")
+                );
+            }
+            Some("get") => {
+                let Some(id) = args.get(2) else {
+                    eprintln!("Usage: genegis catalog stac get ITEM_ID");
+                    process::exit(1);
+                };
+                let item = bind_stac_item(&alpha_catalog(), id).unwrap_or_else(|err| {
+                    eprintln!("STAC item error: {err}");
+                    process::exit(1);
+                });
+                println!("{}", serde_json::to_string_pretty(&item).expect("json"));
+            }
+            _ => {
+                eprintln!("Usage: genegis catalog stac list");
+                eprintln!("       genegis catalog stac get ITEM_ID");
+                process::exit(1);
+            }
+        },
+        _ => {
+            eprintln!("Usage: genegis catalog stac list");
+            eprintln!("       genegis catalog stac get ITEM_ID");
+            process::exit(1);
+        }
+    }
+}
+
 fn handle_workflow(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("run") => {
@@ -1201,9 +1242,16 @@ fn handle_workflow(args: &[String]) {
                 }
                 "remote-cog-demo" => {
                     if execute {
-                        run_remote_cog_execute();
+                        run_cog_execute(REMOTE_COG_DEMO_ID);
                     } else {
                         print_workflow_json(&remote_cog_metadata_template());
+                    }
+                }
+                "local-cog-demo" => {
+                    if execute {
+                        run_cog_execute(LOCAL_COG_DEMO_ID);
+                    } else {
+                        print_workflow_json(&local_cog_metadata_template());
                     }
                 }
                 _ => {
@@ -1214,7 +1262,7 @@ fn handle_workflow(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "Usage: genegis workflow run [nagoya-density|remote-cog-demo] [--execute] [--html] [--png] [-o FILE]"
+                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo] [--execute] [--html] [--png] [-o FILE]"
             );
             process::exit(1);
         }
@@ -1240,6 +1288,8 @@ Usage:
   genegis plugin list [DIR]                        List plugin manifests (default: ./plugins)
   genegis plugin info BUNDLE_DIR                   Show one plugin manifest + effective caps
   genegis plugin load BUNDLE_DIR                   Capability-gated WASM load smoke
+  genegis catalog stac list                        Browse alpha STAC collection summary
+  genegis catalog stac get ITEM_ID                 Export one catalog dataset as STAC Item
   genegis collab comment list                      List map-anchored review comments
   genegis collab comment add "..." [--author NAME] Add a comment
   genegis collab branch list|create NAME           List or create project branches
@@ -1263,6 +1313,7 @@ Usage:
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
   genegis workflow run remote-cog-demo --execute   Probe catalog COG over HTTP range-read
+  genegis workflow run local-cog-demo --execute    Probe bundled local COG metadata (offline)
   genegis workflow run nagoya-density -x --html    Execute + write HTML map
   genegis workflow run nagoya-density -x --png     Execute + write PNG map
   genegis version
@@ -1285,8 +1336,8 @@ fn print_workflow_json(workflow: &genegis_workflow::GeoWorkflow) {
     }
 }
 
-fn run_remote_cog_execute() {
-    let uri = match alpha_catalog().require(REMOTE_COG_DEMO_ID) {
+fn run_cog_execute(dataset_id: &str) {
+    let uri = match alpha_catalog().require(dataset_id) {
         Ok(record) => record.uri.clone(),
         Err(err) => {
             eprintln!("Catalog error: {err}");

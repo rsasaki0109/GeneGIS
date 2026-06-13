@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::RasterError;
 
+/// Bundled local COG fixture used by the alpha catalog (`local-cog-demo`).
+pub fn smoke_demo_cog_path() -> &'static str {
+    concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/smoke-demo.tif")
+}
+
 /// Metadata summary for a Cloud Optimized GeoTIFF (COG) or GeoTIFF file.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CogInfo {

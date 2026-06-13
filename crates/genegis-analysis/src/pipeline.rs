@@ -15,7 +15,7 @@ use crate::result::{AnalysisResult, VerificationReport};
 #[derive(Debug, Clone)]
 pub enum ExecutedWorkflow {
     NagoyaDensity(AnalysisResult),
-    RemoteCogMetadata(CogInfo),
+    CogMetadata(CogInfo),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -54,8 +54,8 @@ pub fn run_analysis_for_plan(
 ) -> Result<(AnalysisResult, DatasetRecord), AnalysisError> {
     match execute_workflow_for_plan(plan)? {
         (ExecutedWorkflow::NagoyaDensity(analysis), dataset) => Ok((analysis, dataset)),
-        (ExecutedWorkflow::RemoteCogMetadata(_), _) => Err(AnalysisError::Message(
-            "remote-cog-demo does not produce AnalysisResult; use execute_workflow_for_plan"
+        (ExecutedWorkflow::CogMetadata(_), _) => Err(AnalysisError::Message(
+            "cog metadata workflow does not produce AnalysisResult; use execute_workflow_for_plan"
                 .into(),
         )),
     }
@@ -75,13 +75,10 @@ pub fn execute_workflow_for_plan(
             let analysis = run_nagoya_population_density_for_dataset(&plan.resolved.dataset_id)?;
             Ok((ExecutedWorkflow::NagoyaDensity(analysis), dataset_record))
         }
-        WorkflowId::RemoteCogDemo => {
+        WorkflowId::RemoteCogDemo | WorkflowId::LocalCogDemo => {
             let info = genegis_raster::read_cog_uri(&dataset_record.uri)
                 .map_err(|err| AnalysisError::Message(err.to_string()))?;
-            Ok((
-                ExecutedWorkflow::RemoteCogMetadata(info),
-                dataset_record,
-            ))
+            Ok((ExecutedWorkflow::CogMetadata(info), dataset_record))
         }
     }
 }
@@ -89,7 +86,7 @@ pub fn execute_workflow_for_plan(
 pub fn verify_executed_workflow(result: &ExecutedWorkflow) -> Result<bool, AnalysisError> {
     match result {
         ExecutedWorkflow::NagoyaDensity(analysis) => verify_analysis_densities(analysis),
-        ExecutedWorkflow::RemoteCogMetadata(info) => verify_remote_cog_metadata(info),
+        ExecutedWorkflow::CogMetadata(info) => verify_remote_cog_metadata(info),
     }
 }
 
@@ -160,7 +157,7 @@ pub fn execute_from_plan(
         ExecutedWorkflow::NagoyaDensity(analysis) => {
             build_ask_result(prompt, plan, analysis, dataset, duckdb_verified)
         }
-        ExecutedWorkflow::RemoteCogMetadata(info) => {
+        ExecutedWorkflow::CogMetadata(info) => {
             build_remote_cog_ask_result(prompt, plan, info, dataset, duckdb_verified)
         }
     }

@@ -5,6 +5,8 @@ use crate::error::AgentError;
 const PLANNER_TOOLS: &[&str] = &[
     "parse_intent",
     "resolve_workflow",
+    "stac_browse",
+    "stac_bind",
     "catalog_bind",
     "llm_plan_workflow",
     "plan_workflow",
@@ -14,6 +16,7 @@ const EXECUTOR_TOOLS: &[&str] = &[
     "catalog_resolve",
     "run_nagoya_density",
     "run_remote_cog_metadata",
+    "run_local_cog_metadata",
     "verify_retry",
 ];
 

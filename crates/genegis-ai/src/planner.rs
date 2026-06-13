@@ -1,6 +1,7 @@
 use genegis_catalog::alpha_catalog;
 use genegis_workflow::{
-    nagoya_population_density_template, remote_cog_metadata_template, GeoWorkflow,
+    local_cog_metadata_template, nagoya_population_density_template,
+    remote_cog_metadata_template, GeoWorkflow,
 };
 
 use crate::backend::{PlannerBackend, PlannerConfig};
@@ -102,6 +103,7 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
     match id {
         WorkflowId::NagoyaDensity => nagoya_population_density_template(),
         WorkflowId::RemoteCogDemo => remote_cog_metadata_template(),
+        WorkflowId::LocalCogDemo => local_cog_metadata_template(),
     }
 }
 
@@ -109,7 +111,7 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
 mod tests {
     use super::*;
 
-    use genegis_catalog::{NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
+    use genegis_catalog::{LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn plans_north_star() {
@@ -139,14 +141,21 @@ mod tests {
         };
         let plan = plan_with_config("名古屋市の人口密度を表示", &config).expect("plan");
         assert_eq!(plan.mode, "rule_based_mvp");
-        assert_eq!(plan.tool_calls.len(), 3);
+        assert_eq!(plan.tool_calls.len(), 4);
         assert_eq!(plan.tool_calls[0].tool, "parse_intent");
+    }
+
+    #[test]
+    fn plans_local_cog_demo() {
+        let plan = plan_from_prompt("ローカルCOGデモのメタデータを表示").expect("plan");
+        assert_eq!(plan.resolved.workflow_id, WorkflowId::LocalCogDemo);
+        assert_eq!(plan.workflow.steps.len(), 4);
     }
 
     #[test]
     fn rule_based_plan_includes_tool_calls() {
         let plan = plan_from_prompt("名古屋市の人口密度を表示").expect("plan");
-        assert_eq!(plan.tool_calls.len(), 3);
+        assert_eq!(plan.tool_calls.len(), 4);
         assert!(plan.tool_calls.iter().all(|call| call.ok));
     }
 

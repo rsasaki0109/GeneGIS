@@ -85,6 +85,10 @@ genegis agent export-audit -o .genegis/audit-bundle.json
 # Second verified workflow (remote COG metadata via HTTP range-read)
 genegis agent run "リモートCOGデモのメタデータを表示"
 
+# Third verified workflow (local bundled COG — offline)
+genegis agent run "ローカルCOGデモのメタデータを表示"
+genegis catalog stac list
+
 # Multi-client collab demo (terminal 1: server, terminal 2: workbench)
 cargo run -p genegis-server
 cargo run -p genegis-workbench

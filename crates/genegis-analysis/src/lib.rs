@@ -19,5 +19,8 @@ pub use pipeline::{
     verify_analysis_densities, verify_executed_workflow, verify_remote_cog_metadata,
     AskPipelineResult, ExecutedWorkflow,
 };
-pub use preview::{nagoya_choropleth_map, spawn_nagoya_gpu_preview};
+pub use preview::{
+    cog_raster_preview_map, nagoya_choropleth_map, spawn_cog_gpu_preview, spawn_gpu_preview_for_workflow,
+    spawn_nagoya_gpu_preview,
+};
 pub use result::{AnalysisResult, DensityFeature, VerificationCheck, VerificationReport};

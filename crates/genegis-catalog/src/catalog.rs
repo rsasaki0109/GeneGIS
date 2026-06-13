@@ -11,6 +11,9 @@ pub const NAGOYA_WARDS_DENSITY_ID: &str = "nagoya-wards-density";
 /// Well-known dataset id for the remote COG metadata demo.
 pub const REMOTE_COG_DEMO_ID: &str = "remote-cog-demo";
 
+/// Well-known dataset id for the bundled local COG metadata demo.
+pub const LOCAL_COG_DEMO_ID: &str = "local-cog-demo";
+
 /// Path to the bundled Nagoya wards GeoJSON asset.
 pub fn nagoya_wards_geojson_path() -> &'static str {
     concat!(
@@ -57,6 +60,7 @@ pub fn alpha_catalog() -> Catalog {
     let mut catalog = Catalog::new();
     catalog.register(nagoya_wards_density_record());
     catalog.register(remote_cog_demo_record());
+    catalog.register(local_cog_demo_record());
     catalog
 }
 
@@ -99,6 +103,25 @@ fn remote_cog_demo_record() -> DatasetRecord {
     }
 }
 
+fn local_cog_demo_record() -> DatasetRecord {
+    DatasetRecord {
+        id: LOCAL_COG_DEMO_ID.into(),
+        title: "Local bundled COG metadata demo".into(),
+        description: "Offline smoke GeoTIFF generated at build time for local COG workflows.".into(),
+        format: DatasetFormat::cog(),
+        crs: "EPSG:4326".into(),
+        bbox: BoundingBox::new(-180.0, 89.52, -179.36, 90.0),
+        uri: genegis_raster::smoke_demo_cog_path().into(),
+        license: "GeneGIS smoke fixture".into(),
+        tags: vec![
+            "cog".into(),
+            "local".into(),
+            "demo".into(),
+            "raster".into(),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,6 +140,14 @@ mod tests {
         let record = catalog.require(REMOTE_COG_DEMO_ID).expect("record");
         assert_eq!(record.format.kind, "cog");
         assert!(record.uri.starts_with("https://"));
-        assert_eq!(catalog.list().len(), 2);
+        assert_eq!(catalog.list().len(), 3);
+    }
+
+    #[test]
+    fn alpha_catalog_lists_local_cog_demo() {
+        let catalog = alpha_catalog();
+        let record = catalog.require(LOCAL_COG_DEMO_ID).expect("record");
+        assert_eq!(record.format.kind, "cog");
+        assert!(std::path::Path::new(&record.uri).exists());
     }
 }
