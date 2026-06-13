@@ -40,7 +40,7 @@
 - [x] CI agent workflow matrix — nagoya-density + local-cog-demo + remote-cog-demo
 - [x] Audit bundle v2 — includes STAC collection + item snapshots
 - [x] Workbench STAC catalog panel (browse + click item → summary)
-- [ ] GitHub Release v0.8.0
+- [x] GitHub Release v0.8.0
 
 ## Recommended order
 
