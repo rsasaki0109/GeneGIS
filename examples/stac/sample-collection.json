@@ -1,0 +1,24 @@
+{
+  "stac_version": "1.0.0",
+  "type": "Collection",
+  "id": "genegis-sample-external",
+  "title": "GeneGIS sample external STAC collection",
+  "description": "Fixture collection for offline STAC fetch smoke tests.",
+  "license": "CC-BY-4.0",
+  "extent": {
+    "spatial": { "bbox": [[136.79, 35.03, 137.06, 35.26]] },
+    "temporal": { "interval": [[null, null]] }
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "file://examples/stac/sample-collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "item",
+      "href": "file://examples/stac/sample-item.json",
+      "type": "application/json"
+    }
+  ]
+}

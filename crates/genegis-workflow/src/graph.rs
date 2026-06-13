@@ -115,3 +115,22 @@ pub fn local_cog_metadata_template() -> GeoWorkflow {
     ];
     workflow
 }
+
+/// Nagoya GeoParquet read + feature-count verification workflow (Phase 9 alpha).
+pub fn nagoya_geoparquet_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋 wards GeoParquet を検証");
+    workflow.assumptions.push("Bundled GeoParquet fixture with 16 Nagoya wards".into());
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "geoparquet", "demo"] }),
+        ),
+        WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new(
+            "VerifyFeatureCount",
+            serde_json::json!({ "expected": 16, "field": "ward_name" }),
+        ),
+        WorkflowStep::new("AttachSources", serde_json::json!({})),
+    ];
+    workflow
+}

@@ -17,10 +17,11 @@ const EXECUTOR_TOOLS: &[&str] = &[
     "run_nagoya_density",
     "run_remote_cog_metadata",
     "run_local_cog_metadata",
+    "run_geoparquet_read",
     "verify_retry",
 ];
 
-const VERIFIER_TOOLS: &[&str] = &["duckdb_verify", "cog_metadata_verify"];
+const VERIFIER_TOOLS: &[&str] = &["duckdb_verify", "cog_metadata_verify", "geoparquet_feature_verify"];
 
 /// Validate planner tool calls against the Phase 6 allowlist (ADR 0003).
 pub fn validate_planner_tools(calls: &[PlannerToolCall]) -> Result<(), AgentError> {

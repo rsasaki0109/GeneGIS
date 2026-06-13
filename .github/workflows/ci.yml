@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Build Nagoya GeoParquet fixture
+        run: cargo run -p genegis-vector --example write_nagoya_geoparquet
       - name: Build workspace
         run: cargo build --workspace
       - name: Test workspace
@@ -31,6 +33,11 @@ jobs:
           cargo run -p genegis-cli -- agent run "名古屋市の人口密度を表示"
           cargo run -p genegis-cli -- agent run "ローカルCOGデモのメタデータを表示"
           cargo run -p genegis-cli -- agent run "リモートCOGデモのメタデータを表示"
+          cargo run -p genegis-cli -- agent run "名古屋 wards GeoParquet を検証"
+      - name: Phase 9 alpha — external STAC fetch smoke
+        run: |
+          cargo run -p genegis-cli -- catalog stac fetch examples/stac/sample-collection.json
+          cargo run -p genegis-cli -- workflow run nagoya-geoparquet --execute
       - name: Agent human gate smoke
         run: |
           cargo run -p genegis-cli -- agent plan "名古屋市の人口密度を表示"
@@ -44,8 +51,8 @@ jobs:
           bundle = json.loads(Path("/tmp/genegis-audit-bundle.json").read_text())
           assert bundle["schema"] == "genegis-audit-bundle-v2", bundle["schema"]
           stac = bundle["stac"]
-          assert stac["collection"]["item_count"] == 3
-          assert len(stac["items"]) == 3
+          assert stac["collection"]["item_count"] == 4
+          assert len(stac["items"]) == 4
           PY
       - name: STAC collection smoke
         run: cargo run -p genegis-cli -- catalog stac list

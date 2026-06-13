@@ -11,6 +11,7 @@ pub enum WorkflowId {
     NagoyaDensity,
     RemoteCogDemo,
     LocalCogDemo,
+    NagoyaGeoparquet,
 }
 
 impl WorkflowId {
@@ -19,6 +20,7 @@ impl WorkflowId {
             Self::NagoyaDensity => "nagoya-density",
             Self::RemoteCogDemo => "remote-cog-demo",
             Self::LocalCogDemo => "local-cog-demo",
+            Self::NagoyaGeoparquet => "nagoya-geoparquet",
         }
     }
 
@@ -27,6 +29,7 @@ impl WorkflowId {
             Self::NagoyaDensity => &["nagoya", "density"],
             Self::RemoteCogDemo => &["cog", "remote", "demo"],
             Self::LocalCogDemo => &["cog", "local", "demo"],
+            Self::NagoyaGeoparquet => &["nagoya", "geoparquet", "demo"],
         }
     }
 }
@@ -58,6 +61,23 @@ pub fn resolve_workflow_with_catalog(
     let density = intent.signals.metric.as_deref() == Some("population_density");
     let remote_cog = intent.signals.metric.as_deref() == Some("remote_cog");
     let local_cog = intent.signals.metric.as_deref() == Some("local_cog");
+    let geoparquet = intent.signals.metric.as_deref() == Some("geoparquet");
+
+    if nagoya && geoparquet {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::NagoyaGeoparquet,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "GeoParquet read + feature-count verification only (Phase 9 alpha)".into(),
+                "Expected 16 Nagoya wards in bundled fixture".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
 
     if nagoya && density {
         let mut resolved = ResolvedWorkflow {
@@ -146,6 +166,9 @@ fn map_catalog_error(err: CatalogError) -> AiError {
         CatalogError::AmbiguousMatch(ids) => {
             AiError::Ambiguous(format!("multiple catalog datasets match: {ids:?}"))
         }
+        CatalogError::Remote(msg) | CatalogError::InvalidStac(msg) => {
+            AiError::Unresolved(format!("catalog error: {msg}"))
+        }
     }
 }
 
@@ -161,7 +184,7 @@ fn default_ambiguities() -> Vec<String> {
 mod tests {
     use super::*;
     use crate::intent::ParsedIntent;
-    use genegis_catalog::{LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
+    use genegis_catalog::{LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID};
 
     #[test]
     fn resolves_nagoya_density() {
@@ -189,5 +212,13 @@ mod tests {
         let resolved = resolve_workflow(&intent).expect("resolve");
         assert_eq!(resolved.workflow_id, WorkflowId::LocalCogDemo);
         assert_eq!(resolved.dataset_id, LOCAL_COG_DEMO_ID);
+    }
+
+    #[test]
+    fn resolves_nagoya_geoparquet() {
+        let intent = ParsedIntent::parse("名古屋 wards GeoParquet を検証");
+        let resolved = resolve_workflow(&intent).expect("resolve");
+        assert_eq!(resolved.workflow_id, WorkflowId::NagoyaGeoparquet);
+        assert_eq!(resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
     }
 }

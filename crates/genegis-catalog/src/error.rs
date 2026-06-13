@@ -8,4 +8,8 @@ pub enum CatalogError {
     NoMatch(Vec<String>),
     #[error("ambiguous catalog match: {0:?}")]
     AmbiguousMatch(Vec<String>),
+    #[error("remote catalog error: {0}")]
+    Remote(String),
+    #[error("invalid STAC payload: {0}")]
+    InvalidStac(String),
 }

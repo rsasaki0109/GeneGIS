@@ -21,8 +21,11 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 bytes = "1"
+geoarrow-array = "0.8"
+geoarrow-schema = "0.8"
 wkb = "0.9"
 
 [dev-dependencies]
 geoarrow-array = "0.8"
 geoarrow-schema = "0.8"
+genegis-catalog = { path = "../genegis-catalog" }

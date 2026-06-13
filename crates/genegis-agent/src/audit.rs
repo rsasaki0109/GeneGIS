@@ -106,13 +106,13 @@ mod tests {
         let stac = bundle.get("stac").expect("stac");
         assert_eq!(
             stac.pointer("/collection/item_count").and_then(Value::as_u64),
-            Some(3)
+            Some(4)
         );
         let items = stac
             .get("items")
             .and_then(Value::as_array)
             .expect("stac items");
-        assert_eq!(items.len(), 3);
+        assert_eq!(items.len(), 4);
 
         let runs = bundle
             .get("agent_runs")

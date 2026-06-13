@@ -8,7 +8,7 @@ pub mod review;
 pub mod step;
 
 pub use graph::{
-    nagoya_population_density_template, local_cog_metadata_template,
+    local_cog_metadata_template, nagoya_geoparquet_template, nagoya_population_density_template,
     remote_cog_metadata_template, Citation, GeoWorkflow,
 };
 pub use operation::{OperationDescriptor, OperationId};

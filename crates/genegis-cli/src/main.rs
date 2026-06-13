@@ -6,8 +6,8 @@ use genegis_analysis::{
     run_nagoya_population_density,
 };
 use genegis_catalog::{
-    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, LOCAL_COG_DEMO_ID,
-    REMOTE_COG_DEMO_ID,
+    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, fetch_stac_collection,
+    import_stac_item_url, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
 use genegis_agent::{
     build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
@@ -18,8 +18,10 @@ use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{
-    local_cog_metadata_template, nagoya_population_density_template, remote_cog_metadata_template,
+    local_cog_metadata_template, nagoya_geoparquet_template, nagoya_population_density_template,
+    remote_cog_metadata_template,
 };
+use genegis_vector::{geoparquet_summary, read_geoparquet_uri};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -38,6 +40,7 @@ fn main() {
         Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("plugin") => handle_plugin(&args[2..]),
         Some("catalog") => handle_catalog(&args[2..]),
+        Some("vector") => handle_vector(&args[2..]),
         Some("collab") => handle_collab(&args[2..]),
         Some("agent") => handle_agent(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
@@ -1205,15 +1208,97 @@ fn handle_catalog(args: &[String]) {
                 });
                 println!("{}", serde_json::to_string_pretty(&item).expect("json"));
             }
+            Some("fetch") => {
+                let Some(url) = args.get(2) else {
+                    eprintln!("Usage: genegis catalog stac fetch URL");
+                    process::exit(1);
+                };
+                let collection = fetch_stac_collection(url).unwrap_or_else(|err| {
+                    eprintln!("STAC fetch error: {err}");
+                    process::exit(1);
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&collection.summary_json()).expect("json")
+                );
+            }
+            Some("import") => {
+                let Some(url) = args.get(2) else {
+                    eprintln!("Usage: genegis catalog stac import ITEM_URL");
+                    process::exit(1);
+                };
+                let record = import_stac_item_url(url).unwrap_or_else(|err| {
+                    eprintln!("STAC import error: {err}");
+                    process::exit(1);
+                });
+                println!("{}", serde_json::to_string_pretty(&record.summary_json()).expect("json"));
+            }
             _ => {
                 eprintln!("Usage: genegis catalog stac list");
                 eprintln!("       genegis catalog stac get ITEM_ID");
+                eprintln!("       genegis catalog stac fetch URL");
+                eprintln!("       genegis catalog stac import ITEM_URL");
                 process::exit(1);
             }
         },
         _ => {
             eprintln!("Usage: genegis catalog stac list");
             eprintln!("       genegis catalog stac get ITEM_ID");
+            eprintln!("       genegis catalog stac fetch URL");
+            eprintln!("       genegis catalog stac import ITEM_URL");
+            process::exit(1);
+        }
+    }
+}
+
+fn handle_vector(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("geoparquet") => match args.get(1).map(String::as_str) {
+            Some("info") => {
+                let Some(path) = args.get(2) else {
+                    eprintln!("Usage: genegis vector geoparquet info PATH");
+                    process::exit(1);
+                };
+                let dataset = read_geoparquet_uri(path).unwrap_or_else(|err| {
+                    eprintln!("GeoParquet error: {err}");
+                    process::exit(1);
+                });
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&geoparquet_summary(&dataset)).expect("json")
+                );
+            }
+            Some("build-fixture") => {
+                let status = process::Command::new("cargo")
+                    .args([
+                        "run",
+                        "-p",
+                        "genegis-vector",
+                        "--example",
+                        "write_nagoya_geoparquet",
+                    ])
+                    .status();
+                match status {
+                    Ok(status) if status.success() => {}
+                    Ok(status) => {
+                        eprintln!("Fixture build failed with status: {status}");
+                        process::exit(status.code().unwrap_or(1));
+                    }
+                    Err(err) => {
+                        eprintln!("Fixture build failed: {err}");
+                        process::exit(1);
+                    }
+                }
+            }
+            _ => {
+                eprintln!("Usage: genegis vector geoparquet info PATH");
+                eprintln!("       genegis vector geoparquet build-fixture");
+                process::exit(1);
+            }
+        },
+        _ => {
+            eprintln!("Usage: genegis vector geoparquet info PATH");
+            eprintln!("       genegis vector geoparquet build-fixture");
             process::exit(1);
         }
     }
@@ -1254,6 +1339,13 @@ fn handle_workflow(args: &[String]) {
                         print_workflow_json(&local_cog_metadata_template());
                     }
                 }
+                "nagoya-geoparquet" => {
+                    if execute {
+                        run_geoparquet_execute(NAGOYA_WARDS_GEOPARQUET_ID);
+                    } else {
+                        print_workflow_json(&nagoya_geoparquet_template());
+                    }
+                }
                 _ => {
                     eprintln!("Unknown workflow: {name}");
                     process::exit(1);
@@ -1262,7 +1354,7 @@ fn handle_workflow(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo] [--execute] [--html] [--png] [-o FILE]"
+                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet] [--execute] [--html] [--png] [-o FILE]"
             );
             process::exit(1);
         }
@@ -1290,6 +1382,10 @@ Usage:
   genegis plugin load BUNDLE_DIR                   Capability-gated WASM load smoke
   genegis catalog stac list                        Browse alpha STAC collection summary
   genegis catalog stac get ITEM_ID                 Export one catalog dataset as STAC Item
+  genegis catalog stac fetch URL                   Fetch external STAC Collection summary
+  genegis catalog stac import ITEM_URL             Import STAC Item into catalog overlay
+  genegis vector geoparquet info PATH              GeoParquet metadata JSON
+  genegis vector geoparquet build-fixture          Write Nagoya wards GeoParquet fixture
   genegis collab comment list                      List map-anchored review comments
   genegis collab comment add "..." [--author NAME] Add a comment
   genegis collab branch list|create NAME           List or create project branches
@@ -1314,6 +1410,8 @@ Usage:
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
   genegis workflow run remote-cog-demo --execute   Probe catalog COG over HTTP range-read
   genegis workflow run local-cog-demo --execute    Probe bundled local COG metadata (offline)
+  genegis workflow run nagoya-geoparquet           Print GeoParquet verification workflow JSON
+  genegis workflow run nagoya-geoparquet --execute Read bundled GeoParquet + verify 16 wards
   genegis workflow run nagoya-density -x --html    Execute + write HTML map
   genegis workflow run nagoya-density -x --png     Execute + write PNG map
   genegis version
@@ -1354,6 +1452,36 @@ fn run_cog_execute(dataset_id: &str) {
             process::exit(1);
         }
     }
+}
+
+fn run_geoparquet_execute(dataset_id: &str) {
+    let uri = match alpha_catalog().require(dataset_id) {
+        Ok(record) => record.uri.clone(),
+        Err(err) => {
+            eprintln!("Catalog error: {err}");
+            process::exit(1);
+        }
+    };
+
+    let dataset = match read_geoparquet_uri(&uri) {
+        Ok(dataset) => dataset,
+        Err(err) => {
+            eprintln!("GeoParquet error: {err}");
+            process::exit(1);
+        }
+    };
+
+    let summary = geoparquet_summary(&dataset);
+    println!("{}", serde_json::to_string_pretty(&summary).expect("json"));
+    if summary
+        .get("feature_count")
+        .and_then(|value| value.as_u64())
+        != Some(16)
+    {
+        eprintln!("GeoParquet verification: failed (expected 16 features)");
+        process::exit(1);
+    }
+    eprintln!("GeoParquet verification: passed");
 }
 
 fn run_nagoya_execute(export_html: bool, export_png: bool, output: Option<&Path>) {

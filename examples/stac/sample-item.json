@@ -1,0 +1,37 @@
+{
+  "stac_version": "1.0.0",
+  "type": "Feature",
+  "id": "genegis-sample-external-item",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [136.792, 35.034],
+        [137.061, 35.034],
+        [137.061, 35.26],
+        [136.792, 35.26],
+        [136.792, 35.034]
+      ]
+    ]
+  },
+  "bbox": [136.792, 35.034, 137.061, 35.26],
+  "properties": {
+    "title": "Sample external STAC item",
+    "description": "Imported into GeneGIS catalog overlay for Phase 9 alpha smoke."
+  },
+  "assets": {
+    "data": {
+      "href": "../../examples/nagoya-population-density/data/nagoya-wards.geojson",
+      "type": "application/geo+json",
+      "roles": ["data"],
+      "title": "Nagoya wards GeoJSON (fixture link)"
+    }
+  },
+  "links": [
+    {
+      "rel": "self",
+      "href": "file://examples/stac/sample-item.json",
+      "type": "application/json"
+    }
+  ]
+}

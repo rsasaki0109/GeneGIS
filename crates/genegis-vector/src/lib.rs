@@ -9,4 +9,7 @@ mod geometry;
 pub use dataset::{FeatureRecord, VectorDataset};
 pub use error::VectorError;
 pub use geojson::{read_geojson_path, read_geojson_str};
-pub use geoparquet::{read_geoparquet_bytes, read_geoparquet_path, read_geoparquet_uri};
+pub use geoparquet::{
+    geoparquet_summary, read_geoparquet_bytes, read_geoparquet_path, read_geoparquet_uri,
+    verify_nagoya_geoparquet, NAGOYA_WARD_FEATURE_COUNT,
+};

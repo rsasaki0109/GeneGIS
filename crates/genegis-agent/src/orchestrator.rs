@@ -1,8 +1,8 @@
 use chrono::Utc;
 use genegis_ai::{plan_with_config, PlanResult, WorkflowId, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
-    build_ask_result, build_remote_cog_ask_result, execute_workflow_for_plan,
-    verify_executed_workflow, ExecutedWorkflow,
+    build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result,
+    execute_workflow_for_plan, verify_executed_workflow, ExecutedWorkflow,
 };
 use genegis_catalog::{alpha_catalog, DatasetRecord};
 use uuid::Uuid;
@@ -130,6 +130,11 @@ impl AgentOrchestrator {
             }
             ExecutedWorkflow::CogMetadata(info) => {
                 let ask = build_remote_cog_ask_result(prompt, &plan, info, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::Geoparquet(vector) => {
+                let ask = build_geoparquet_ask_result(prompt, &plan, vector, dataset, verified)
                     .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
@@ -284,6 +289,12 @@ fn record_execute_step(
             format!("Read local COG metadata (attempt {attempt})"),
             info.summary_json(),
         ),
+        (WorkflowId::NagoyaGeoparquet, ExecutedWorkflow::Geoparquet(dataset)) => (
+            "run_geoparquet_read",
+            "vector_executor",
+            format!("Read Nagoya GeoParquet fixture (attempt {attempt})"),
+            genegis_vector::geoparquet_summary(dataset),
+        ),
         _ => {
             return Err(AgentError::Message(format!(
                 "workflow mismatch for {}",
@@ -324,6 +335,11 @@ fn record_verify_step(
             "cog_metadata_verify",
             "raster_verifier",
             format!("Validate COG metadata fields (attempt {attempt})"),
+        ),
+        WorkflowId::NagoyaGeoparquet => (
+            "geoparquet_feature_verify",
+            "vector_verifier",
+            format!("Validate GeoParquet feature count (attempt {attempt})"),
         ),
     };
 
@@ -435,6 +451,24 @@ mod tests {
         assert_eq!(run.workflow_id.as_deref(), Some("local-cog-demo"));
         assert_eq!(run.steps[2].tool_calls[0].tool, "run_local_cog_metadata");
         assert_eq!(run.steps[3].tool_calls[0].tool, "cog_metadata_verify");
+    }
+
+    #[test]
+    fn runs_nagoya_geoparquet_agent_trace() {
+        let path = genegis_catalog::nagoya_wards_geoparquet_path();
+        if !std::path::Path::new(path).exists() {
+            return;
+        }
+
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .run("名古屋 wards GeoParquet を検証")
+            .expect("run");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.workflow_id.as_deref(), Some("nagoya-geoparquet"));
+        assert_eq!(run.steps[2].tool_calls[0].tool, "run_geoparquet_read");
+        assert_eq!(run.steps[3].tool_calls[0].tool, "geoparquet_feature_verify");
     }
 
     #[test]

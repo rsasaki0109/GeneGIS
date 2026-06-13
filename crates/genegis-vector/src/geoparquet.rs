@@ -17,6 +17,29 @@ use crate::dataset::{FeatureRecord, VectorDataset};
 use crate::error::VectorError;
 use crate::geometry::geo_geometry_to_rings;
 
+/// Expected Nagoya ward feature count for bundled GeoParquet fixtures.
+pub const NAGOYA_WARD_FEATURE_COUNT: usize = 16;
+
+/// Summarize a GeoParquet dataset for agent / CLI diagnostics.
+pub fn geoparquet_summary(dataset: &VectorDataset) -> serde_json::Value {
+    serde_json::json!({
+        "name": dataset.name,
+        "feature_count": dataset.feature_count(),
+        "crs": dataset.crs,
+        "bbox": {
+            "min_x": dataset.bbox.min.x,
+            "min_y": dataset.bbox.min.y,
+            "max_x": dataset.bbox.max.x,
+            "max_y": dataset.bbox.max.y,
+        },
+    })
+}
+
+/// Verify bundled Nagoya GeoParquet smoke expectations.
+pub fn verify_nagoya_geoparquet(dataset: &VectorDataset) -> Result<bool, VectorError> {
+    Ok(dataset.feature_count() == NAGOYA_WARD_FEATURE_COUNT && dataset.crs.starts_with("EPSG:"))
+}
+
 /// Read a GeoParquet file from disk into the shared [`VectorDataset`] model.
 pub fn read_geoparquet_path(path: &str) -> Result<VectorDataset, VectorError> {
     let file = File::open(path)?;

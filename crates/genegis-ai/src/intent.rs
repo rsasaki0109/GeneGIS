@@ -55,6 +55,15 @@ impl ParsedIntent {
 
         if contains_any(
             &normalized,
+            &["geoparquet", "geo parquet", "geo-parquet", "パーケット", "parquet"],
+        ) {
+            signals.metric = Some("geoparquet".into());
+            signals.matched_tokens.push("metric:geoparquet".into());
+            score += 0.35;
+        }
+
+        if contains_any(
+            &normalized,
             &["表示", "見せ", "地図", "map", "choropleth", "コロプレス"],
         ) {
             signals.visualization = Some("choropleth".into());
@@ -100,5 +109,12 @@ mod tests {
         let intent = ParsedIntent::parse("ローカルCOGデモのメタデータを表示");
         assert_eq!(intent.signals.metric.as_deref(), Some("local_cog"));
         assert!(intent.confidence >= 0.5);
+    }
+
+    #[test]
+    fn parses_nagoya_geoparquet_prompt() {
+        let intent = ParsedIntent::parse("名古屋 wards GeoParquet を検証");
+        assert_eq!(intent.signals.place.as_deref(), Some("名古屋市"));
+        assert_eq!(intent.signals.metric.as_deref(), Some("geoparquet"));
     }
 }

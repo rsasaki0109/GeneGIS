@@ -22,6 +22,7 @@ genegis-plugin-host = { path = "../genegis-plugin-host" }
 genegis-pointcloud = { path = "../genegis-pointcloud" }
 genegis-raster = { path = "../genegis-raster" }
 genegis-storage = { path = "../genegis-storage" }
+genegis-vector = { path = "../genegis-vector" }
 genegis-workflow = { path = "../genegis-workflow" }
 genegis-testkit = { path = "../genegis-testkit" }
 serde_json.workspace = true

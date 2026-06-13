@@ -5,6 +5,7 @@ use genegis_ai::{PlanResult, PlannerConfig, WorkflowId, plan_with_config};
 use genegis_catalog::{alpha_catalog, DatasetRecord};
 use genegis_query::verify_nagoya_densities;
 use genegis_raster::CogInfo;
+use genegis_vector::{geoparquet_summary, read_geoparquet_uri, verify_nagoya_geoparquet, VectorDataset};
 
 use crate::error::AnalysisError;
 use crate::export::{export_html_map, export_png_map};
@@ -16,6 +17,7 @@ use crate::result::{AnalysisResult, VerificationReport};
 pub enum ExecutedWorkflow {
     NagoyaDensity(AnalysisResult),
     CogMetadata(CogInfo),
+    Geoparquet(VectorDataset),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -58,6 +60,10 @@ pub fn run_analysis_for_plan(
             "cog metadata workflow does not produce AnalysisResult; use execute_workflow_for_plan"
                 .into(),
         )),
+        (ExecutedWorkflow::Geoparquet(_), _) => Err(AnalysisError::Message(
+            "geoparquet workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
     }
 }
 
@@ -80,6 +86,11 @@ pub fn execute_workflow_for_plan(
                 .map_err(|err| AnalysisError::Message(err.to_string()))?;
             Ok((ExecutedWorkflow::CogMetadata(info), dataset_record))
         }
+        WorkflowId::NagoyaGeoparquet => {
+            let dataset = read_geoparquet_uri(&dataset_record.uri)
+                .map_err(|err| AnalysisError::Message(err.to_string()))?;
+            Ok((ExecutedWorkflow::Geoparquet(dataset), dataset_record))
+        }
     }
 }
 
@@ -87,6 +98,7 @@ pub fn verify_executed_workflow(result: &ExecutedWorkflow) -> Result<bool, Analy
     match result {
         ExecutedWorkflow::NagoyaDensity(analysis) => verify_analysis_densities(analysis),
         ExecutedWorkflow::CogMetadata(info) => verify_remote_cog_metadata(info),
+        ExecutedWorkflow::Geoparquet(dataset) => verify_geoparquet_features(dataset),
     }
 }
 
@@ -109,6 +121,10 @@ pub fn verify_analysis_densities(analysis: &AnalysisResult) -> Result<bool, Anal
 
 pub fn verify_remote_cog_metadata(info: &CogInfo) -> Result<bool, AnalysisError> {
     Ok(info.width > 0 && info.height > 0 && info.band_count >= 1 && !info.crs.is_empty())
+}
+
+pub fn verify_geoparquet_features(dataset: &VectorDataset) -> Result<bool, AnalysisError> {
+    verify_nagoya_geoparquet(dataset).map_err(|err| AnalysisError::Message(err.to_string()))
 }
 
 pub fn build_ask_result(
@@ -160,6 +176,9 @@ pub fn execute_from_plan(
         ExecutedWorkflow::CogMetadata(info) => {
             build_remote_cog_ask_result(prompt, plan, info, dataset, duckdb_verified)
         }
+        ExecutedWorkflow::Geoparquet(vector) => {
+            build_geoparquet_ask_result(prompt, plan, vector, dataset, duckdb_verified)
+        }
     }
 }
 
@@ -186,6 +205,42 @@ pub fn build_remote_cog_ask_result(
         workflow_steps: plan.workflow.steps.len(),
         verification: VerificationReport {
             crs: info.crs.clone(),
+            area_method: "n/a".into(),
+            density_unit: "n/a".into(),
+            checks: vec![],
+        },
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: verified,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+    })
+}
+
+pub fn build_geoparquet_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    vector: VectorDataset,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "geoparquet": geoparquet_summary(&vector),
+        "verification_passed": verified,
+    });
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: vector.crs.clone(),
             area_method: "n/a".into(),
             density_unit: "n/a".into(),
             checks: vec![],
@@ -258,5 +313,18 @@ mod tests {
             read_mode: Some("http_range".into()),
         };
         assert!(verify_remote_cog_metadata(&info).expect("verify"));
+    }
+
+    #[test]
+    fn geoparquet_feature_verifier_accepts_nagoya_fixture() {
+        let catalog = alpha_catalog();
+        let record = catalog
+            .require(genegis_catalog::NAGOYA_WARDS_GEOPARQUET_ID)
+            .expect("record");
+        if !std::path::Path::new(&record.uri).exists() {
+            return;
+        }
+        let dataset = read_geoparquet_uri(&record.uri).expect("read geoparquet");
+        assert!(verify_geoparquet_features(&dataset).expect("verify"));
     }
 }

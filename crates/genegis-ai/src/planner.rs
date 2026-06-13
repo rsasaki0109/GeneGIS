@@ -1,6 +1,6 @@
 use genegis_catalog::alpha_catalog;
 use genegis_workflow::{
-    local_cog_metadata_template, nagoya_population_density_template,
+    local_cog_metadata_template, nagoya_geoparquet_template, nagoya_population_density_template,
     remote_cog_metadata_template, GeoWorkflow,
 };
 
@@ -104,6 +104,7 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
         WorkflowId::NagoyaDensity => nagoya_population_density_template(),
         WorkflowId::RemoteCogDemo => remote_cog_metadata_template(),
         WorkflowId::LocalCogDemo => local_cog_metadata_template(),
+        WorkflowId::NagoyaGeoparquet => nagoya_geoparquet_template(),
     }
 }
 
@@ -111,7 +112,9 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
 mod tests {
     use super::*;
 
-    use genegis_catalog::{LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
+    use genegis_catalog::{
+        NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+    };
 
     #[test]
     fn plans_north_star() {
@@ -149,6 +152,14 @@ mod tests {
     fn plans_local_cog_demo() {
         let plan = plan_from_prompt("ローカルCOGデモのメタデータを表示").expect("plan");
         assert_eq!(plan.resolved.workflow_id, WorkflowId::LocalCogDemo);
+        assert_eq!(plan.workflow.steps.len(), 4);
+    }
+
+    #[test]
+    fn plans_nagoya_geoparquet() {
+        let plan = plan_from_prompt("名古屋 wards GeoParquet を検証").expect("plan");
+        assert_eq!(plan.resolved.workflow_id, WorkflowId::NagoyaGeoparquet);
+        assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
         assert_eq!(plan.workflow.steps.len(), 4);
     }
 
