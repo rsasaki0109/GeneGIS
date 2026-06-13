@@ -13,10 +13,11 @@ const PLANNER_TOOLS: &[&str] = &[
 const EXECUTOR_TOOLS: &[&str] = &[
     "catalog_resolve",
     "run_nagoya_density",
+    "run_remote_cog_metadata",
     "verify_retry",
 ];
 
-const VERIFIER_TOOLS: &[&str] = &["duckdb_verify"];
+const VERIFIER_TOOLS: &[&str] = &["duckdb_verify", "cog_metadata_verify"];
 
 /// Validate planner tool calls against the Phase 6 allowlist (ADR 0003).
 pub fn validate_planner_tools(calls: &[PlannerToolCall]) -> Result<(), AgentError> {

@@ -223,10 +223,10 @@
         <h2>Intent</h2>
         <div class="prompt-box">名古屋市の人口密度を表示</div>
         <div class="actions">
-          <button type="button">Run Ask Pipeline</button>
-          <button type="button" class="secondary">Download PNG</button>
-          <button type="button" class="secondary">Open GPU Map</button>
-          <span class="status">Done · DuckDB verified</span>
+          <button type="button" class="secondary">Plan only</button>
+          <button type="button">Approve &amp; execute</button>
+          <button type="button" class="secondary">Retry verify</button>
+          <span class="status">Done · DuckDB verified · audit linked</span>
         </div>
       </section>
 
@@ -239,38 +239,43 @@
 
       <aside class="sidebar">
         <section class="panel">
+          <h2>Agent trace</h2>
+          <pre class="mono">planner → catalog → execute → verify
+run: 5bcfb044… · 4 steps
+verification: passed</pre>
+        </section>
+
+        <section class="panel">
+          <h2>History</h2>
+          <article class="comment-item">
+            <div class="comment-meta">5bcfb044… · nagoya-density · passed</div>
+            <p class="comment-body">名古屋市の人口密度を表示</p>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Provenance</h2>
+          <article class="comment-item">
+            <div class="comment-meta">agent_run_id · rule_based_mvp</div>
+            <p class="comment-body">DuckDB verify passed · workflow nagoya-density</p>
+          </article>
+        </section>
+
+        <section class="panel">
           <h2>Resolution</h2>
           <pre class="mono">workflow: nagoya-density
 confidence: 100%
-steps: 6
+steps: 14
 duckdb: passed</pre>
         </section>
 
         <section class="panel">
           <h2>Comments</h2>
-          <div class="collab-sync">synced · source: server · 127.0.0.1:7813</div>
+          <div class="collab-sync">synced · server · 127.0.0.1:7813</div>
           <article class="comment-item">
             <div class="comment-meta">reviewer · Verify 中区 ward boundary alignment</div>
             <p class="comment-body">Verify 中区 ward boundary alignment</p>
           </article>
-        </section>
-
-        <section class="panel">
-          <h2>Verification</h2>
-          <ul>
-            <li class="ok">✓ crs_declared: CRS = EPSG:4326</li>
-            <li class="ok">✓ feature_count: Nagoya has 16 wards</li>
-            <li class="ok">✓ population_positive: 16 wards</li>
-            <li class="ok">✓ density_unit: persons/km²</li>
-          </ul>
-        </section>
-
-        <section class="panel">
-          <h2>Dataset</h2>
-          <pre class="mono">id: nagoya-wards-density
-format: geojson
-crs: EPSG:4326
-license: MLIT N03 / e-Stat</pre>
         </section>
       </aside>
     </main>

@@ -197,10 +197,9 @@
         <h2>Intent</h2>
         <div class="prompt-box">名古屋市の人口密度を表示</div>
         <div class="actions">
-          <button type="button">Run Ask Pipeline</button>
-          <button type="button" class="secondary" disabled>Download PNG</button>
-          <button type="button" class="secondary" disabled>Open GPU Map</button>
-          <span class="status">Running pipeline…</span>
+          <button type="button" class="secondary">Plan only</button>
+          <button type="button" disabled>Approve &amp; execute</button>
+          <span class="status">Planning · human gate</span>
         </div>
       </section>
 
@@ -216,19 +215,18 @@
 
       <aside class="sidebar">
         <section class="panel">
-          <h2>Resolution</h2>
-          <pre class="mono">workflow: —
-confidence: —
-steps: —
-duckdb: pending</pre>
+          <h2>Agent trace</h2>
+          <pre class="mono">planner: running…
+catalog: pending
+verify: pending</pre>
         </section>
         <section class="panel">
-          <h2>Dataset</h2>
-          <pre class="mono">resolving catalog match…</pre>
+          <h2>History</h2>
+          <pre class="mono">loading agent runs…</pre>
         </section>
         <section class="panel">
-          <h2>Verification</h2>
-          <pre class="mono">waiting for execution…</pre>
+          <h2>Provenance</h2>
+          <pre class="mono">waiting for run id…</pre>
         </section>
       </aside>
     </main>

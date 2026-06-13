@@ -39,7 +39,8 @@
 - [x] CI — `genegis agent run` north-star smoke + human gate + export-audit
 - [x] Server E2E — in-process axum tests for agent run list/get/latest POST
 - [x] Audit bundle regression — `build_audit_bundle` schema + run index tests
-- [ ] Workbench hero GIF refresh (manual asset update)
+- [x] Workbench hero HTML refresh (Phase 7 agent history + provenance panels)
+- [x] Workbench hero GIF re-render (`scripts/render-readme-hero.sh`)
 
 ## Recommended order
 
@@ -75,4 +76,6 @@ Sidebar → **Agent trace** shows latest run steps; **history** lists recent run
 
 「名古屋市の人口密度を表示」 — offline rule planner + DuckDB verification.
 
-See [`phase-6-autonomous.md`](phase-6-autonomous.md) and [`docs/guides/agent-orchestration.md`](../guides/agent-orchestration.md).
+## Next
+
+Phase 8 — intent expansion beyond Nagoya: [`phase-8-intent-expansion.md`](phase-8-intent-expansion.md)

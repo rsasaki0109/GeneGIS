@@ -82,6 +82,9 @@ genegis agent run "名古屋市の人口密度を表示" --json -o .genegis/agen
 genegis agent plan "名古屋市の人口密度を表示" && genegis agent execute
 genegis agent export-audit -o .genegis/audit-bundle.json
 
+# Second verified workflow (remote COG metadata via HTTP range-read)
+genegis agent run "リモートCOGデモのメタデータを表示"
+
 # Multi-client collab demo (terminal 1: server, terminal 2: workbench)
 cargo run -p genegis-server
 cargo run -p genegis-workbench
@@ -140,7 +143,8 @@ examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 | 4 | Plugins & COPC — SDK, WASM host, point cloud alpha | 5,000 → 7,500 | [`docs/roadmap/phase-4-plugins.md`](docs/roadmap/phase-4-plugins.md) |
 | 5 | Figma for GIS — comments, branches, collab sync | 7,500 → 10,000 | [`docs/roadmap/phase-5-collab.md`](docs/roadmap/phase-5-collab.md) |
 | 6 | Autonomous GIS platform — multi-agent orchestration | 10,000 → 15,000 | [`docs/roadmap/phase-6-autonomous.md`](docs/roadmap/phase-6-autonomous.md) |
-| 7 | Audit trail & release workbench — run history + provenance UI | 15,000 → 20,000 | [`docs/roadmap/phase-7-release.md`](docs/roadmap/phase-7-release.md) (gamma: CI + E2E hardening) |
+| 7 | Audit trail & release workbench — run history + provenance UI | 15,000 → 20,000 | [`docs/roadmap/phase-7-release.md`](docs/roadmap/phase-7-release.md) |
+| 8 | Intent expansion — multi-workflow agent verify beyond Nagoya | 20,000 → 30,000 | [`docs/roadmap/phase-8-intent-expansion.md`](docs/roadmap/phase-8-intent-expansion.md) |
 
 ## Tech stack (decisions)
 

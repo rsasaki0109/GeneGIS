@@ -120,4 +120,4 @@ See [`phase-5-collab.md`](phase-5-collab.md).
 
 ## Next
 
-Phase 7 — audit trail & release workbench: [`phase-7-release.md`](phase-7-release.md)
+Phase 8 — intent expansion beyond Nagoya: [`phase-8-intent-expansion.md`](phase-8-intent-expansion.md)

@@ -46,9 +46,9 @@ Pending plans are stored at `.genegis/agent-plan.json`. Runs are stored at `.gen
 
 Planner tools: `parse_intent`, `resolve_workflow`, `catalog_bind`, `llm_plan_workflow`, `plan_workflow`.
 
-Executor tools: `catalog_resolve`, `run_nagoya_density`, `verify_retry`.
+Executor tools: `catalog_resolve`, `run_nagoya_density`, `run_remote_cog_metadata`, `verify_retry`.
 
-Verifier tools: `duckdb_verify`.
+Verifier tools: `duckdb_verify` (Nagoya density), `cog_metadata_verify` (remote COG metadata).
 
 Unknown tools are rejected before execution (see `crates/genegis-agent/src/tool_registry.rs`).
 

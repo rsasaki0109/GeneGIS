@@ -34,3 +34,5 @@ jobs:
           cargo run -p genegis-cli -- agent execute
       - name: Agent audit export smoke
         run: cargo run -p genegis-cli -- agent export-audit -o /tmp/genegis-audit-bundle.json
+      - name: Remote COG agent smoke (network)
+        run: cargo run -p genegis-cli -- agent run "リモートCOGデモのメタデータを表示"

@@ -15,6 +15,7 @@ genegis-query = { path = "../genegis-query" }
 genegis-render = { path = "../genegis-render" }
 genegis-style = { path = "../genegis-style" }
 genegis-vector = { path = "../genegis-vector" }
+genegis-raster = { path = "../genegis-raster" }
 genegis-workflow = { path = "../genegis-workflow" }
 serde.workspace = true
 serde_json.workspace = true

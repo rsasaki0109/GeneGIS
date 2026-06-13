@@ -1,7 +1,8 @@
 use chrono::Utc;
-use genegis_ai::{plan_with_config, PlanResult, DEFAULT_AGENT_PLAN_PATH};
+use genegis_ai::{plan_with_config, PlanResult, WorkflowId, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
-    build_ask_result, run_analysis_for_plan, verify_analysis_densities,
+    build_ask_result, build_remote_cog_ask_result, execute_workflow_for_plan,
+    verify_executed_workflow, ExecutedWorkflow,
 };
 use genegis_catalog::{alpha_catalog, DatasetRecord};
 use uuid::Uuid;
@@ -68,32 +69,38 @@ impl AgentOrchestrator {
 
         let max_attempts = self.config.verify_retries.max(1);
         let mut verify_attempts = 0_u32;
-        let mut duckdb_verified = false;
-        let mut analysis = None;
+        let mut verified = false;
+        let mut executed: Option<ExecutedWorkflow> = None;
 
         for attempt in 1..=max_attempts {
             if attempt > 1 {
                 steps.push(record_retry_step(attempt)?);
             }
 
-            let (next_analysis, next_dataset) = run_analysis_for_plan(&plan)?;
+            let (next_executed, next_dataset) = execute_workflow_for_plan(&plan)
+                .map_err(|err| AgentError::Message(err.to_string()))?;
             if attempt == 1 {
                 debug_assert_eq!(next_dataset.id, dataset.id);
             }
-            steps.push(record_execute_step(&plan, next_analysis.features.len(), attempt)?);
+            steps.push(record_execute_step(
+                &plan,
+                &next_executed,
+                attempt,
+            )?);
 
-            duckdb_verified = verify_analysis_densities(&next_analysis)?;
+            verified = verify_executed_workflow(&next_executed)
+                .map_err(|err| AgentError::Message(err.to_string()))?;
             verify_attempts = attempt;
-            steps.push(record_verify_step(duckdb_verified, attempt)?);
+            steps.push(record_verify_step(&plan, verified, attempt)?);
 
-            analysis = Some(next_analysis);
-            if duckdb_verified {
+            executed = Some(next_executed);
+            if verified {
                 break;
             }
         }
 
-        let analysis = analysis.expect("at least one execute attempt");
-        if !duckdb_verified {
+        let executed = executed.expect("at least one execute attempt");
+        if !verified {
             return Ok(AgentRun {
                 id: run_id,
                 prompt: prompt.to_string(),
@@ -108,14 +115,25 @@ impl AgentOrchestrator {
                 finished_at: Utc::now(),
                 steps,
                 summary: serde_json::json!({
-                    "error": "DuckDB density verification failed",
+                    "error": "workflow verification failed",
                     "verify_attempts": verify_attempts,
                     "workflow_id": plan.resolved.workflow_id.as_str(),
                 }),
             });
         }
 
-        let ask = build_ask_result(prompt, &plan, analysis, dataset, duckdb_verified)?;
+        let summary = match executed {
+            ExecutedWorkflow::NagoyaDensity(analysis) => {
+                let ask = build_ask_result(prompt, &plan, analysis, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::RemoteCogMetadata(info) => {
+                let ask = build_remote_cog_ask_result(prompt, &plan, info, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+        };
 
         Ok(AgentRun {
             id: run_id,
@@ -130,7 +148,7 @@ impl AgentOrchestrator {
             started_at,
             finished_at: Utc::now(),
             steps,
-            summary: ask.summary,
+            summary,
         })
     }
 }
@@ -244,45 +262,78 @@ fn record_retry_step(attempt: u32) -> Result<AgentStep, AgentError> {
 
 fn record_execute_step(
     plan: &PlanResult,
-    ward_count: usize,
+    executed: &ExecutedWorkflow,
     attempt: u32,
 ) -> Result<AgentStep, AgentError> {
-    validate_executor_tool("run_nagoya_density")?;
-    Ok(
-        AgentStep::new(
-            AgentRole::Executor,
+    let (tool, agent, detail, output) = match (&plan.resolved.workflow_id, executed) {
+        (WorkflowId::NagoyaDensity, ExecutedWorkflow::NagoyaDensity(analysis)) => (
+            "run_nagoya_density",
             "nagoya_executor",
             format!("Run Nagoya density analysis (attempt {attempt})"),
-        )
-        .with_tool_call(ToolCall {
-            tool: "run_nagoya_density".into(),
-            input: serde_json::json!({
-                "workflow_id": plan.resolved.workflow_id.as_str(),
-                "dataset_id": plan.resolved.dataset_id,
-                "attempt": attempt,
-            }),
-            output: serde_json::json!({ "ward_count": ward_count }),
-            ok: true,
-        })
-        .finish(),
+            serde_json::json!({ "ward_count": analysis.features.len() }),
+        ),
+        (WorkflowId::RemoteCogDemo, ExecutedWorkflow::RemoteCogMetadata(info)) => (
+            "run_remote_cog_metadata",
+            "raster_executor",
+            format!("Fetch remote COG metadata (attempt {attempt})"),
+            info.summary_json(),
+        ),
+        _ => {
+            return Err(AgentError::Message(format!(
+                "workflow mismatch for {}",
+                plan.resolved.workflow_id.as_str()
+            )));
+        }
+    };
+
+    validate_executor_tool(tool)?;
+    Ok(
+        AgentStep::new(AgentRole::Executor, agent, detail)
+            .with_tool_call(ToolCall {
+                tool: tool.into(),
+                input: serde_json::json!({
+                    "workflow_id": plan.resolved.workflow_id.as_str(),
+                    "dataset_id": plan.resolved.dataset_id,
+                    "attempt": attempt,
+                }),
+                output,
+                ok: true,
+            })
+            .finish(),
     )
 }
 
-fn record_verify_step(passed: bool, attempt: u32) -> Result<AgentStep, AgentError> {
-    validate_verifier_tool("duckdb_verify")?;
-    Ok(
-        AgentStep::new(
-            AgentRole::Verifier,
+fn record_verify_step(
+    plan: &PlanResult,
+    passed: bool,
+    attempt: u32,
+) -> Result<AgentStep, AgentError> {
+    let (tool, agent, detail) = match plan.resolved.workflow_id {
+        WorkflowId::NagoyaDensity => (
+            "duckdb_verify",
             "duckdb_verifier",
             format!("Cross-check ward densities with DuckDB (attempt {attempt})"),
-        )
-        .with_tool_call(ToolCall {
-            tool: "duckdb_verify".into(),
-            input: serde_json::json!({ "workflow": "nagoya-density", "attempt": attempt }),
-            output: serde_json::json!({ "passed": passed, "attempt": attempt }),
-            ok: passed,
-        })
-        .finish(),
+        ),
+        WorkflowId::RemoteCogDemo => (
+            "cog_metadata_verify",
+            "raster_verifier",
+            format!("Validate COG metadata fields (attempt {attempt})"),
+        ),
+    };
+
+    validate_verifier_tool(tool)?;
+    Ok(
+        AgentStep::new(AgentRole::Verifier, agent, detail)
+            .with_tool_call(ToolCall {
+                tool: tool.into(),
+                input: serde_json::json!({
+                    "workflow": plan.resolved.workflow_id.as_str(),
+                    "attempt": attempt,
+                }),
+                output: serde_json::json!({ "passed": passed, "attempt": attempt }),
+                ok: passed,
+            })
+            .finish(),
     )
 }
 
@@ -342,5 +393,32 @@ mod tests {
 
         assert!(run.verification_passed);
         assert_eq!(run.steps.len(), 4);
+    }
+
+    #[test]
+    fn remote_cog_plan_only_resolves_workflow() {
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline().plan_only())
+            .run("リモートCOGデモのメタデータを表示")
+            .expect("run");
+
+        assert_eq!(run.workflow_id.as_deref(), Some("remote-cog-demo"));
+        assert_eq!(run.steps.len(), 1);
+        assert_eq!(run.steps[0].role, AgentRole::Planner);
+    }
+
+    #[test]
+    #[ignore = "requires network access to OSGeo sample COG"]
+    fn runs_remote_cog_agent_trace() {
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .run("リモートCOGデモのメタデータを表示")
+            .expect("run");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.workflow_id.as_deref(), Some("remote-cog-demo"));
+        assert_eq!(run.steps.len(), 4);
+        assert_eq!(run.steps[2].tool_calls[0].tool, "run_remote_cog_metadata");
+        assert_eq!(run.steps[3].tool_calls[0].tool, "cog_metadata_verify");
     }
 }
