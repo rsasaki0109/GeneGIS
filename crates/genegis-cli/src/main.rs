@@ -18,8 +18,8 @@ use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{
-    local_cog_metadata_template, nagoya_geoparquet_template, nagoya_population_density_template,
-    remote_cog_metadata_template,
+    external_stac_fetch_template, local_cog_metadata_template, nagoya_geoparquet_density_template,
+    nagoya_geoparquet_template, nagoya_population_density_template, remote_cog_metadata_template,
 };
 use genegis_vector::{geoparquet_summary, read_geoparquet_uri};
 use std::env;
@@ -1346,6 +1346,20 @@ fn handle_workflow(args: &[String]) {
                         print_workflow_json(&nagoya_geoparquet_template());
                     }
                 }
+                "nagoya-geoparquet-density" => {
+                    if execute {
+                        run_geoparquet_density_execute();
+                    } else {
+                        print_workflow_json(&nagoya_geoparquet_density_template());
+                    }
+                }
+                "external-stac-demo" => {
+                    if execute {
+                        run_external_stac_execute();
+                    } else {
+                        print_workflow_json(&external_stac_fetch_template());
+                    }
+                }
                 _ => {
                     eprintln!("Unknown workflow: {name}");
                     process::exit(1);
@@ -1354,7 +1368,7 @@ fn handle_workflow(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet] [--execute] [--html] [--png] [-o FILE]"
+                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet|nagoya-geoparquet-density|external-stac-demo] [--execute] [--html] [--png] [-o FILE]"
             );
             process::exit(1);
         }
@@ -1412,6 +1426,8 @@ Usage:
   genegis workflow run local-cog-demo --execute    Probe bundled local COG metadata (offline)
   genegis workflow run nagoya-geoparquet           Print GeoParquet verification workflow JSON
   genegis workflow run nagoya-geoparquet --execute Read bundled GeoParquet + verify 16 wards
+  genegis workflow run nagoya-geoparquet-density --execute GeoParquet density + DuckDB verify
+  genegis workflow run external-stac-demo --execute Fetch bundled sample STAC collection
   genegis workflow run nagoya-density -x --html    Execute + write HTML map
   genegis workflow run nagoya-density -x --png     Execute + write PNG map
   genegis version
@@ -1482,6 +1498,66 @@ fn run_geoparquet_execute(dataset_id: &str) {
         process::exit(1);
     }
     eprintln!("GeoParquet verification: passed");
+}
+
+fn run_geoparquet_density_execute() {
+    let path = genegis_catalog::nagoya_wards_geoparquet_path();
+    let result = match genegis_analysis::run_nagoya_population_density_geoparquet(path) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Analysis failed: {err}");
+            process::exit(1);
+        }
+    };
+
+    let rows: Vec<(String, u64, f64, f64)> = result
+        .features
+        .iter()
+        .map(|f| {
+            (
+                f.ward_name.clone(),
+                f.population,
+                f.area_km2,
+                f.density_per_km2,
+            )
+        })
+        .collect();
+
+    match verify_nagoya_densities(&rows) {
+        Ok(true) => eprintln!("DuckDB verification: passed"),
+        Ok(false) => {
+            eprintln!("DuckDB verification: failed");
+            process::exit(1);
+        }
+        Err(err) => {
+            eprintln!("DuckDB verification error: {err}");
+            process::exit(1);
+        }
+    }
+
+    let summary = serde_json::json!({
+        "goal": result.workflow.goal,
+        "ward_count": result.features.len(),
+        "source": "geoparquet",
+        "density_unit": result.verification.density_unit,
+    });
+    println!("{}", serde_json::to_string_pretty(&summary).expect("json"));
+}
+
+fn run_external_stac_execute() {
+    let url = genegis_catalog::repo_root()
+        .join("examples/stac/sample-collection.json")
+        .to_string_lossy()
+        .into_owned();
+    match fetch_stac_collection(&url) {
+        Ok(collection) => {
+            println!("{}", serde_json::to_string_pretty(&collection.summary_json()).expect("json"));
+        }
+        Err(err) => {
+            eprintln!("STAC fetch error: {err}");
+            process::exit(1);
+        }
+    }
 }
 
 fn run_nagoya_execute(export_html: bool, export_png: bool, output: Option<&Path>) {

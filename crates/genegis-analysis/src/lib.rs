@@ -12,12 +12,14 @@ pub use export::{export_html_map, export_map_svg, export_png_map, ExportError};
 pub use nagoya::{
     default_nagoya_data_path, default_nagoya_dataset_id, run_nagoya_population_density,
     run_nagoya_population_density_for_dataset, run_nagoya_population_density_from_catalog,
+    run_nagoya_population_density_geoparquet,
 };
 pub use pipeline::{
-    build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result, execute_from_plan,
-    execute_workflow_for_plan, run_analysis_for_plan, run_ask_pipeline, run_ask_pipeline_with_config,
+    build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result,
+    build_stac_collection_ask_result, execute_from_plan, execute_workflow_for_plan,
+    run_analysis_for_plan, run_ask_pipeline, run_ask_pipeline_with_config,
     verify_analysis_densities, verify_executed_workflow, verify_geoparquet_features,
-    verify_remote_cog_metadata, AskPipelineResult, ExecutedWorkflow,
+    verify_remote_cog_metadata, verify_stac_collection, AskPipelineResult, ExecutedWorkflow,
 };
 pub use preview::{
     cog_raster_preview_map, nagoya_choropleth_map, spawn_cog_gpu_preview, spawn_gpu_preview_for_workflow,

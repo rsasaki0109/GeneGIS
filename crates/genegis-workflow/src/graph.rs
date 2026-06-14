@@ -126,10 +126,48 @@ pub fn nagoya_geoparquet_template() -> GeoWorkflow {
             serde_json::json!({ "tags": ["nagoya", "geoparquet", "demo"] }),
         ),
         WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new("AttachSources", serde_json::json!({})),
+    ];
+    workflow
+}
+
+/// Nagoya GeoParquet population density choropleth workflow (Phase 9 beta).
+pub fn nagoya_geoparquet_density_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋 GeoParquet 人口密度を表示");
+    workflow.assumptions.push("Density computed from bundled GeoParquet wards fixture".into());
+    workflow.steps = vec![
         WorkflowStep::new(
-            "VerifyFeatureCount",
-            serde_json::json!({ "expected": 16, "field": "ward_name" }),
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "geoparquet", "density"] }),
         ),
+        WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new("CalculateAreaKm2", serde_json::json!({})),
+        WorkflowStep::new(
+            "CalculateDensity",
+            serde_json::json!({ "formula": "population / area_km2" }),
+        ),
+        WorkflowStep::new("GenerateChoropleth", serde_json::json!({})),
+        WorkflowStep::new("VerifyUnits", serde_json::json!({})),
+        WorkflowStep::new("RenderMap", serde_json::json!({})),
+        WorkflowStep::new("AttachSources", serde_json::json!({})),
+    ];
+    workflow
+}
+
+/// External STAC collection fetch workflow (Phase 9 beta).
+pub fn external_stac_fetch_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("外部 STAC collection を fetch");
+    workflow.assumptions.push("Collection URL is extracted from the user prompt".into());
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "FindDataset",
+            serde_json::json!({ "tags": ["stac", "external", "demo"] }),
+        ),
+        WorkflowStep::new(
+            "FetchStacCollection",
+            serde_json::json!({ "tool": "stac_fetch" }),
+        ),
+        WorkflowStep::new("SummarizeCollection", serde_json::json!({})),
         WorkflowStep::new("AttachSources", serde_json::json!({})),
     ];
     workflow

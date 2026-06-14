@@ -2484,6 +2484,7 @@ dependencies = [
  "genegis-agent",
  "genegis-ai",
  "genegis-analysis",
+ "genegis-catalog",
  "genegis-collab",
  "genegis-plugin-host",
  "open",

@@ -70,7 +70,7 @@ mod tests {
     fn matches_nagoya_density_tags() {
         let catalog = alpha_catalog();
         let matched = catalog
-            .match_dataset(&["nagoya", "density"])
+            .match_dataset(&["nagoya", "density", "population"])
             .expect("match");
         assert_eq!(matched.dataset_id, NAGOYA_WARDS_DENSITY_ID);
         assert_eq!(matched.score, 1.0);

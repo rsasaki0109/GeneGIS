@@ -14,7 +14,13 @@ use genegis_agent::{
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
-use genegis_catalog::{alpha_catalog, bind_stac_item, browse_alpha_stac_collection};
+use genegis_catalog::{
+    bind_stac_item, browse_alpha_stac_collection, extended_catalog, fetch_stac_collection,
+    import_stac_item_url, load_catalog_overlay, DatasetRecord,
+};
+use genegis_collab::{
+    pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL,
+};
 use genegis_plugin_host::PluginHost;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -119,6 +125,32 @@ struct StacItemResponse {
     item: Option<genegis_catalog::StacItem>,
 }
 
+#[derive(Deserialize)]
+struct StacUrlRequest {
+    url: String,
+}
+
+#[derive(Serialize)]
+struct StacFetchResponse {
+    ok: bool,
+    error: Option<String>,
+    collection: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct StacImportResponse {
+    ok: bool,
+    error: Option<String>,
+    record: Option<serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct StacOverlayResponse {
+    ok: bool,
+    error: Option<String>,
+    records: Vec<serde_json::Value>,
+}
+
 #[derive(Serialize)]
 struct GpuPreviewResponse {
     ok: bool,
@@ -172,6 +204,9 @@ async fn main() {
         .route("/api/gpu-preview", post(gpu_preview))
         .route("/api/stac/collection", get(stac_collection))
         .route("/api/stac/items/{id}", get(stac_item))
+        .route("/api/stac/overlay", get(stac_overlay))
+        .route("/api/stac/fetch", post(stac_fetch))
+        .route("/api/stac/import", post(stac_import))
         .route("/api/plugins", get(list_plugins))
         .route("/api/collab", get(collab_snapshot))
         .route("/api/collab/comment", post(add_comment))
@@ -554,7 +589,7 @@ async fn gpu_preview(Json(body): Json<GpuPreviewRequest>) -> impl IntoResponse {
 }
 
 async fn stac_collection() -> impl IntoResponse {
-    let collection = browse_alpha_stac_collection(&alpha_catalog());
+    let collection = browse_alpha_stac_collection(&extended_catalog());
     (
         StatusCode::OK,
         Json(StacCollectionResponse {
@@ -566,7 +601,7 @@ async fn stac_collection() -> impl IntoResponse {
 }
 
 async fn stac_item(Path(id): Path<String>) -> impl IntoResponse {
-    match bind_stac_item(&alpha_catalog(), &id) {
+    match bind_stac_item(&extended_catalog(), &id) {
         Ok(item) => (
             StatusCode::OK,
             Json(StacItemResponse {
@@ -581,6 +616,63 @@ async fn stac_item(Path(id): Path<String>) -> impl IntoResponse {
                 ok: false,
                 error: Some(err.to_string()),
                 item: None,
+            }),
+        ),
+    }
+}
+
+async fn stac_overlay() -> impl IntoResponse {
+    let records: Vec<serde_json::Value> = load_catalog_overlay()
+        .iter()
+        .map(DatasetRecord::summary_json)
+        .collect();
+    (
+        StatusCode::OK,
+        Json(StacOverlayResponse {
+            ok: true,
+            error: None,
+            records,
+        }),
+    )
+}
+
+async fn stac_fetch(Json(body): Json<StacUrlRequest>) -> impl IntoResponse {
+    match fetch_stac_collection(&body.url) {
+        Ok(collection) => (
+            StatusCode::OK,
+            Json(StacFetchResponse {
+                ok: true,
+                error: None,
+                collection: Some(collection.summary_json()),
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(StacFetchResponse {
+                ok: false,
+                error: Some(err.to_string()),
+                collection: None,
+            }),
+        ),
+    }
+}
+
+async fn stac_import(Json(body): Json<StacUrlRequest>) -> impl IntoResponse {
+    match import_stac_item_url(&body.url) {
+        Ok(record) => (
+            StatusCode::OK,
+            Json(StacImportResponse {
+                ok: true,
+                error: None,
+                record: Some(record.summary_json()),
+            }),
+        ),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(StacImportResponse {
+                ok: false,
+                error: Some(err.to_string()),
+                record: None,
             }),
         ),
     }

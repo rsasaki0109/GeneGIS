@@ -1,8 +1,9 @@
-use genegis_catalog::{alpha_catalog, browse_alpha_stac_collection, bind_stac_item};
+use genegis_catalog::{alpha_catalog, browse_alpha_stac_collection, bind_stac_item, fetch_stac_collection};
 use serde::{Deserialize, Serialize};
 
 use crate::intent::ParsedIntent;
 use crate::resolver::ResolvedWorkflow;
+use crate::stac_url::extract_catalog_url;
 
 /// Structured planner tool invocation (Phase 6 beta — LLM + rule fallback).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,7 +35,7 @@ pub fn rule_based_tool_calls(intent: &ParsedIntent, resolved: &ResolvedWorkflow)
     let collection = browse_alpha_stac_collection(&catalog);
     let stac_item = bind_stac_item(&catalog, &resolved.dataset_id).ok();
 
-    vec![
+    let mut calls = vec![
         PlannerToolCall::new(
             "parse_intent",
             serde_json::json!({ "prompt": intent.raw_prompt }),
@@ -80,7 +81,24 @@ pub fn rule_based_tool_calls(intent: &ParsedIntent, resolved: &ResolvedWorkflow)
             }),
             !resolved.dataset_id.is_empty(),
         ),
-    ]
+    ];
+
+    if let Some(url) = extract_catalog_url(&intent.raw_prompt) {
+        let fetch_output = fetch_stac_collection(&url)
+            .map(|collection| collection.summary_json())
+            .unwrap_or_else(|err| {
+                serde_json::json!({ "error": err.to_string(), "url": url })
+            });
+        let ok = fetch_output.get("error").is_none();
+        calls.push(PlannerToolCall::new(
+            "stac_fetch",
+            serde_json::json!({ "url": url }),
+            fetch_output,
+            ok,
+        ));
+    }
+
+    calls
 }
 
 pub fn llm_tool_calls(resolved: &ResolvedWorkflow, raw: &[PlannerToolCall]) -> Vec<PlannerToolCall> {
@@ -145,6 +163,18 @@ mod tests {
         assert_eq!(calls[3].tool, "stac_bind");
         assert!(calls[3].ok);
         assert_eq!(resolved.dataset_id, NAGOYA_WARDS_DENSITY_ID);
+    }
+
+    #[test]
+    fn rule_based_emits_stac_fetch_for_external_url() {
+        let intent = ParsedIntent::parse(
+            "外部STAC examples/stac/sample-collection.json を fetch",
+        );
+        let resolved = resolve_workflow(&intent).expect("resolve");
+        let calls = rule_based_tool_calls(&intent, &resolved);
+        assert_eq!(calls.len(), 5);
+        assert_eq!(calls[4].tool, "stac_fetch");
+        assert!(calls[4].ok);
     }
 
     #[test]

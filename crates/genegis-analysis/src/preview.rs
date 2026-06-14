@@ -1,4 +1,4 @@
-use genegis_catalog::{alpha_catalog, LOCAL_COG_DEMO_ID, REMOTE_COG_DEMO_ID};
+use genegis_catalog::{alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID};
 use genegis_geometry::PolygonRing;
 use genegis_render::{ChoroplethMap, run_choropleth_window};
 use genegis_style::ColorRgba;
@@ -83,6 +83,17 @@ pub fn spawn_gpu_preview_for_workflow(workflow_id: &str) -> Result<String, Analy
                 .clone();
             spawn_cog_gpu_preview(&uri)?;
             Ok("WebGPU raster preview launched (local COG window)".into())
+        }
+        "nagoya-geoparquet-density" => {
+            let analysis = crate::nagoya::run_nagoya_population_density_for_dataset(
+                NAGOYA_WARDS_GEOPARQUET_ID,
+            )?;
+            let mut map = ChoroplethMap::default();
+            for feature in &analysis.features {
+                map.push_feature(feature.rings.clone(), feature.color);
+            }
+            spawn_gpu_map(Ok(map))?;
+            Ok("WebGPU choropleth preview launched (GeoParquet density)".into())
         }
         other => Err(AnalysisError::Message(format!(
             "GPU preview not supported for workflow {other}"

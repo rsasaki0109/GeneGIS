@@ -17,6 +17,9 @@ pub const LOCAL_COG_DEMO_ID: &str = "local-cog-demo";
 /// Well-known dataset id for the bundled Nagoya wards GeoParquet asset.
 pub const NAGOYA_WARDS_GEOPARQUET_ID: &str = "nagoya-wards-geoparquet";
 
+/// Well-known dataset id for the external STAC collection demo.
+pub const EXTERNAL_STAC_DEMO_ID: &str = "external-stac-demo";
+
 /// Path to the bundled Nagoya wards GeoJSON asset.
 pub fn nagoya_wards_geojson_path() -> &'static str {
     concat!(
@@ -78,6 +81,7 @@ pub fn alpha_catalog() -> Catalog {
     catalog.register(remote_cog_demo_record());
     catalog.register(local_cog_demo_record());
     catalog.register(nagoya_geoparquet_record());
+    catalog.register(external_stac_demo_record());
     catalog
 }
 
@@ -142,7 +146,30 @@ fn nagoya_geoparquet_record() -> DatasetRecord {
         tags: vec![
             "nagoya".into(),
             "geoparquet".into(),
+            "density".into(),
             "wards".into(),
+            "demo".into(),
+        ],
+    }
+}
+
+fn external_stac_demo_record() -> DatasetRecord {
+    DatasetRecord {
+        id: EXTERNAL_STAC_DEMO_ID.into(),
+        title: "External STAC collection demo".into(),
+        description: "Bundled sample STAC Collection JSON for offline fetch/import smoke tests.".into(),
+        format: DatasetFormat::geojson(),
+        crs: "EPSG:4326".into(),
+        bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
+        uri: concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/stac/sample-collection.json"
+        )
+        .into(),
+        license: "CC-BY-4.0".into(),
+        tags: vec![
+            "stac".into(),
+            "external".into(),
             "demo".into(),
         ],
     }
@@ -185,7 +212,7 @@ mod tests {
         let record = catalog.require(REMOTE_COG_DEMO_ID).expect("record");
         assert_eq!(record.format.kind, "cog");
         assert!(record.uri.starts_with("https://"));
-        assert_eq!(catalog.list().len(), 4);
+        assert_eq!(catalog.list().len(), 5);
     }
 
     #[test]

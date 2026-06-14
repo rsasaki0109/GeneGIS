@@ -2,7 +2,8 @@ use chrono::Utc;
 use genegis_ai::{plan_with_config, PlanResult, WorkflowId, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
     build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result,
-    execute_workflow_for_plan, verify_executed_workflow, ExecutedWorkflow,
+    build_stac_collection_ask_result, execute_workflow_for_plan, verify_executed_workflow,
+    ExecutedWorkflow,
 };
 use genegis_catalog::{alpha_catalog, DatasetRecord};
 use uuid::Uuid;
@@ -136,6 +137,17 @@ impl AgentOrchestrator {
             ExecutedWorkflow::Geoparquet(vector) => {
                 let ask = build_geoparquet_ask_result(prompt, &plan, vector, dataset, verified)
                     .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::StacCollection(collection) => {
+                let ask = build_stac_collection_ask_result(
+                    prompt,
+                    &plan,
+                    collection,
+                    dataset,
+                    verified,
+                )
+                .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
         };
@@ -277,6 +289,12 @@ fn record_execute_step(
             format!("Run Nagoya density analysis (attempt {attempt})"),
             serde_json::json!({ "ward_count": analysis.features.len() }),
         ),
+        (WorkflowId::NagoyaGeoparquetDensity, ExecutedWorkflow::NagoyaDensity(analysis)) => (
+            "run_geoparquet_density",
+            "vector_executor",
+            format!("Run Nagoya GeoParquet density analysis (attempt {attempt})"),
+            serde_json::json!({ "ward_count": analysis.features.len(), "source": "geoparquet" }),
+        ),
         (WorkflowId::RemoteCogDemo, ExecutedWorkflow::CogMetadata(info)) => (
             "run_remote_cog_metadata",
             "raster_executor",
@@ -294,6 +312,12 @@ fn record_execute_step(
             "vector_executor",
             format!("Read Nagoya GeoParquet fixture (attempt {attempt})"),
             genegis_vector::geoparquet_summary(dataset),
+        ),
+        (WorkflowId::ExternalStacDemo, ExecutedWorkflow::StacCollection(collection)) => (
+            "run_stac_fetch",
+            "catalog_executor",
+            format!("Fetch external STAC collection (attempt {attempt})"),
+            collection.summary_json(),
         ),
         _ => {
             return Err(AgentError::Message(format!(
@@ -326,7 +350,7 @@ fn record_verify_step(
     attempt: u32,
 ) -> Result<AgentStep, AgentError> {
     let (tool, agent, detail) = match plan.resolved.workflow_id {
-        WorkflowId::NagoyaDensity => (
+        WorkflowId::NagoyaDensity | WorkflowId::NagoyaGeoparquetDensity => (
             "duckdb_verify",
             "duckdb_verifier",
             format!("Cross-check ward densities with DuckDB (attempt {attempt})"),
@@ -340,6 +364,11 @@ fn record_verify_step(
             "geoparquet_feature_verify",
             "vector_verifier",
             format!("Validate GeoParquet feature count (attempt {attempt})"),
+        ),
+        WorkflowId::ExternalStacDemo => (
+            "stac_collection_verify",
+            "catalog_verifier",
+            format!("Validate STAC collection payload (attempt {attempt})"),
         ),
     };
 
@@ -469,6 +498,39 @@ mod tests {
         assert_eq!(run.workflow_id.as_deref(), Some("nagoya-geoparquet"));
         assert_eq!(run.steps[2].tool_calls[0].tool, "run_geoparquet_read");
         assert_eq!(run.steps[3].tool_calls[0].tool, "geoparquet_feature_verify");
+    }
+
+    #[test]
+    fn runs_external_stac_agent_trace() {
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .run("外部STAC examples/stac/sample-collection.json を fetch")
+            .expect("run");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.workflow_id.as_deref(), Some("external-stac-demo"));
+        assert_eq!(run.steps[0].tool_calls.len(), 5);
+        assert_eq!(run.steps[0].tool_calls[4].tool, "stac_fetch");
+        assert_eq!(run.steps[2].tool_calls[0].tool, "run_stac_fetch");
+        assert_eq!(run.steps[3].tool_calls[0].tool, "stac_collection_verify");
+    }
+
+    #[test]
+    fn runs_nagoya_geoparquet_density_agent_trace() {
+        let path = genegis_catalog::nagoya_wards_geoparquet_path();
+        if !std::path::Path::new(path).exists() {
+            return;
+        }
+
+        let run = AgentOrchestrator::new()
+            .with_config(AgentRunConfig::rule_based_offline())
+            .run("名古屋 GeoParquet 人口密度を表示")
+            .expect("run");
+
+        assert!(run.verification_passed);
+        assert_eq!(run.workflow_id.as_deref(), Some("nagoya-geoparquet-density"));
+        assert_eq!(run.steps[2].tool_calls[0].tool, "run_geoparquet_density");
+        assert_eq!(run.steps[3].tool_calls[0].tool, "duckdb_verify");
     }
 
     #[test]

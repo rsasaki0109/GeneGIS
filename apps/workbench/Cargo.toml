@@ -15,6 +15,7 @@ axum = "0.8"
 genegis-analysis = { path = "../../crates/genegis-analysis" }
 genegis-agent = { path = "../../crates/genegis-agent" }
 genegis-ai = { path = "../../crates/genegis-ai" }
+genegis-catalog = { path = "../../crates/genegis-catalog" }
 genegis-collab = { path = "../../crates/genegis-collab" }
 genegis-plugin-host = { path = "../../crates/genegis-plugin-host" }
 open = "5"

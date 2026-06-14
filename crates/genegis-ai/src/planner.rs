@@ -1,7 +1,8 @@
 use genegis_catalog::alpha_catalog;
 use genegis_workflow::{
-    local_cog_metadata_template, nagoya_geoparquet_template, nagoya_population_density_template,
-    remote_cog_metadata_template, GeoWorkflow,
+    external_stac_fetch_template, local_cog_metadata_template, nagoya_geoparquet_density_template,
+    nagoya_geoparquet_template, nagoya_population_density_template, remote_cog_metadata_template,
+    GeoWorkflow,
 };
 
 use crate::backend::{PlannerBackend, PlannerConfig};
@@ -105,6 +106,8 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
         WorkflowId::RemoteCogDemo => remote_cog_metadata_template(),
         WorkflowId::LocalCogDemo => local_cog_metadata_template(),
         WorkflowId::NagoyaGeoparquet => nagoya_geoparquet_template(),
+        WorkflowId::NagoyaGeoparquetDensity => nagoya_geoparquet_density_template(),
+        WorkflowId::ExternalStacDemo => external_stac_fetch_template(),
     }
 }
 
@@ -113,7 +116,7 @@ mod tests {
     use super::*;
 
     use genegis_catalog::{
-        NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+        EXTERNAL_STAC_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
     };
 
     #[test]
@@ -161,6 +164,26 @@ mod tests {
         assert_eq!(plan.resolved.workflow_id, WorkflowId::NagoyaGeoparquet);
         assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
         assert_eq!(plan.workflow.steps.len(), 4);
+    }
+
+    #[test]
+    fn plans_nagoya_geoparquet_density() {
+        let plan = plan_from_prompt("名古屋 GeoParquet 人口密度を表示").expect("plan");
+        assert_eq!(plan.resolved.workflow_id, WorkflowId::NagoyaGeoparquetDensity);
+        assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
+        assert_eq!(plan.workflow.steps.len(), 7);
+    }
+
+    #[test]
+    fn plans_external_stac_demo() {
+        let plan = plan_from_prompt(
+            "外部STAC examples/stac/sample-collection.json を fetch",
+        )
+        .expect("plan");
+        assert_eq!(plan.resolved.workflow_id, WorkflowId::ExternalStacDemo);
+        assert_eq!(plan.resolved.dataset_id, EXTERNAL_STAC_DEMO_ID);
+        assert_eq!(plan.tool_calls.len(), 5);
+        assert_eq!(plan.tool_calls[4].tool, "stac_fetch");
     }
 
     #[test]

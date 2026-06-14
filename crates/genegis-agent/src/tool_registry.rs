@@ -7,6 +7,7 @@ const PLANNER_TOOLS: &[&str] = &[
     "resolve_workflow",
     "stac_browse",
     "stac_bind",
+    "stac_fetch",
     "catalog_bind",
     "llm_plan_workflow",
     "plan_workflow",
@@ -18,10 +19,17 @@ const EXECUTOR_TOOLS: &[&str] = &[
     "run_remote_cog_metadata",
     "run_local_cog_metadata",
     "run_geoparquet_read",
+    "run_geoparquet_density",
+    "run_stac_fetch",
     "verify_retry",
 ];
 
-const VERIFIER_TOOLS: &[&str] = &["duckdb_verify", "cog_metadata_verify", "geoparquet_feature_verify"];
+const VERIFIER_TOOLS: &[&str] = &[
+    "duckdb_verify",
+    "cog_metadata_verify",
+    "geoparquet_feature_verify",
+    "stac_collection_verify",
+];
 
 /// Validate planner tool calls against the Phase 6 allowlist (ADR 0003).
 pub fn validate_planner_tools(calls: &[PlannerToolCall]) -> Result<(), AgentError> {

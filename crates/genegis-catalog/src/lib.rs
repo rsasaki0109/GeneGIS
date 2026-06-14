@@ -9,12 +9,12 @@ pub mod stac;
 
 pub use catalog::{
     alpha_catalog, extended_catalog, nagoya_wards_geojson_path, nagoya_wards_geoparquet_path,
-    repo_root, Catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID,
-    REMOTE_COG_DEMO_ID,
+    repo_root, Catalog, EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID,
+    NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
 pub use external_stac::{
     fetch_stac_collection, fetch_stac_item, import_stac_item_url, load_catalog_overlay,
-    CATALOG_OVERLAY_PATH,
+    resolve_catalog_url, CATALOG_OVERLAY_PATH,
 };
 pub use dataset::{DatasetFormat, DatasetRecord};
 pub use error::CatalogError;

@@ -1,8 +1,8 @@
 //! Shared MVP ask → analyze → verify → export pipeline.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use genegis_ai::{PlanResult, PlannerConfig, WorkflowId, plan_with_config};
-use genegis_catalog::{alpha_catalog, DatasetRecord};
+use genegis_ai::{extract_catalog_url, PlanResult, PlannerConfig, WorkflowId, plan_with_config};
+use genegis_catalog::{alpha_catalog, fetch_stac_collection, DatasetRecord, StacCollection};
 use genegis_query::verify_nagoya_densities;
 use genegis_raster::CogInfo;
 use genegis_vector::{geoparquet_summary, read_geoparquet_uri, verify_nagoya_geoparquet, VectorDataset};
@@ -18,6 +18,7 @@ pub enum ExecutedWorkflow {
     NagoyaDensity(AnalysisResult),
     CogMetadata(CogInfo),
     Geoparquet(VectorDataset),
+    StacCollection(StacCollection),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -64,6 +65,10 @@ pub fn run_analysis_for_plan(
             "geoparquet workflow does not produce AnalysisResult; use execute_workflow_for_plan"
                 .into(),
         )),
+        (ExecutedWorkflow::StacCollection(_), _) => Err(AnalysisError::Message(
+            "stac collection workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
     }
 }
 
@@ -77,7 +82,7 @@ pub fn execute_workflow_for_plan(
         .clone();
 
     match plan.resolved.workflow_id {
-        WorkflowId::NagoyaDensity => {
+        WorkflowId::NagoyaDensity | WorkflowId::NagoyaGeoparquetDensity => {
             let analysis = run_nagoya_population_density_for_dataset(&plan.resolved.dataset_id)?;
             Ok((ExecutedWorkflow::NagoyaDensity(analysis), dataset_record))
         }
@@ -91,6 +96,13 @@ pub fn execute_workflow_for_plan(
                 .map_err(|err| AnalysisError::Message(err.to_string()))?;
             Ok((ExecutedWorkflow::Geoparquet(dataset), dataset_record))
         }
+        WorkflowId::ExternalStacDemo => {
+            let url = extract_catalog_url(&plan.intent.raw_prompt)
+                .unwrap_or_else(|| dataset_record.uri.clone());
+            let collection = fetch_stac_collection(&url)
+                .map_err(|err| AnalysisError::Message(err.to_string()))?;
+            Ok((ExecutedWorkflow::StacCollection(collection), dataset_record))
+        }
     }
 }
 
@@ -99,6 +111,7 @@ pub fn verify_executed_workflow(result: &ExecutedWorkflow) -> Result<bool, Analy
         ExecutedWorkflow::NagoyaDensity(analysis) => verify_analysis_densities(analysis),
         ExecutedWorkflow::CogMetadata(info) => verify_remote_cog_metadata(info),
         ExecutedWorkflow::Geoparquet(dataset) => verify_geoparquet_features(dataset),
+        ExecutedWorkflow::StacCollection(collection) => verify_stac_collection(collection),
     }
 }
 
@@ -125,6 +138,10 @@ pub fn verify_remote_cog_metadata(info: &CogInfo) -> Result<bool, AnalysisError>
 
 pub fn verify_geoparquet_features(dataset: &VectorDataset) -> Result<bool, AnalysisError> {
     verify_nagoya_geoparquet(dataset).map_err(|err| AnalysisError::Message(err.to_string()))
+}
+
+pub fn verify_stac_collection(collection: &StacCollection) -> Result<bool, AnalysisError> {
+    Ok(!collection.id.is_empty() && collection.collection_type == "Collection")
 }
 
 pub fn build_ask_result(
@@ -178,6 +195,9 @@ pub fn execute_from_plan(
         }
         ExecutedWorkflow::Geoparquet(vector) => {
             build_geoparquet_ask_result(prompt, plan, vector, dataset, duckdb_verified)
+        }
+        ExecutedWorkflow::StacCollection(collection) => {
+            build_stac_collection_ask_result(prompt, plan, collection, dataset, duckdb_verified)
         }
     }
 }
@@ -241,6 +261,42 @@ pub fn build_geoparquet_ask_result(
         workflow_steps: plan.workflow.steps.len(),
         verification: VerificationReport {
             crs: vector.crs.clone(),
+            area_method: "n/a".into(),
+            density_unit: "n/a".into(),
+            checks: vec![],
+        },
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: verified,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+    })
+}
+
+pub fn build_stac_collection_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    collection: StacCollection,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "stac_collection": collection.summary_json(),
+        "verification_passed": verified,
+    });
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: "n/a".into(),
             area_method: "n/a".into(),
             density_unit: "n/a".into(),
             checks: vec![],

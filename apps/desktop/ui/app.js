@@ -9,6 +9,11 @@ const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
 const stacCollectionEl = document.getElementById("stac-collection");
 const stacItemsEl = document.getElementById("stac-items");
+const stacUrlEl = document.getElementById("stac-url");
+const stacFetchBtn = document.getElementById("stac-fetch-btn");
+const stacImportBtn = document.getElementById("stac-import-btn");
+const stacFetchResultEl = document.getElementById("stac-fetch-result");
+const stacOverlayEl = document.getElementById("stac-overlay");
 const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
 const agentMetaEl = document.getElementById("agent-meta");
@@ -36,6 +41,22 @@ function verificationProfile(workflowId) {
       label: "cog metadata",
       verifier: "cog_metadata_verify",
       status: (passed) => (passed ? "COG metadata verified" : "COG metadata failed"),
+    };
+  }
+
+  if (workflowId === "nagoya-geoparquet") {
+    return {
+      label: "geoparquet features",
+      verifier: "geoparquet_feature_verify",
+      status: (passed) => (passed ? "GeoParquet verified" : "GeoParquet failed"),
+    };
+  }
+
+  if (workflowId === "external-stac-demo") {
+    return {
+      label: "stac collection",
+      verifier: "stac_collection_verify",
+      status: (passed) => (passed ? "STAC collection verified" : "STAC collection failed"),
     };
   }
 
@@ -216,6 +237,94 @@ async function loadStacCollection() {
     console.error(err);
     stacCollectionEl.textContent = `Error: ${err.message || err}`;
     stacItemsEl.textContent = "";
+  }
+}
+
+async function loadStacOverlay() {
+  try {
+    const response = await fetch("/api/stac/overlay");
+    const payload = await response.json();
+    if (!payload.ok) {
+      throw new Error(payload.error || "Failed to load STAC overlay");
+    }
+
+    stacOverlayEl.innerHTML = "";
+    const records = payload.records || [];
+    if (!records.length) {
+      stacOverlayEl.textContent = "No imported STAC items";
+      return;
+    }
+
+    for (const record of records) {
+      const card = document.createElement("article");
+      card.className = "stac-item";
+      card.textContent = `${record.id} · ${record.format}`;
+      card.title = record.uri || record.id;
+      stacOverlayEl.appendChild(card);
+    }
+  } catch (err) {
+    console.error(err);
+    stacOverlayEl.textContent = `Error: ${err.message || err}`;
+  }
+}
+
+async function fetchExternalStac() {
+  const url = stacUrlEl.value.trim();
+  if (!url) {
+    setStatus("STAC URL is empty");
+    return;
+  }
+
+  setStatus("Fetching STAC…", true);
+  try {
+    const response = await fetch("/api/stac/fetch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const payload = await response.json();
+    if (!payload.ok || !payload.collection) {
+      throw new Error(payload.error || "STAC fetch failed");
+    }
+    stacFetchResultEl.textContent = JSON.stringify(payload.collection, null, 2);
+    setStatus(`STAC fetched: ${payload.collection.id}`);
+  } catch (err) {
+    console.error(err);
+    stacFetchResultEl.textContent = `Error: ${err.message || err}`;
+    setStatus(`STAC fetch error: ${err.message || err}`);
+  } finally {
+    setStatus("Ready");
+  }
+}
+
+async function importExternalStac() {
+  const url = stacUrlEl.value.trim();
+  if (!url) {
+    setStatus("STAC URL is empty");
+    return;
+  }
+
+  setStatus("Importing STAC item…", true);
+  try {
+    const response = await fetch("/api/stac/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    const payload = await response.json();
+    if (!payload.ok || !payload.record) {
+      throw new Error(payload.error || "STAC import failed");
+    }
+    stacFetchResultEl.textContent = JSON.stringify(payload.record, null, 2);
+    await loadStacOverlay();
+    await loadStacCollection();
+    setStatus(`STAC imported: ${payload.record.id}`);
+  } catch (err) {
+    console.error(err);
+    stacFetchResultEl.textContent = `Error: ${err.message || err}`;
+    setStatus(`STAC import error: ${err.message || err}`);
+  } finally {
+    setStatus("Ready");
   }
 }
 
@@ -746,6 +855,9 @@ agentRetryBtn?.addEventListener("click", async () => {
 
 loadPlugins();
 loadStacCollection();
+loadStacOverlay();
+stacFetchBtn?.addEventListener("click", fetchExternalStac);
+stacImportBtn?.addEventListener("click", importExternalStac);
 loadComments();
 loadAgentTrace();
 runAsk();

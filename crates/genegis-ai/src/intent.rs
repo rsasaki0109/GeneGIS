@@ -31,19 +31,14 @@ impl ParsedIntent {
             score += 0.45;
         }
 
-        if contains_any(&normalized, &["人口密度", "人口", "density", "population density"]) {
-            signals.metric = Some("population_density".into());
-            signals.matched_tokens.push("metric:population_density".into());
-            score += 0.35;
-        }
-
-        if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
-            && contains_any(&normalized, &["リモート", "remote", "デモ", "demo", "http"])
-        {
-            signals.metric = Some("remote_cog".into());
-            signals.matched_tokens.push("metric:remote_cog".into());
-            score += 0.40;
-        }
+        let has_geoparquet = contains_any(
+            &normalized,
+            &["geoparquet", "geo parquet", "geo-parquet", "パーケット", "parquet"],
+        );
+        let has_density = contains_any(
+            &normalized,
+            &["人口密度", "人口", "density", "population density"],
+        );
 
         if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
             && contains_any(&normalized, &["ローカル", "local", "同梱", "bundled"])
@@ -51,14 +46,35 @@ impl ParsedIntent {
             signals.metric = Some("local_cog".into());
             signals.matched_tokens.push("metric:local_cog".into());
             score += 0.40;
-        }
-
-        if contains_any(
-            &normalized,
-            &["geoparquet", "geo parquet", "geo-parquet", "パーケット", "parquet"],
-        ) {
+        } else if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
+            && contains_any(&normalized, &["リモート", "remote", "http"])
+        {
+            signals.metric = Some("remote_cog".into());
+            signals.matched_tokens.push("metric:remote_cog".into());
+            score += 0.40;
+        } else if contains_any(&normalized, &["stac", "スタック"])
+            && contains_any(
+                &normalized,
+                &["fetch", "import", "取得", "外部", "external", "discover"],
+            )
+            && crate::stac_url::extract_catalog_url(&raw).is_some()
+        {
+            signals.metric = Some("external_stac".into());
+            signals.matched_tokens.push("metric:external_stac".into());
+            score += 0.45;
+        } else if has_geoparquet && has_density {
+            signals.metric = Some("geoparquet_density".into());
+            signals
+                .matched_tokens
+                .push("metric:geoparquet_density".into());
+            score += 0.55;
+        } else if has_geoparquet {
             signals.metric = Some("geoparquet".into());
             signals.matched_tokens.push("metric:geoparquet".into());
+            score += 0.35;
+        } else if has_density {
+            signals.metric = Some("population_density".into());
+            signals.matched_tokens.push("metric:population_density".into());
             score += 0.35;
         }
 
@@ -116,5 +132,20 @@ mod tests {
         let intent = ParsedIntent::parse("名古屋 wards GeoParquet を検証");
         assert_eq!(intent.signals.place.as_deref(), Some("名古屋市"));
         assert_eq!(intent.signals.metric.as_deref(), Some("geoparquet"));
+    }
+
+    #[test]
+    fn parses_geoparquet_density_prompt() {
+        let intent = ParsedIntent::parse("名古屋 GeoParquet 人口密度を表示");
+        assert_eq!(intent.signals.place.as_deref(), Some("名古屋市"));
+        assert_eq!(intent.signals.metric.as_deref(), Some("geoparquet_density"));
+    }
+
+    #[test]
+    fn parses_external_stac_prompt() {
+        let intent = ParsedIntent::parse(
+            "外部STAC examples/stac/sample-collection.json を fetch",
+        );
+        assert_eq!(intent.signals.metric.as_deref(), Some("external_stac"));
     }
 }

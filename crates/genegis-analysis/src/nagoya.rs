@@ -1,7 +1,7 @@
 use genegis_catalog::{alpha_catalog, nagoya_wards_geojson_path, NAGOYA_WARDS_DENSITY_ID};
 use genegis_geometry::{planar_area_km2_rings, AreaMethod};
 use genegis_style::ChoroplethStyle;
-use genegis_vector::read_geojson_path;
+use genegis_vector::{read_geojson_path, read_geoparquet_uri, VectorDataset};
 use genegis_workflow::{nagoya_population_density_template, ReviewStatus};
 
 use crate::error::AnalysisError;
@@ -26,17 +26,34 @@ pub fn run_nagoya_population_density_for_dataset(
     let record = catalog
         .require(dataset_id)
         .map_err(|e| AnalysisError::Message(e.to_string()))?;
-    run_nagoya_population_density(&record.uri)
+    if record.format.kind == "geoparquet" {
+        run_nagoya_population_density_geoparquet(&record.uri)
+    } else {
+        run_nagoya_population_density(&record.uri)
+    }
 }
 
 pub fn run_nagoya_population_density_from_catalog() -> Result<AnalysisResult, AnalysisError> {
     run_nagoya_population_density_for_dataset(default_nagoya_dataset_id())
 }
 
-pub fn run_nagoya_population_density(data_path: &str) -> Result<AnalysisResult, AnalysisError> {
-    let mut workflow = nagoya_population_density_template();
-    let dataset = read_geojson_path(data_path)?;
+pub fn run_nagoya_population_density_geoparquet(
+    data_path: &str,
+) -> Result<AnalysisResult, AnalysisError> {
+    let dataset = read_geoparquet_uri(data_path)
+        .map_err(|err| AnalysisError::Message(err.to_string()))?;
+    run_nagoya_population_density_from_vector(dataset)
+}
 
+pub fn run_nagoya_population_density(data_path: &str) -> Result<AnalysisResult, AnalysisError> {
+    let dataset = read_geojson_path(data_path)?;
+    run_nagoya_population_density_from_vector(dataset)
+}
+
+pub fn run_nagoya_population_density_from_vector(
+    dataset: VectorDataset,
+) -> Result<AnalysisResult, AnalysisError> {
+    let mut workflow = nagoya_population_density_template();
     let mut densities = Vec::new();
     let mut features = Vec::new();
 
@@ -193,5 +210,28 @@ mod tests {
         assert_eq!(result.features.len(), 16);
         assert!(result.verification.checks.iter().all(|c| c.passed));
         assert!(result.features[0].density_per_km2 > 0.0);
+    }
+
+    #[test]
+    fn runs_nagoya_geoparquet_density() {
+        let path = genegis_catalog::nagoya_wards_geoparquet_path();
+        if !std::path::Path::new(path).exists() {
+            return;
+        }
+        let result = run_nagoya_population_density_geoparquet(path).expect("run");
+        assert_eq!(result.features.len(), 16);
+        assert!(result.verification.checks.iter().all(|c| c.passed));
+    }
+
+    #[test]
+    fn geoparquet_dataset_id_resolves_to_parquet_path() {
+        assert_eq!(
+            alpha_catalog()
+                .require(genegis_catalog::NAGOYA_WARDS_GEOPARQUET_ID)
+                .expect("record")
+                .format
+                .kind,
+            "geoparquet"
+        );
     }
 }

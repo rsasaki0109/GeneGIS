@@ -13,8 +13,20 @@ pub const CATALOG_OVERLAY_PATH: &str = ".genegis/catalog-overlay.json";
 
 /// Fetch JSON bytes from an HTTP(S) URL or local filesystem path.
 pub fn fetch_json_bytes(uri: &str) -> Result<Vec<u8>, CatalogError> {
-    let normalized = normalize_fetch_uri(uri);
+    let normalized = resolve_catalog_url(uri);
     read_asset_bytes(&normalized).map_err(|err| CatalogError::Remote(err.to_string()))
+}
+
+/// Resolve repo-relative catalog paths for offline smoke fixtures.
+pub fn resolve_catalog_url(uri: &str) -> String {
+    let normalized = normalize_fetch_uri(uri);
+    if normalized.starts_with("examples/") {
+        return crate::catalog::repo_root()
+            .join(&normalized)
+            .to_string_lossy()
+            .into_owned();
+    }
+    normalized
 }
 
 /// Fetch and parse an external STAC Collection document.

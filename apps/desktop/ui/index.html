@@ -10,7 +10,7 @@
     <header class="topbar">
       <div class="brand">
         <strong>GeneGIS</strong>
-        <span>AI-native GIS Workbench · Phase 8 gamma</span>
+        <span>AI-native GIS Workbench · Phase 9 beta</span>
       </div>
     </header>
 
@@ -79,6 +79,22 @@
           <h2>STAC Catalog</h2>
           <pre id="stac-collection" class="mono">Loading…</pre>
           <div id="stac-items" class="stac-list">Loading items…</div>
+        </section>
+        <section class="panel">
+          <h2>External STAC</h2>
+          <label for="stac-url">Collection or Item URL</label>
+          <input
+            id="stac-url"
+            type="text"
+            value="examples/stac/sample-collection.json"
+            autocomplete="off"
+          />
+          <div class="comment-actions">
+            <button id="stac-fetch-btn" type="button" class="secondary">Fetch</button>
+            <button id="stac-import-btn" type="button" class="secondary">Import item</button>
+          </div>
+          <pre id="stac-fetch-result" class="mono">—</pre>
+          <div id="stac-overlay" class="stac-list">Loading overlay…</div>
         </section>
         <section class="panel">
           <h2>Dataset</h2>

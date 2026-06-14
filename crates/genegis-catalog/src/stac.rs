@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(collection.id, ALPHA_STAC_COLLECTION_ID);
         assert_eq!(
             collection.summaries.get("item_count").and_then(Value::as_u64),
-            Some(4)
+            Some(5)
         );
         let ids = collection
             .summaries
@@ -217,6 +217,7 @@ mod tests {
         assert!(ids.iter().any(|id| id.as_str() == Some(REMOTE_COG_DEMO_ID)));
         assert!(ids.iter().any(|id| id.as_str() == Some(LOCAL_COG_DEMO_ID)));
         assert!(ids.iter().any(|id| id.as_str() == Some(crate::catalog::NAGOYA_WARDS_GEOPARQUET_ID)));
+        assert!(ids.iter().any(|id| id.as_str() == Some(crate::catalog::EXTERNAL_STAC_DEMO_ID)));
     }
 
     #[test]
