@@ -14,7 +14,7 @@ pub use catalog::{
 };
 pub use external_stac::{
     fetch_stac_collection, fetch_stac_item, import_stac_item_url, load_catalog_overlay,
-    resolve_catalog_url, CATALOG_OVERLAY_PATH,
+    resolve_catalog_url, catalog_overlay_path, CATALOG_OVERLAY_ENV, CATALOG_OVERLAY_PATH,
 };
 pub use dataset::{DatasetFormat, DatasetRecord};
 pub use error::CatalogError;

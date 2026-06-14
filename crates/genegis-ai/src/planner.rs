@@ -171,7 +171,7 @@ mod tests {
         let plan = plan_from_prompt("名古屋 GeoParquet 人口密度を表示").expect("plan");
         assert_eq!(plan.resolved.workflow_id, WorkflowId::NagoyaGeoparquetDensity);
         assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
-        assert_eq!(plan.workflow.steps.len(), 7);
+        assert_eq!(plan.workflow.steps.len(), 8);
     }
 
     #[test]

@@ -81,6 +81,6 @@ genegis workflow run remote-cog-demo --execute
 
 ## Next
 
-Phase 9 — external STAC discovery and GeoParquet workflows (TBD): draft `docs/roadmap/phase-9-external-data.md`
+Phase 9 — external STAC discovery and GeoParquet workflows: see [`phase-9-external-data.md`](phase-9-external-data.md).
 
 See [`phase-7-release.md`](phase-7-release.md) and [`docs/guides/agent-orchestration.md`](../guides/agent-orchestration.md).

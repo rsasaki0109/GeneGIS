@@ -2,13 +2,16 @@
 
 use std::path::Path;
 
-use genegis_catalog::{alpha_catalog, bind_stac_item, browse_alpha_stac_collection};
+use genegis_catalog::{
+    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, extended_catalog,
+    load_catalog_overlay, Catalog, DatasetRecord,
+};
 use serde_json::Value;
 
 use crate::error::AgentError;
 use crate::model::AgentRun;
 
-pub const AUDIT_BUNDLE_SCHEMA: &str = "genegis-audit-bundle-v2";
+pub const AUDIT_BUNDLE_SCHEMA: &str = "genegis-audit-bundle-v3";
 
 /// Collab-side fields included in an audit bundle.
 #[derive(Debug, Clone)]
@@ -28,23 +31,42 @@ impl AuditCollabSnapshot {
     }
 }
 
-/// Build STAC collection + item snapshot from the alpha catalog.
-pub fn build_audit_stac_snapshot() -> Result<Value, AgentError> {
-    let catalog = alpha_catalog();
-    let collection = browse_alpha_stac_collection(&catalog);
-    let mut items = Vec::new();
+fn stac_items_for_catalog(catalog: &Catalog) -> Result<Vec<Value>, AgentError> {
+    catalog
+        .list()
+        .into_iter()
+        .map(|record| {
+            bind_stac_item(catalog, &record.id)
+                .map_err(|err| AgentError::Message(err.to_string()))
+                .and_then(|item| {
+                    serde_json::to_value(item).map_err(|err| AgentError::Json(err.to_string()))
+                })
+        })
+        .collect()
+}
 
-    for record in catalog.list() {
-        let item = bind_stac_item(&catalog, &record.id)
-            .map_err(|err| AgentError::Message(err.to_string()))?;
-        items.push(
-            serde_json::to_value(item).map_err(|err| AgentError::Json(err.to_string()))?,
-        );
-    }
+/// Build STAC alpha, overlay, and merged catalog snapshots for audit export.
+pub fn build_audit_stac_snapshot() -> Result<Value, AgentError> {
+    let alpha = alpha_catalog();
+    let merged = extended_catalog();
+    let overlay = load_catalog_overlay();
+
+    let alpha_collection = browse_alpha_stac_collection(&alpha);
+    let merged_collection = browse_alpha_stac_collection(&merged);
 
     Ok(serde_json::json!({
-        "collection": collection.summary_json(),
-        "items": items,
+        "alpha": {
+            "collection": alpha_collection.summary_json(),
+            "items": stac_items_for_catalog(&alpha)?,
+        },
+        "overlay": {
+            "record_count": overlay.len(),
+            "records": overlay.iter().map(DatasetRecord::summary_json).collect::<Vec<_>>(),
+        },
+        "merged": {
+            "collection": merged_collection.summary_json(),
+            "items": stac_items_for_catalog(&merged)?,
+        },
     }))
 }
 
@@ -105,14 +127,21 @@ mod tests {
 
         let stac = bundle.get("stac").expect("stac");
         assert_eq!(
-            stac.pointer("/collection/item_count").and_then(Value::as_u64),
+            stac.pointer("/alpha/collection/item_count")
+                .and_then(Value::as_u64),
             Some(5)
         );
-        let items = stac
-            .get("items")
+        let alpha_items = stac
+            .pointer("/alpha/items")
             .and_then(Value::as_array)
-            .expect("stac items");
-        assert_eq!(items.len(), 5);
+            .expect("alpha items");
+        assert_eq!(alpha_items.len(), 5);
+        assert!(stac.get("overlay").is_some());
+        assert_eq!(
+            stac.pointer("/merged/collection/item_count")
+                .and_then(Value::as_u64),
+            Some(5)
+        );
 
         let runs = bundle
             .get("agent_runs")
@@ -131,7 +160,7 @@ mod tests {
     fn audit_stac_snapshot_includes_local_cog_item() {
         let stac = build_audit_stac_snapshot().expect("stac");
         let items = stac
-            .get("items")
+            .pointer("/alpha/items")
             .and_then(Value::as_array)
             .expect("items");
         assert!(

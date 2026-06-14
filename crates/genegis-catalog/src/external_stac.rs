@@ -11,6 +11,15 @@ use crate::stac::{StacCollection, StacItem};
 /// Default overlay path for imported STAC items.
 pub const CATALOG_OVERLAY_PATH: &str = ".genegis/catalog-overlay.json";
 
+/// Environment variable override for overlay path (tests / CI isolation).
+pub const CATALOG_OVERLAY_ENV: &str = "GENEGIS_CATALOG_OVERLAY_PATH";
+
+pub fn catalog_overlay_path() -> PathBuf {
+    std::env::var(CATALOG_OVERLAY_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(CATALOG_OVERLAY_PATH))
+}
+
 /// Fetch JSON bytes from an HTTP(S) URL or local filesystem path.
 pub fn fetch_json_bytes(uri: &str) -> Result<Vec<u8>, CatalogError> {
     let normalized = resolve_catalog_url(uri);
@@ -110,11 +119,11 @@ fn format_from_media_type(media_type: &str) -> DatasetFormat {
 
 /// Load imported dataset records from the overlay file.
 pub fn load_catalog_overlay() -> Vec<DatasetRecord> {
-    let path = Path::new(CATALOG_OVERLAY_PATH);
+    let path = catalog_overlay_path();
     if !path.exists() {
         return Vec::new();
     }
-    let json = match std::fs::read_to_string(path) {
+    let json = match std::fs::read_to_string(&path) {
         Ok(json) => json,
         Err(_) => return Vec::new(),
     };
@@ -123,7 +132,7 @@ pub fn load_catalog_overlay() -> Vec<DatasetRecord> {
 
 /// Persist imported dataset records to the overlay file.
 pub fn save_catalog_overlay(records: &[DatasetRecord]) -> Result<(), CatalogError> {
-    let path = Path::new(CATALOG_OVERLAY_PATH);
+    let path = catalog_overlay_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|err| CatalogError::Remote(format!("overlay dir: {err}")))?;
@@ -211,9 +220,12 @@ mod tests {
 
     #[test]
     fn imports_sample_stac_item_to_overlay() {
-        let overlay_path = Path::new(CATALOG_OVERLAY_PATH);
-        let backup = overlay_path.exists().then(|| std::fs::read(overlay_path).expect("read"));
-        let _guard = RestoreOverlay { backup };
+        let overlay_path = std::env::temp_dir().join(format!(
+            "genegis-overlay-test-{}.json",
+            std::process::id()
+        ));
+        std::env::set_var(CATALOG_OVERLAY_ENV, &overlay_path);
+        let _guard = RestoreOverlayEnv;
 
         let record = import_stac_item_url(&sample_item_path()).expect("import");
         assert_eq!(record.id, "genegis-sample-external-item");
@@ -221,23 +233,14 @@ mod tests {
 
         let overlay = load_catalog_overlay();
         assert!(overlay.iter().any(|entry| entry.id == record.id));
+        let _ = std::fs::remove_file(&overlay_path);
     }
 
-    struct RestoreOverlay {
-        backup: Option<Vec<u8>>,
-    }
+    struct RestoreOverlayEnv;
 
-    impl Drop for RestoreOverlay {
+    impl Drop for RestoreOverlayEnv {
         fn drop(&mut self) {
-            let path = Path::new(CATALOG_OVERLAY_PATH);
-            match &self.backup {
-                Some(bytes) => {
-                    let _ = std::fs::write(path, bytes);
-                }
-                None => {
-                    let _ = std::fs::remove_file(path);
-                }
-            }
+            let _ = std::env::remove_var(CATALOG_OVERLAY_ENV);
         }
     }
 }

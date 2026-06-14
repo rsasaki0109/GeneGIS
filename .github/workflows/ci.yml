@@ -21,40 +21,43 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace
       - name: Test workspace
-        run: cargo test --workspace
+        run: cargo test --workspace -- --test-threads=1
       - name: MVP workflow smoke
         run: cargo run -p genegis-cli -- workflow run nagoya-density
       - name: MVP execute pipeline
         run: cargo run -p genegis-cli -- workflow run nagoya-density --execute
       - name: MVP ask intent pipeline
         run: cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --no-html
-      - name: Phase 8 gamma — agent workflow matrix
+      - name: Phase 9 gamma — six-workflow agent matrix
         run: |
           cargo run -p genegis-cli -- agent run "名古屋市の人口密度を表示"
           cargo run -p genegis-cli -- agent run "ローカルCOGデモのメタデータを表示"
           cargo run -p genegis-cli -- agent run "リモートCOGデモのメタデータを表示"
           cargo run -p genegis-cli -- agent run "名古屋 wards GeoParquet を検証"
-      - name: Phase 9 beta — discovery + GeoParquet density smoke
-        run: |
           cargo run -p genegis-cli -- agent run "外部STAC examples/stac/sample-collection.json を fetch"
           cargo run -p genegis-cli -- agent run "名古屋 GeoParquet 人口密度を表示"
-          cargo run -p genegis-cli -- workflow run nagoya-geoparquet-density --execute
+      - name: Phase 9 gamma — ask + overlay smoke
+        run: |
+          cargo run -p genegis-cli -- ask "名古屋 GeoParquet 人口密度を表示" --no-html
           cargo run -p genegis-cli -- catalog stac import examples/stac/sample-item.json
+          cargo run -p genegis-cli -- workflow run nagoya-geoparquet-density --execute
       - name: Agent human gate smoke
         run: |
           cargo run -p genegis-cli -- agent plan "名古屋市の人口密度を表示"
           cargo run -p genegis-cli -- agent execute
-      - name: Agent audit export smoke (STAC bundle v2)
+      - name: Agent audit export smoke (STAC bundle v3)
         run: |
           cargo run -p genegis-cli -- agent export-audit -o /tmp/genegis-audit-bundle.json
           python3 - <<'PY'
           import json
           from pathlib import Path
           bundle = json.loads(Path("/tmp/genegis-audit-bundle.json").read_text())
-          assert bundle["schema"] == "genegis-audit-bundle-v2", bundle["schema"]
+          assert bundle["schema"] == "genegis-audit-bundle-v3", bundle["schema"]
           stac = bundle["stac"]
-          assert stac["collection"]["item_count"] == 5
-          assert len(stac["items"]) == 5
+          assert stac["alpha"]["collection"]["item_count"] == 5
+          assert len(stac["alpha"]["items"]) == 5
+          assert stac["overlay"]["record_count"] >= 1
+          assert len(stac["merged"]["items"]) >= 6
           PY
       - name: STAC collection smoke
         run: cargo run -p genegis-cli -- catalog stac list

@@ -126,6 +126,10 @@ pub fn nagoya_geoparquet_template() -> GeoWorkflow {
             serde_json::json!({ "tags": ["nagoya", "geoparquet", "demo"] }),
         ),
         WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new(
+            "VerifyFeatureCount",
+            serde_json::json!({ "expected": 16, "field": "ward_name" }),
+        ),
         WorkflowStep::new("AttachSources", serde_json::json!({})),
     ];
     workflow
