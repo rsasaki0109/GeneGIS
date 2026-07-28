@@ -67,3 +67,31 @@ jobs:
           PY
       - name: STAC collection smoke
         run: cargo run -p genegis-cli -- catalog stac list
+      - name: Generate verified Playground bundle
+        run: cargo run -p genegis-analysis --example export_playground -- public/demo
+      - name: Verify Playground execution receipt
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(Path("public/demo/nagoya-density.json").read_text())
+          workflow_id = bundle["workflow"]["id"]
+          assert bundle["command"]["command"]["type"] == "run_workflow"
+          assert bundle["command"]["command"]["workflow_id"] == workflow_id
+          assert bundle["provenance"]["entries"][0]["workflow_id"] == workflow_id
+          assert bundle["provenance"]["entries"][0]["details"]["crs"] == "EPSG:4326"
+          assert bundle["provenance"]["entries"][0]["details"]["units"] == "persons/km²"
+          assert all(check["passed"] for check in bundle["verification"]["checks"])
+          assert bundle["workflow"]["citations"]
+          assert Path("public/demo/nagoya-density.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check and build public Playground
+        run: |
+          npm ci
+          npm run check
+          npm run build

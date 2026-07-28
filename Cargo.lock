@@ -2198,8 +2198,10 @@ name = "genegis-analysis"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "genegis-ai",
  "genegis-catalog",
+ "genegis-core",
  "genegis-geometry",
  "genegis-query",
  "genegis-raster",

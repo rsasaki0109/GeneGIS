@@ -1,11 +1,15 @@
 //! Shared MVP ask → analyze → verify → export pipeline.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use genegis_ai::{extract_catalog_url, PlanResult, PlannerConfig, WorkflowId, plan_with_config};
+use genegis_ai::{extract_catalog_url, plan_with_config, PlanResult, PlannerConfig, WorkflowId};
 use genegis_catalog::{alpha_catalog, fetch_stac_collection, DatasetRecord, StacCollection};
+use genegis_core::{Command, CommandEnvelope, CommandOrigin, ProvenanceStore};
 use genegis_query::verify_nagoya_densities;
 use genegis_raster::CogInfo;
-use genegis_vector::{geoparquet_summary, read_geoparquet_uri, verify_nagoya_geoparquet, VectorDataset};
+use genegis_vector::{
+    geoparquet_summary, read_geoparquet_uri, verify_nagoya_geoparquet, VectorDataset,
+};
+use genegis_workflow::{GeoWorkflow, ReviewStatus};
 
 use crate::error::AnalysisError;
 use crate::export::{export_html_map, export_png_map};
@@ -37,6 +41,12 @@ pub struct AskPipelineResult {
     pub duckdb_verified: bool,
     pub dataset: DatasetRecord,
     pub stac_item: genegis_catalog::StacItem,
+    /// Auditable command that authorized this execution.
+    pub command: CommandEnvelope,
+    /// Executed workflow graph referenced by `command`.
+    pub workflow: GeoWorkflow,
+    /// Append-only execution provenance, including CRS, units, and source identity.
+    pub provenance: ProvenanceStore,
 }
 
 pub fn run_ask_pipeline(prompt: &str) -> Result<AskPipelineResult, AnalysisError> {
@@ -155,6 +165,15 @@ pub fn build_ask_result(
     let html = export_html_map(&analysis, "名古屋市 人口密度");
     let png = export_png_map(&analysis, "名古屋市 人口密度")?;
     let png_base64 = STANDARD.encode(&png);
+    let (command, workflow, provenance) = execution_receipt(
+        plan,
+        analysis.workflow.clone(),
+        &dataset,
+        &analysis.verification.crs,
+        &analysis.verification.density_unit,
+        duckdb_verified,
+        "duckdb_verify",
+    );
 
     Ok(AskPipelineResult {
         prompt: prompt.to_string(),
@@ -170,6 +189,9 @@ pub fn build_ask_result(
         duckdb_verified,
         dataset: dataset.clone(),
         stac_item: dataset.to_stac_item(),
+        command,
+        workflow,
+        provenance,
     })
 }
 
@@ -217,6 +239,16 @@ pub fn build_remote_cog_ask_result(
         "read_mode": info.read_mode,
     });
 
+    let (command, workflow, provenance) = execution_receipt(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &info.crs,
+        "raster pixels",
+        verified,
+        "cog_metadata_verify",
+    );
+
     Ok(AskPipelineResult {
         prompt: prompt.to_string(),
         workflow_id: plan.resolved.workflow_id.as_str().to_string(),
@@ -236,6 +268,9 @@ pub fn build_remote_cog_ask_result(
         duckdb_verified: verified,
         dataset: dataset.clone(),
         stac_item: dataset.to_stac_item(),
+        command,
+        workflow,
+        provenance,
     })
 }
 
@@ -252,6 +287,16 @@ pub fn build_geoparquet_ask_result(
         "geoparquet": geoparquet_summary(&vector),
         "verification_passed": verified,
     });
+
+    let (command, workflow, provenance) = execution_receipt(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &vector.crs,
+        "declared by attributes",
+        verified,
+        "geoparquet_feature_verify",
+    );
 
     Ok(AskPipelineResult {
         prompt: prompt.to_string(),
@@ -272,6 +317,9 @@ pub fn build_geoparquet_ask_result(
         duckdb_verified: verified,
         dataset: dataset.clone(),
         stac_item: dataset.to_stac_item(),
+        command,
+        workflow,
+        provenance,
     })
 }
 
@@ -288,6 +336,16 @@ pub fn build_stac_collection_ask_result(
         "stac_collection": collection.summary_json(),
         "verification_passed": verified,
     });
+
+    let (command, workflow, provenance) = execution_receipt(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        "catalog metadata",
+        verified,
+        "stac_collection_verify",
+    );
 
     Ok(AskPipelineResult {
         prompt: prompt.to_string(),
@@ -308,7 +366,52 @@ pub fn build_stac_collection_ask_result(
         duckdb_verified: verified,
         dataset: dataset.clone(),
         stac_item: dataset.to_stac_item(),
+        command,
+        workflow,
+        provenance,
     })
+}
+
+fn execution_receipt(
+    plan: &PlanResult,
+    mut workflow: GeoWorkflow,
+    dataset: &DatasetRecord,
+    crs: &str,
+    units: &str,
+    verified: bool,
+    verifier: &str,
+) -> (CommandEnvelope, GeoWorkflow, ProvenanceStore) {
+    workflow.review_status = if verified {
+        ReviewStatus::Executed
+    } else {
+        ReviewStatus::PendingReview
+    };
+    let command = CommandEnvelope::new(
+        CommandOrigin::Ai,
+        Command::RunWorkflow {
+            workflow_id: workflow.id,
+        },
+    );
+    let mut provenance = ProvenanceStore::default();
+    provenance.record_workflow(
+        workflow.id.to_string(),
+        "genegis-analysis",
+        "execute_verified_workflow",
+        dataset.id.clone(),
+        serde_json::json!({
+            "command_id": command.id,
+            "planner_mode": plan.mode,
+            "source_uri": dataset.uri,
+            "source_id": dataset.id,
+            "stac_item_id": dataset.id,
+            "crs": crs,
+            "units": units,
+            "license": dataset.license,
+            "verifier": verifier,
+            "verification_passed": verified,
+        }),
+    );
+    (command, workflow, provenance)
 }
 
 fn build_summary(result: &AnalysisResult, dataset: &DatasetRecord) -> serde_json::Value {
@@ -349,6 +452,19 @@ mod tests {
         assert!(result.summary.get("dataset").is_some());
         assert_eq!(result.stac_item.id, NAGOYA_WARDS_DENSITY_ID);
         assert!(result.stac_item.assets.contains_key("geojson"));
+        match result.command.command {
+            Command::RunWorkflow { workflow_id } => assert_eq!(workflow_id, result.workflow.id),
+            _ => panic!("ask pipeline must emit RunWorkflow"),
+        }
+        assert_eq!(result.workflow.review_status, ReviewStatus::Executed);
+        let provenance = &result.provenance.entries[0];
+        assert_eq!(
+            provenance.workflow_id.as_deref(),
+            Some(result.workflow.id.to_string().as_str())
+        );
+        assert_eq!(provenance.details["crs"], "EPSG:4326");
+        assert_eq!(provenance.details["units"], "persons/km²");
+        assert_eq!(provenance.details["verification_passed"], true);
     }
 
     #[test]

@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+genegis-core = { path = "../genegis-core" }
 genegis-geometry = { path = "../genegis-geometry" }
 genegis-ai = { path = "../genegis-ai" }
 genegis-catalog = { path = "../genegis-catalog" }
@@ -22,5 +23,6 @@ serde_json.workspace = true
 thiserror.workspace = true
 resvg = "0.47"
 base64 = "0.22"
+chrono.workspace = true
 
 [dev-dependencies]

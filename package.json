@@ -1,0 +1,36 @@
+{
+  "name": "genegis-playground",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "npm@11.4.2",
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "check": "tsc --noEmit && vinext check",
+    "start": "wrangler dev --config dist/server/wrangler.json",
+    "export:demo": "cargo run -p genegis-analysis --example export_playground -- public/demo"
+  },
+  "dependencies": {
+    "@vinext/cloudflare": "^1.0.0-beta.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-server-dom-webpack": "^19.2.8",
+    "vinext": "^1.0.0-beta.4"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.47.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.4",
+    "@vitejs/plugin-rsc": "^0.5.32",
+    "typescript": "^5.9.0",
+    "vite": "^8.1.5",
+    "wrangler": "^4.114.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260722.1": true
+  }
+}
