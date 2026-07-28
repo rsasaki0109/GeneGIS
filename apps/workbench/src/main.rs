@@ -15,13 +15,16 @@ use genegis_agent::{
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
 use genegis_catalog::{
-    bind_stac_item, browse_alpha_stac_collection, extended_catalog, fetch_stac_collection,
-    import_stac_item_url, load_catalog_overlay, DatasetRecord,
+    bind_stac_item, browse_alpha_stac_collection, endpoint_registry_path, extended_catalog,
+    fetch_stac_collection, import_stac_item_url, load_catalog_overlay, DatasetRecord,
+    EndpointRegistry, StacSearchRequest,
 };
 use genegis_collab::{
     pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL,
 };
+use genegis_core::{Command, CommandEnvelope, CommandOrigin};
 use genegis_plugin_host::PluginHost;
+use genegis_workflow::{federated_stac_search_template, stac_endpoint_registry_template};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
@@ -47,6 +50,8 @@ struct AppState {
     agent_run_path: PathBuf,
     agent_runs_dir: PathBuf,
     server_url: String,
+    endpoint_registry_path: PathBuf,
+    endpoint_registry: Arc<Mutex<EndpointRegistry>>,
     collab: Arc<Mutex<CollabSession>>,
     sync: Arc<Mutex<SyncStatus>>,
 }
@@ -151,6 +156,32 @@ struct StacOverlayResponse {
     records: Vec<serde_json::Value>,
 }
 
+#[derive(Deserialize)]
+struct EndpointAddRequest {
+    id: String,
+    title: Option<String>,
+    url: String,
+    auth_kind: Option<String>,
+    auth_env: Option<String>,
+    auth_header: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct EndpointRemoveRequest {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct FederatedSearchRequest {
+    #[serde(default)]
+    endpoint_ids: Vec<String>,
+    bbox: Option<[f64; 4]>,
+    datetime: Option<String>,
+    #[serde(default)]
+    collections: Vec<String>,
+    limit: Option<usize>,
+}
+
 #[derive(Serialize)]
 struct GpuPreviewResponse {
     ok: bool,
@@ -182,6 +213,11 @@ async fn main() {
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_AGENT_RUNS_DIR));
     let server_url = std::env::var("GENEGIS_SERVER_URL")
         .unwrap_or_else(|_| DEFAULT_SERVER_URL.into());
+    let endpoint_registry_path = endpoint_registry_path();
+    let endpoint_registry = EndpointRegistry::load(&endpoint_registry_path).unwrap_or_else(|error| {
+        eprintln!("Endpoint registry warning: {error}");
+        EndpointRegistry::default()
+    });
 
     let (collab, sync) = load_initial_collab(&collab_path, &server_url).await;
     let agent_run_path_for_load = agent_run_path.clone();
@@ -194,6 +230,8 @@ async fn main() {
         agent_run_path,
         agent_runs_dir,
         server_url: server_url.clone(),
+        endpoint_registry_path,
+        endpoint_registry: Arc::new(Mutex::new(endpoint_registry)),
         collab: Arc::new(Mutex::new(collab)),
         sync: Arc::new(Mutex::new(sync)),
     });
@@ -207,6 +245,12 @@ async fn main() {
         .route("/api/stac/overlay", get(stac_overlay))
         .route("/api/stac/fetch", post(stac_fetch))
         .route("/api/stac/import", post(stac_import))
+        .route(
+            "/api/stac/endpoints",
+            get(stac_endpoints).post(stac_endpoint_add),
+        )
+        .route("/api/stac/endpoints/remove", post(stac_endpoint_remove))
+        .route("/api/stac/search", post(federated_stac_search))
         .route("/api/plugins", get(list_plugins))
         .route("/api/collab", get(collab_snapshot))
         .route("/api/collab/comment", post(add_comment))
@@ -228,7 +272,7 @@ async fn main() {
     println!("Plugin root: {}", plugin_root.display());
     println!("Collab server: {server_url} (set GENEGIS_SERVER_URL to override)");
 
-    if open::that(&url).is_err() {
+    if std::env::var_os("GENEGIS_NO_OPEN").is_none() && open::that(&url).is_err() {
         eprintln!("Open {url} in your browser.");
     }
 
@@ -674,6 +718,176 @@ async fn stac_import(Json(body): Json<StacUrlRequest>) -> impl IntoResponse {
                 error: Some(err.to_string()),
                 record: None,
             }),
+        ),
+    }
+}
+
+async fn stac_endpoints(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let registry = state
+        .endpoint_registry
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "path": state.endpoint_registry_path,
+            "endpoints": registry.endpoints,
+            "command_count": registry.command_history.len(),
+            "workflow_count": registry.workflows.len(),
+            "provenance_count": registry.provenance.entries.len(),
+        })),
+    )
+}
+
+async fn stac_endpoint_add(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<EndpointAddRequest>,
+) -> impl IntoResponse {
+    let id = body.id.trim().to_string();
+    let url = body.url.trim().to_string();
+    if id.is_empty() || url.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "endpoint id and URL are required",
+            })),
+        );
+    }
+    let command = Command::RegisterStacEndpoint {
+        endpoint_id: id.clone(),
+        title: body.title.unwrap_or_else(|| id.clone()),
+        url,
+        auth_kind: body.auth_kind.unwrap_or_else(|| "anonymous".into()),
+        auth_env: body.auth_env,
+        auth_header: body.auth_header,
+    };
+    let mut registry = state
+        .endpoint_registry
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let result = registry
+        .apply(
+            CommandEnvelope::new(CommandOrigin::Ui, command),
+            stac_endpoint_registry_template("register", &id),
+        )
+        .and_then(|_| registry.save(&state.endpoint_registry_path));
+    match result {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": true,
+                "endpoint": registry.get(&id),
+            })),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
+        ),
+    }
+}
+
+async fn stac_endpoint_remove(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<EndpointRemoveRequest>,
+) -> impl IntoResponse {
+    let id = body.id.trim().to_string();
+    let mut registry = state
+        .endpoint_registry
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let result = registry
+        .apply(
+            CommandEnvelope::new(
+                CommandOrigin::Ui,
+                Command::RemoveStacEndpoint {
+                    endpoint_id: id.clone(),
+                },
+            ),
+            stac_endpoint_registry_template("remove", &id),
+        )
+        .and_then(|_| registry.save(&state.endpoint_registry_path));
+    match result {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "removed": id })),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
+        ),
+    }
+}
+
+async fn federated_stac_search(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<FederatedSearchRequest>,
+) -> impl IntoResponse {
+    let request = StacSearchRequest {
+        bbox: body.bbox,
+        datetime: body.datetime,
+        collections: body.collections,
+        limit: body.limit,
+    };
+    let (catalog, endpoint_ids) = {
+        let registry = state
+            .endpoint_registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match registry.federated_catalog(&body.endpoint_ids) {
+            Ok(catalog) => {
+                let ids = catalog
+                    .endpoints()
+                    .iter()
+                    .map(|endpoint| endpoint.id.clone())
+                    .collect::<Vec<_>>();
+                (catalog, ids)
+            }
+            Err(error) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
+                )
+            }
+        }
+    };
+    if endpoint_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "ok": false, "error": "no endpoints configured" })),
+        );
+    }
+
+    let envelope = CommandEnvelope::new(
+        CommandOrigin::Ui,
+        Command::SearchFederatedStac {
+            endpoint_ids: endpoint_ids.clone(),
+            bbox: request.bbox,
+            datetime: request.datetime.clone(),
+            collections: request.collections.clone(),
+            limit: request.limit,
+        },
+    );
+    let workflow = federated_stac_search_template(&endpoint_ids);
+    let result = catalog.search(&request);
+    let persisted = {
+        let mut registry = state
+            .endpoint_registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        registry
+            .record_search(envelope, workflow, &result)
+            .and_then(|_| registry.save(&state.endpoint_registry_path))
+    };
+    match persisted {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "result": result })),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
         ),
     }
 }

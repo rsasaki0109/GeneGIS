@@ -6,6 +6,7 @@ pub mod error;
 pub mod external_stac;
 pub mod federated;
 pub mod lookup;
+pub mod registry;
 pub mod stac;
 
 pub use catalog::{
@@ -19,11 +20,14 @@ pub use external_stac::{
 };
 pub use federated::{
     EndpointSearchOutcome, FederatedCatalog, FederatedSearchResult, FederatedStacItem,
-    StacEndpoint, StacItemCollection, StacSearchRequest,
+    StacAuthentication, StacEndpoint, StacItemCollection, StacSearchRequest,
 };
 pub use dataset::{DatasetFormat, DatasetRecord};
 pub use error::CatalogError;
 pub use lookup::CatalogMatch;
+pub use registry::{
+    endpoint_registry_path, EndpointRegistry, ENDPOINT_REGISTRY_ENV, ENDPOINT_REGISTRY_PATH,
+};
 pub use stac::{
     bind_stac_item, browse_alpha_stac_collection, StacAsset, StacCollection, StacItem, StacLink,
     ALPHA_STAC_COLLECTION_ID,

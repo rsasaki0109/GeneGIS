@@ -26,6 +26,28 @@ pub struct CommandEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Command {
+    RegisterStacEndpoint {
+        endpoint_id: String,
+        title: String,
+        url: String,
+        auth_kind: String,
+        auth_env: Option<String>,
+        auth_header: Option<String>,
+    },
+    RemoveStacEndpoint {
+        endpoint_id: String,
+    },
+    SearchFederatedStac {
+        endpoint_ids: Vec<String>,
+        bbox: Option<[f64; 4]>,
+        datetime: Option<String>,
+        collections: Vec<String>,
+        limit: Option<usize>,
+    },
+    ReadRemoteGeoParquet {
+        uri: String,
+        row_groups: Option<Vec<usize>>,
+    },
     AddLayer {
         name: String,
         source_id: Uuid,

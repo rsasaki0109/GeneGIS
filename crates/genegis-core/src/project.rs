@@ -67,6 +67,26 @@ pub struct ProvenanceStore {
 }
 
 impl ProvenanceStore {
+    pub fn record_workflow(
+        &mut self,
+        workflow_id: impl Into<String>,
+        actor: impl Into<String>,
+        action: impl Into<String>,
+        target: impl Into<String>,
+        details: serde_json::Value,
+    ) {
+        self.entries.push(ProvenanceEntry {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            actor: actor.into(),
+            action: action.into(),
+            target: target.into(),
+            details,
+            agent_run_id: None,
+            workflow_id: Some(workflow_id.into()),
+        });
+    }
+
     pub fn record(
         &mut self,
         actor: impl Into<String>,

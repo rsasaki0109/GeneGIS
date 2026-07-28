@@ -210,7 +210,9 @@ fn map_catalog_error(err: CatalogError) -> AiError {
         CatalogError::AmbiguousMatch(ids) => {
             AiError::Ambiguous(format!("multiple catalog datasets match: {ids:?}"))
         }
-        CatalogError::Remote(msg) | CatalogError::InvalidStac(msg) => {
+        CatalogError::Remote(msg)
+        | CatalogError::InvalidStac(msg)
+        | CatalogError::InvalidRegistry(msg) => {
             AiError::Unresolved(format!("catalog error: {msg}"))
         }
     }

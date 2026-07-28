@@ -40,9 +40,22 @@ pub fn fetch_http_bytes(url: &str) -> Result<HttpFetchResult, StorageError> {
 
 /// POST a JSON request and return the response body.
 pub fn post_http_json_bytes(url: &str, body: &[u8]) -> Result<HttpFetchResult, StorageError> {
-    let mut response = ureq::post(url)
+    post_http_json_bytes_with_headers(url, body, &[])
+}
+
+/// POST JSON with caller-provided headers. Header values are never persisted by storage.
+pub fn post_http_json_bytes_with_headers(
+    url: &str,
+    body: &[u8],
+    headers: &[(String, String)],
+) -> Result<HttpFetchResult, StorageError> {
+    let mut request = ureq::post(url)
         .header("Content-Type", "application/json")
-        .header("Content-Length", &body.len().to_string())
+        .header("Content-Length", &body.len().to_string());
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    let mut response = request
         .send(body)
         .map_err(map_transport_error)?;
 
@@ -111,15 +124,16 @@ pub fn parse_content_range_total(content_range: &str) -> Option<u64> {
 
 /// Probe remote object size via `Content-Length` (HEAD) or `Content-Range` (`bytes=0-0`).
 pub fn probe_http_content_length(url: &str) -> Result<u64, StorageError> {
-    let head = ureq::head(url).call().map_err(map_transport_error)?;
-    if head.status().as_u16() == 200 {
-        if let Some(len) = head
-            .headers()
-            .get("Content-Length")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-        {
-            return Ok(len);
+    if let Ok(head) = ureq::head(url).call() {
+        if head.status().as_u16() == 200 {
+            if let Some(len) = head
+                .headers()
+                .get("Content-Length")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+            {
+                return Ok(len);
+            }
         }
     }
 

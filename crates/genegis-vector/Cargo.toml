@@ -21,6 +21,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 bytes = "1"
+chrono.workspace = true
 geoarrow-array = "0.8"
 geoarrow-schema = "0.8"
 wkb = "0.9"

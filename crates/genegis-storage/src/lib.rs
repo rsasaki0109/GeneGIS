@@ -14,6 +14,7 @@ pub use asset::{
 pub use error::StorageError;
 pub use http::{
     fetch_http_bytes, fetch_http_range, parse_content_range_total, post_http_json_bytes,
+    post_http_json_bytes_with_headers,
     probe_http_content_length, HttpFetchResult,
 };
 pub use range::ByteRange;
@@ -21,33 +22,20 @@ pub use range::ByteRange;
 #[cfg(test)]
 mod tests {
     use std::io::{Read, Write};
-    use std::net::{TcpListener, TcpStream};
+    use std::net::{Shutdown, TcpListener, TcpStream};
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
     use std::thread;
-    use std::time::Duration;
 
     use super::*;
 
     fn spawn_http_fixture(body: Vec<u8>) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
-        listener.set_nonblocking(true).expect("nonblocking");
         let addr = listener.local_addr().expect("addr");
-        let hits = Arc::new(AtomicUsize::new(0));
-        let hits_thread = Arc::clone(&hits);
-        let payload = Arc::new(body);
 
         thread::spawn(move || {
-            let deadline = std::time::Instant::now() + Duration::from_secs(5);
-            while hits_thread.load(Ordering::SeqCst) < 4
-                && std::time::Instant::now() < deadline
-            {
-                if let Ok((mut stream, _)) = listener.accept() {
-                    handle_http_request(&mut stream, &payload, &hits_thread);
-                } else {
-                    thread::sleep(Duration::from_millis(10));
-                }
-            }
+            let (mut stream, _) = listener.accept().expect("accept");
+            let hits = AtomicUsize::new(0);
+            handle_http_request(&mut stream, &body, &hits);
         });
 
         format!("http://{addr}/asset.bin")
@@ -101,6 +89,7 @@ mod tests {
                 body.len()
             );
             let _ = stream.write_all(response.as_bytes());
+            finish_http_response(stream);
             return;
         }
 
@@ -117,6 +106,7 @@ mod tests {
             );
             let _ = stream.write_all(response.as_bytes());
             let _ = stream.write_all(slice);
+            finish_http_response(stream);
             return;
         }
 
@@ -126,14 +116,18 @@ mod tests {
         );
         let _ = stream.write_all(response.as_bytes());
         let _ = stream.write_all(body);
+        finish_http_response(stream);
+    }
+
+    fn finish_http_response(stream: &mut TcpStream) {
+        let _ = stream.flush();
+        let _ = stream.shutdown(Shutdown::Write);
     }
 
     #[test]
     fn fetch_http_range_returns_partial_body() {
         let body: Vec<u8> = (0..10_000).map(|i| (i % 256) as u8).collect();
         let url = spawn_http_fixture(body.clone());
-        thread::sleep(Duration::from_millis(50));
-
         let range = ByteRange::new(128, 255).expect("range");
         let result = fetch_http_range(&url, &range).expect("fetch");
         assert_eq!(result.status, 206);
@@ -144,8 +138,6 @@ mod tests {
     fn post_http_json_returns_response_body() {
         let response_body = br#"{"type":"FeatureCollection","features":[]}"#.to_vec();
         let url = spawn_http_fixture(response_body.clone());
-        thread::sleep(Duration::from_millis(50));
-
         let result = post_http_json_bytes(&url, br#"{"limit":10}"#).expect("post");
         assert_eq!(result.status, 200);
         assert_eq!(result.bytes, response_body);
@@ -172,8 +164,6 @@ mod tests {
     fn probe_http_content_length_uses_head_or_range() {
         let body: Vec<u8> = (0..5000).map(|i| (i % 256) as u8).collect();
         let url = spawn_http_fixture(body);
-        thread::sleep(Duration::from_millis(50));
-
         let len = probe_http_content_length(&url).expect("probe");
         assert_eq!(len, 5000);
     }

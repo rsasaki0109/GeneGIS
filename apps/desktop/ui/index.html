@@ -10,7 +10,7 @@
     <header class="topbar">
       <div class="brand">
         <strong>GeneGIS</strong>
-        <span>AI-native GIS Workbench · Phase 9 gamma</span>
+        <span>AI-native GIS Workbench · Phase 10 alpha</span>
       </div>
     </header>
 
@@ -79,6 +79,34 @@
           <h2>STAC Catalog</h2>
           <pre id="stac-collection" class="mono">Loading…</pre>
           <div id="stac-items" class="stac-list">Loading items…</div>
+        </section>
+        <section class="panel">
+          <h2>Federated Discovery</h2>
+          <form id="endpoint-form" class="federated-form">
+            <label for="endpoint-id">Endpoint ID</label>
+            <input id="endpoint-id" type="text" value="local" autocomplete="off" />
+            <label for="endpoint-url">STAC API or fixture</label>
+            <input
+              id="endpoint-url"
+              type="text"
+              value="examples/stac/sample-search.json"
+              autocomplete="off"
+            />
+            <button id="endpoint-add-btn" type="submit" class="secondary">Save endpoint</button>
+          </form>
+          <div id="endpoint-list" class="stac-list">Loading endpoints…</div>
+          <div class="federated-form">
+            <label for="federated-bbox">WGS84 bbox</label>
+            <input
+              id="federated-bbox"
+              type="text"
+              value="136.79,35.03,137.07,35.27"
+              autocomplete="off"
+            />
+            <button id="federated-search-btn" type="button">Search selected</button>
+          </div>
+          <div id="federated-summary" class="mono">—</div>
+          <div id="federated-results" class="stac-list"></div>
         </section>
         <section class="panel">
           <h2>External STAC</h2>

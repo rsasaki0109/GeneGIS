@@ -12,4 +12,6 @@ pub enum CatalogError {
     Remote(String),
     #[error("invalid STAC payload: {0}")]
     InvalidStac(String),
+    #[error("invalid endpoint registry: {0}")]
+    InvalidRegistry(String),
 }

@@ -2,7 +2,7 @@
 
 **Goal:** Search and bind datasets across federated STAC endpoints and cloud GeoParquet assets.
 
-**Status:** Alpha in progress.
+**Status:** Alpha complete; beta in progress.
 
 ## Tracks
 
@@ -22,12 +22,12 @@
 - [x] Normalize and deduplicate STAC Items while retaining every source endpoint
 - [x] Add offline FeatureCollection fixtures and catalog unit tests
 - [x] Add `genegis catalog stac search` CLI entry point
-- [ ] Persist named endpoint registry with authentication metadata
-- [ ] Add workbench federated discovery panel
+- [x] Persist named endpoint registry with authentication metadata
+- [x] Add workbench federated discovery panel
 
 ### Phase 10 beta — cloud execution
 
-- [ ] Read remote GeoParquet metadata and selected row groups with HTTP range requests
+- [x] Read remote GeoParquet metadata and selected row groups with HTTP range requests
 - [ ] Bind a discovered asset through Command + GeoWorkflow IR
 - [ ] Verify schema, CRS, units, license, and source coverage before execution
 - [ ] Record source URL, STAC identity, retrieval time, and verification provenance

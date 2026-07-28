@@ -14,6 +14,14 @@ const stacFetchBtn = document.getElementById("stac-fetch-btn");
 const stacImportBtn = document.getElementById("stac-import-btn");
 const stacFetchResultEl = document.getElementById("stac-fetch-result");
 const stacOverlayEl = document.getElementById("stac-overlay");
+const endpointFormEl = document.getElementById("endpoint-form");
+const endpointIdEl = document.getElementById("endpoint-id");
+const endpointUrlEl = document.getElementById("endpoint-url");
+const endpointListEl = document.getElementById("endpoint-list");
+const federatedBboxEl = document.getElementById("federated-bbox");
+const federatedSearchBtn = document.getElementById("federated-search-btn");
+const federatedSummaryEl = document.getElementById("federated-summary");
+const federatedResultsEl = document.getElementById("federated-results");
 const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
 const agentMetaEl = document.getElementById("agent-meta");
@@ -265,6 +273,153 @@ async function loadStacOverlay() {
   } catch (err) {
     console.error(err);
     stacOverlayEl.textContent = `Error: ${err.message || err}`;
+  }
+}
+
+async function loadStacEndpoints() {
+  try {
+    const response = await fetch("/api/stac/endpoints");
+    const payload = await response.json();
+    if (!payload.ok) {
+      throw new Error(payload.error || "Failed to load endpoints");
+    }
+    endpointListEl.innerHTML = "";
+    const endpoints = payload.endpoints || [];
+    if (!endpoints.length) {
+      endpointListEl.textContent = "No endpoints configured";
+      return;
+    }
+    for (const endpoint of endpoints) {
+      const row = document.createElement("div");
+      row.className = "stac-item endpoint-row";
+
+      const selected = document.createElement("input");
+      selected.type = "checkbox";
+      selected.name = "federated-endpoint";
+      selected.value = endpoint.id;
+      selected.checked = true;
+      selected.setAttribute("aria-label", `Search ${endpoint.id}`);
+
+      const label = document.createElement("span");
+      label.textContent = `${endpoint.title} · ${endpoint.url}`;
+      label.title = `${endpoint.id} · ${endpoint.authentication?.type || "anonymous"}`;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "secondary";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `Remove ${endpoint.id}`);
+      remove.addEventListener("click", () => removeStacEndpoint(endpoint.id));
+
+      row.append(selected, label, remove);
+      endpointListEl.appendChild(row);
+    }
+  } catch (err) {
+    console.error(err);
+    endpointListEl.textContent = `Error: ${err.message || err}`;
+  }
+}
+
+async function addStacEndpoint(event) {
+  event.preventDefault();
+  const id = endpointIdEl.value.trim();
+  const url = endpointUrlEl.value.trim();
+  if (!id || !url) {
+    setStatus("Endpoint ID and URL are required");
+    return;
+  }
+  try {
+    const response = await fetch("/api/stac/endpoints", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, title: id, url, auth_kind: "anonymous" }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) {
+      throw new Error(payload.error || "Failed to save endpoint");
+    }
+    await loadStacEndpoints();
+    setStatus(`Endpoint saved: ${id}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Endpoint error: ${err.message || err}`);
+  }
+}
+
+async function removeStacEndpoint(id) {
+  try {
+    const response = await fetch("/api/stac/endpoints/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) {
+      throw new Error(payload.error || "Failed to remove endpoint");
+    }
+    await loadStacEndpoints();
+    setStatus(`Endpoint removed: ${id}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Endpoint error: ${err.message || err}`);
+  }
+}
+
+function parseFederatedBbox() {
+  const values = federatedBboxEl.value
+    .split(",")
+    .map((value) => Number(value.trim()));
+  if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+    throw new Error("bbox must be MINX,MINY,MAXX,MAXY");
+  }
+  if (values[0] > values[2] || values[1] > values[3]) {
+    throw new Error("bbox minimums must not exceed maximums");
+  }
+  return values;
+}
+
+async function searchFederatedStac() {
+  federatedSearchBtn.disabled = true;
+  federatedResultsEl.innerHTML = "";
+  try {
+    const endpointIds = Array.from(
+      endpointListEl.querySelectorAll('input[name="federated-endpoint"]:checked'),
+    ).map((input) => input.value);
+    if (!endpointIds.length) {
+      throw new Error("Select at least one endpoint");
+    }
+    const response = await fetch("/api/stac/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        endpoint_ids: endpointIds,
+        bbox: parseFederatedBbox(),
+        limit: 25,
+      }),
+    });
+    const payload = await response.json();
+    if (!payload.ok || !payload.result) {
+      throw new Error(payload.error || "Federated search failed");
+    }
+    const result = payload.result;
+    const succeeded = result.endpoints.filter((endpoint) => !endpoint.error).length;
+    federatedSummaryEl.textContent =
+      `${result.items.length} items · ${succeeded}/${result.endpoints.length} endpoints`;
+    for (const resultItem of result.items) {
+      const card = document.createElement("article");
+      card.className = "stac-item";
+      const title = resultItem.item.properties?.title || resultItem.item.id;
+      card.textContent = `${title} · sources: ${resultItem.source_endpoints.join(", ")}`;
+      card.title = JSON.stringify(resultItem.item.assets || {});
+      federatedResultsEl.appendChild(card);
+    }
+    setStatus(`Federated search: ${result.items.length} items`);
+  } catch (err) {
+    console.error(err);
+    federatedSummaryEl.textContent = `Error: ${err.message || err}`;
+    setStatus(`Federated search error: ${err.message || err}`);
+  } finally {
+    federatedSearchBtn.disabled = false;
   }
 }
 
@@ -856,8 +1011,11 @@ agentRetryBtn?.addEventListener("click", async () => {
 loadPlugins();
 loadStacCollection();
 loadStacOverlay();
+loadStacEndpoints();
 stacFetchBtn?.addEventListener("click", fetchExternalStac);
 stacImportBtn?.addEventListener("click", importExternalStac);
+endpointFormEl?.addEventListener("submit", addStacEndpoint);
+federatedSearchBtn?.addEventListener("click", searchFederatedStac);
 loadComments();
 loadAgentTrace();
 runAsk();
