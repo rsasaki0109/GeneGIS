@@ -120,9 +120,9 @@ fn remote_cog_demo_record() -> DatasetRecord {
         description: "Public OSGeo GeoTIFF sample for HTTP range-read and raster metadata smoke tests."
             .into(),
         format: DatasetFormat::cog(),
-        crs: "EPSG:26718".into(),
-        bbox: BoundingBox::new(-79.05, 42.02, -78.98, 42.08),
-        uri: "https://download.osgeo.org/geotiff/samples/gcp.tif".into(),
+        crs: "EPSG:32617".into(),
+        bbox: BoundingBox::new(-78.638, 40.983, -78.487, 41.129),
+        uri: "http://download.osgeo.org/geotiff/samples/usgs/o41078a5.tif".into(),
         license: "Public domain (OSGeo sample data)".into(),
         tags: vec![
             "cog".into(),
@@ -211,7 +211,7 @@ mod tests {
         let catalog = alpha_catalog();
         let record = catalog.require(REMOTE_COG_DEMO_ID).expect("record");
         assert_eq!(record.format.kind, "cog");
-        assert!(record.uri.starts_with("https://"));
+        assert!(genegis_storage::is_remote_uri(&record.uri));
         assert_eq!(catalog.list().len(), 5);
     }
 
