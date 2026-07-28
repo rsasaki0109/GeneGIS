@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::CatalogError;
@@ -120,6 +121,65 @@ pub struct FederatedSearchResult {
     pub items: Vec<FederatedStacItem>,
 }
 
+/// Requirements used by the planner to rank assets without hiding trade-offs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AssetRequirements {
+    /// Preferred media types in descending priority order.
+    pub media_types: Vec<String>,
+    /// Search area whose coverage must intersect the candidate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bbox: Option<[f64; 4]>,
+    /// Require explicit CRS, units, and license metadata.
+    #[serde(default = "default_true")]
+    pub require_metadata: bool,
+}
+
+impl Default for AssetRequirements {
+    fn default() -> Self {
+        Self {
+            media_types: vec!["application/vnd.apache.parquet".into()],
+            bbox: None,
+            require_metadata: true,
+        }
+    }
+}
+
+/// One auditable verification performed before an asset is eligible.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetVerification {
+    pub check: String,
+    pub passed: bool,
+    pub evidence: String,
+}
+
+/// A flattened item/asset candidate with deterministic score and explanation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AssetCandidate {
+    pub stac_item_key: String,
+    pub asset_key: String,
+    pub href: String,
+    pub media_type: String,
+    pub source_endpoints: Vec<String>,
+    pub score: i32,
+    pub compatible: bool,
+    pub verifications: Vec<AssetVerification>,
+}
+
+/// Selected STAC asset and the evidence needed to reproduce the decision.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AssetBindingReceipt {
+    pub selected: AssetCandidate,
+    pub candidates: Vec<AssetCandidate>,
+    pub selection_reason: String,
+    pub source_urls: Vec<String>,
+    pub stac_item_id: String,
+    pub stac_collection: Option<String>,
+    pub crs: String,
+    pub units: String,
+    pub license: String,
+    pub retrieved_at: DateTime<Utc>,
+}
+
 impl FederatedSearchResult {
     /// Number of endpoints that returned a valid ItemCollection.
     pub fn successful_endpoints(&self) -> usize {
@@ -132,6 +192,147 @@ impl FederatedSearchResult {
     /// Number of endpoints isolated as failures.
     pub fn failed_endpoints(&self) -> usize {
         self.endpoints.len() - self.successful_endpoints()
+    }
+
+    /// Compare every data asset, reject unverifiable candidates, and bind the best one.
+    pub fn compare_and_bind(
+        &self,
+        requirements: &AssetRequirements,
+    ) -> Result<AssetBindingReceipt, CatalogError> {
+        let mut candidates = Vec::new();
+        for federated in &self.items {
+            for (asset_key, asset) in &federated.item.assets {
+                let metadata = item_metadata(&federated.item);
+                let mut verifications = vec![
+                    verification(
+                        "media_type",
+                        requirements.media_types.contains(&asset.media_type),
+                        &asset.media_type,
+                    ),
+                    verification(
+                        "data_role",
+                        asset.roles.iter().any(|role| role == "data"),
+                        &format!("{:?}", asset.roles),
+                    ),
+                    verification(
+                        "source_coverage",
+                        requirements
+                            .bbox
+                            .is_none_or(|bbox| bbox_intersects(federated.item.bbox, bbox)),
+                        &format!("{:?}", federated.item.bbox),
+                    ),
+                ];
+                if requirements.require_metadata {
+                    verifications.extend([
+                        verification("crs", metadata.crs != "unknown", &metadata.crs),
+                        verification("units", metadata.units != "unknown", &metadata.units),
+                        verification("license", metadata.license != "unknown", &metadata.license),
+                    ]);
+                }
+                let compatible = verifications.iter().all(|check| check.passed);
+                let media_rank = requirements
+                    .media_types
+                    .iter()
+                    .position(|media_type| media_type == &asset.media_type)
+                    .map_or(0, |index| 100 - index as i32 * 10);
+                let score = media_rank
+                    + if asset.roles.iter().any(|role| role == "data") {
+                        20
+                    } else {
+                        0
+                    }
+                    + federated.source_endpoints.len() as i32 * 5
+                    + if compatible { 1_000 } else { 0 };
+                candidates.push(AssetCandidate {
+                    stac_item_key: federated.key.clone(),
+                    asset_key: asset_key.clone(),
+                    href: asset.href.clone(),
+                    media_type: asset.media_type.clone(),
+                    source_endpoints: federated.source_endpoints.clone(),
+                    score,
+                    compatible,
+                    verifications,
+                });
+            }
+        }
+        candidates.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.stac_item_key.cmp(&right.stac_item_key))
+                .then_with(|| left.asset_key.cmp(&right.asset_key))
+        });
+        let selected = candidates
+            .iter()
+            .find(|candidate| candidate.compatible)
+            .cloned()
+            .ok_or_else(|| {
+                CatalogError::InvalidStac("no compatible, verified asset candidate".into())
+            })?;
+        let item = self
+            .items
+            .iter()
+            .find(|item| item.key == selected.stac_item_key)
+            .expect("selected candidate retains its item");
+        let metadata = item_metadata(&item.item);
+        let source_urls = self
+            .endpoints
+            .iter()
+            .filter(|endpoint| selected.source_endpoints.contains(&endpoint.endpoint_id))
+            .map(|endpoint| endpoint.endpoint_url.clone())
+            .collect();
+        let selection_reason = format!(
+            "Selected {}/{}: verified all {} checks; score {} (preferred media type, data role, {} source endpoint(s)).",
+            selected.stac_item_key,
+            selected.asset_key,
+            selected.verifications.len(),
+            selected.score,
+            selected.source_endpoints.len()
+        );
+        Ok(AssetBindingReceipt {
+            selected,
+            candidates,
+            selection_reason,
+            source_urls,
+            stac_item_id: item.item.id.clone(),
+            stac_collection: item.item.collection.clone(),
+            crs: metadata.crs,
+            units: metadata.units,
+            license: metadata.license,
+            retrieved_at: Utc::now(),
+        })
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn verification(check: &str, passed: bool, evidence: &str) -> AssetVerification {
+    AssetVerification {
+        check: check.into(),
+        passed,
+        evidence: evidence.into(),
+    }
+}
+
+struct ItemMetadata {
+    crs: String,
+    units: String,
+    license: String,
+}
+
+fn item_metadata(item: &StacItem) -> ItemMetadata {
+    let text = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|key| item.properties.get(key).and_then(serde_json::Value::as_str))
+            .unwrap_or("unknown")
+            .to_string()
+    };
+    ItemMetadata {
+        crs: text(&["proj:code", "genegis:crs"]),
+        units: text(&["genegis:units", "units"]),
+        license: text(&["license", "genegis:license"]),
     }
 }
 
@@ -160,11 +361,20 @@ impl FederatedCatalog {
 
     /// Search every endpoint, isolate failures, and merge duplicate items.
     pub fn search(&self, request: &StacSearchRequest) -> FederatedSearchResult {
+        self.search_with_policy(request, &genegis_storage::RemoteAccessPolicy::default())
+    }
+
+    /// Search every endpoint under one explicit remote access policy.
+    pub fn search_with_policy(
+        &self,
+        request: &StacSearchRequest,
+        policy: &genegis_storage::RemoteAccessPolicy,
+    ) -> FederatedSearchResult {
         let mut endpoints = Vec::with_capacity(self.endpoints.len());
         let mut items_by_key: BTreeMap<String, FederatedStacItem> = BTreeMap::new();
 
         for endpoint in &self.endpoints {
-            match search_endpoint(endpoint, request) {
+            match search_endpoint(endpoint, request, policy) {
                 Ok(items) => {
                     let matched_items = items.len();
                     for item in items {
@@ -214,13 +424,14 @@ impl FederatedCatalog {
 fn search_endpoint(
     endpoint: &StacEndpoint,
     request: &StacSearchRequest,
+    policy: &genegis_storage::RemoteAccessPolicy,
 ) -> Result<Vec<StacItem>, CatalogError> {
     let bytes = if endpoint.url.starts_with("http://") || endpoint.url.starts_with("https://") {
         let url = stac_search_url(&endpoint.url);
         let body = serde_json::to_vec(request)
             .map_err(|error| CatalogError::InvalidStac(format!("search request: {error}")))?;
         let headers = authentication_headers(&endpoint.authentication)?;
-        genegis_storage::post_http_json_bytes_with_headers(&url, &body, &headers)
+        genegis_storage::post_http_json_bytes_with_policy(&url, &body, &headers, policy)
             .map_err(|error| CatalogError::Remote(error.to_string()))?
             .bytes
     } else {
@@ -252,13 +463,17 @@ fn authentication_headers(
         StacAuthentication::Anonymous => Ok(Vec::new()),
         StacAuthentication::BearerEnv { env_var } => {
             let value = std::env::var(env_var).map_err(|_| {
-                CatalogError::Remote(format!("authentication environment variable {env_var:?} is not set"))
+                CatalogError::Remote(format!(
+                    "authentication environment variable {env_var:?} is not set"
+                ))
             })?;
             Ok(vec![("Authorization".into(), format!("Bearer {value}"))])
         }
         StacAuthentication::HeaderEnv { header, env_var } => {
             let value = std::env::var(env_var).map_err(|_| {
-                CatalogError::Remote(format!("authentication environment variable {env_var:?} is not set"))
+                CatalogError::Remote(format!(
+                    "authentication environment variable {env_var:?} is not set"
+                ))
             })?;
             Ok(vec![(header.clone(), value)])
         }
@@ -435,5 +650,61 @@ mod tests {
         assert_eq!(result.successful_endpoints(), 1);
         assert_eq!(result.items.len(), 1);
         assert_eq!(result.items[0].source_endpoints, vec!["http".to_string()]);
+    }
+
+    #[test]
+    fn compares_candidates_and_explains_verified_binding() {
+        let mut catalog = FederatedCatalog::new();
+        catalog.register(fixture_endpoint("primary"));
+        catalog.register(fixture_endpoint("mirror"));
+        let result = catalog.search(&StacSearchRequest {
+            bbox: Some([136.79, 35.03, 137.07, 35.27]),
+            ..StacSearchRequest::default()
+        });
+
+        let receipt = result
+            .compare_and_bind(&AssetRequirements {
+                bbox: result.request.bbox,
+                ..AssetRequirements::default()
+            })
+            .expect("verified GeoParquet binding");
+
+        assert_eq!(receipt.selected.asset_key, "geoparquet");
+        assert_eq!(receipt.crs, "EPSG:4326");
+        assert_eq!(receipt.units, "degrees");
+        assert_eq!(receipt.license, "CC-BY-4.0");
+        assert_eq!(receipt.source_urls.len(), 2);
+        assert!(receipt
+            .selected
+            .verifications
+            .iter()
+            .all(|check| check.passed));
+        assert!(receipt.selection_reason.contains("2 source endpoint(s)"));
+        assert!(receipt
+            .candidates
+            .iter()
+            .any(|candidate| !candidate.compatible));
+    }
+
+    #[test]
+    fn rejects_remote_endpoint_outside_explicit_allowlist() {
+        let mut catalog = FederatedCatalog::new();
+        catalog.register(StacEndpoint::new(
+            "blocked",
+            "https://blocked.invalid/stac",
+        ));
+        let policy = genegis_storage::RemoteAccessPolicy {
+            allowed_hosts: vec![],
+            allow_loopback: false,
+            ..genegis_storage::RemoteAccessPolicy::from_env()
+        };
+
+        let result = catalog.search_with_policy(&StacSearchRequest::default(), &policy);
+
+        assert_eq!(result.failed_endpoints(), 1);
+        assert!(result.endpoints[0]
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("not allowlisted")));
     }
 }

@@ -14,16 +14,17 @@ pub use catalog::{
     repo_root, Catalog, EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID,
     NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
+pub use dataset::{DatasetFormat, DatasetRecord};
+pub use error::CatalogError;
 pub use external_stac::{
-    fetch_stac_collection, fetch_stac_item, import_stac_item_url, load_catalog_overlay,
-    resolve_catalog_url, catalog_overlay_path, CATALOG_OVERLAY_ENV, CATALOG_OVERLAY_PATH,
+    catalog_overlay_path, fetch_stac_collection, fetch_stac_item, import_stac_item_url,
+    load_catalog_overlay, resolve_catalog_url, CATALOG_OVERLAY_ENV, CATALOG_OVERLAY_PATH,
 };
 pub use federated::{
+    AssetBindingReceipt, AssetCandidate, AssetRequirements, AssetVerification,
     EndpointSearchOutcome, FederatedCatalog, FederatedSearchResult, FederatedStacItem,
     StacAuthentication, StacEndpoint, StacItemCollection, StacSearchRequest,
 };
-pub use dataset::{DatasetFormat, DatasetRecord};
-pub use error::CatalogError;
 pub use lookup::CatalogMatch;
 pub use registry::{
     endpoint_registry_path, EndpointRegistry, ENDPOINT_REGISTRY_ENV, ENDPOINT_REGISTRY_PATH,

@@ -91,12 +91,25 @@ pub fn read_geoparquet_uri_with_options(
     uri: &str,
     options: GeoParquetReadOptions,
 ) -> Result<GeoParquetReadReport, VectorError> {
+    read_geoparquet_uri_with_options_and_policy(
+        uri,
+        options,
+        genegis_storage::RemoteAccessPolicy::default(),
+    )
+}
+
+/// Read remote GeoParquet under an explicit host, redirect, timeout, and size policy.
+pub fn read_geoparquet_uri_with_options_and_policy(
+    uri: &str,
+    options: GeoParquetReadOptions,
+    policy: genegis_storage::RemoteAccessPolicy,
+) -> Result<GeoParquetReadReport, VectorError> {
     if !genegis_storage::is_remote_uri(uri) {
         return Err(VectorError::GeoParquet(
             "range-backed GeoParquet reader requires an HTTP(S) URI".into(),
         ));
     }
-    let reader = HttpRangeChunkReader::open(uri)?;
+    let reader = HttpRangeChunkReader::open(uri, policy)?;
     let content_length = reader.len();
     let stats = Arc::clone(&reader.stats);
     let name = remote_dataset_name(uri);
@@ -236,16 +249,21 @@ struct HttpRangeChunkReader {
     uri: Arc<str>,
     content_length: u64,
     stats: Arc<HttpRangeStats>,
+    policy: genegis_storage::RemoteAccessPolicy,
 }
 
 impl HttpRangeChunkReader {
-    fn open(uri: &str) -> Result<Self, VectorError> {
-        let content_length = genegis_storage::probe_http_content_length(uri)
+    fn open(
+        uri: &str,
+        policy: genegis_storage::RemoteAccessPolicy,
+    ) -> Result<Self, VectorError> {
+        let content_length = genegis_storage::probe_http_content_length_with_policy(uri, &policy)
             .map_err(|error| VectorError::GeoParquet(error.to_string()))?;
         Ok(Self {
             uri: Arc::from(uri),
             content_length,
             stats: Arc::new(HttpRangeStats::default()),
+            policy,
         })
     }
 
@@ -264,7 +282,8 @@ impl HttpRangeChunkReader {
         }
         let range = genegis_storage::ByteRange::new(start, end)
             .map_err(|error| ParquetError::General(error.to_string()))?;
-        let bytes = genegis_storage::read_asset_range(&self.uri, &range)
+        let bytes =
+            genegis_storage::read_asset_range_with_policy(&self.uri, &range, &self.policy)
             .map_err(|error| ParquetError::General(error.to_string()))?;
         if bytes.len() != length {
             return Err(ParquetError::General(format!(

@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  GENEGIS_REMOTE_ALLOWED_HOSTS: download.osgeo.org
 
 jobs:
   build:
@@ -28,6 +29,8 @@ jobs:
         run: cargo build --workspace
       - name: Test workspace
         run: cargo test --workspace -- --test-threads=1
+      - name: Phase 10 — federated bind + HTTP Range E2E
+        run: cargo test -p genegis-catalog --test federated_asset_e2e
       - name: MVP workflow smoke
         run: cargo run -p genegis-cli -- workflow run nagoya-density
       - name: MVP execute pipeline

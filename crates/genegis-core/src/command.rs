@@ -44,6 +44,16 @@ pub enum Command {
         collections: Vec<String>,
         limit: Option<usize>,
     },
+    BindStacAsset {
+        stac_item_key: String,
+        asset_key: String,
+        source_endpoints: Vec<String>,
+        href: String,
+        media_type: String,
+        crs: String,
+        units: String,
+        license: String,
+    },
     ReadRemoteGeoParquet {
         uri: String,
         row_groups: Option<Vec<usize>>,

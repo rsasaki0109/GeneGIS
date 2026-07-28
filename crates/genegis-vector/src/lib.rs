@@ -11,6 +11,7 @@ pub use error::VectorError;
 pub use geojson::{read_geojson_path, read_geojson_str};
 pub use geoparquet::{
     geoparquet_summary, read_geoparquet_bytes, read_geoparquet_path, read_geoparquet_uri,
-    read_geoparquet_uri_with_options, verify_nagoya_geoparquet, GeoParquetReadOptions,
-    GeoParquetReadReport, NAGOYA_WARD_FEATURE_COUNT,
+    read_geoparquet_uri_with_options, read_geoparquet_uri_with_options_and_policy,
+    verify_nagoya_geoparquet, GeoParquetReadOptions, GeoParquetReadReport,
+    NAGOYA_WARD_FEATURE_COUNT,
 };

@@ -70,6 +70,27 @@ npm run dev
 See [`docs/adr/0005-public-playground.md`](docs/adr/0005-public-playground.md)
 for the verified-replay architecture.
 
+### Federated STAC → verified GeoParquet
+
+The local Workbench can search multiple STAC endpoints, compare every returned
+asset, explain the selected GeoParquet, bind it through a typed Command +
+GeoWorkflow, execute row group 0 with HTTP Range requests, and return one
+machine-readable verification receipt. Candidate checks cover media type, data
+role, source coverage, CRS, units, and license.
+
+External network access is fail-closed. Before adding a remote STAC endpoint,
+allow its API host and any separate asset host:
+
+```bash
+GENEGIS_REMOTE_ALLOWED_HOSTS=earth-search.aws.element84.com,example-bucket.s3.amazonaws.com \
+  cargo run -p genegis-workbench
+```
+
+See
+[`docs/adr/0006-federated-stac-asset-binding.md`](docs/adr/0006-federated-stac-asset-binding.md)
+and the
+[`federated asset E2E`](crates/genegis-catalog/tests/federated_asset_e2e.rs).
+
 ## Architecture at a glance
 
 ```
