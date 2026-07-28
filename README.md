@@ -13,7 +13,7 @@
 GeneGIS is **not a QGIS clone**. It is a next-generation GIS platform built around workflow graphs, AI agents, cloud-optimized formats, and GPU rendering — designed for spatial intelligence in the GeoAI era.
 
 <p align="center">
-  <a href="PLAYGROUND_URL"><strong>Open the zero-install Playground →</strong></a>
+  <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open the zero-install Playground →</strong></a>
 </p>
 
 No install and no API key: run the North Star prompt, inspect all 14 workflow
@@ -47,7 +47,8 @@ GeneGIS resolves the place, discovers datasets, normalizes CRS, computes density
 
 ## Try it in 30 seconds
 
-The fastest path is the [public Playground](PLAYGROUND_URL). For local execution:
+The fastest path is the [public Playground](https://genegis-playground.rsasaki0109.chatgpt.site).
+For local execution:
 
 ```bash
 # North-star one-liner (Intent → Workflow → Map)
