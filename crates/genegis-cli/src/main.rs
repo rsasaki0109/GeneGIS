@@ -6,10 +6,12 @@ use genegis_analysis::{
     run_nagoya_population_density,
 };
 use genegis_catalog::{
-    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, fetch_stac_collection,
-    import_stac_item_url, FederatedCatalog, StacEndpoint, StacSearchRequest, LOCAL_COG_DEMO_ID,
+    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, endpoint_registry_path,
+    fetch_stac_collection, import_stac_item_url, EndpointRegistry, FederatedCatalog, StacEndpoint,
+    StacSearchRequest, LOCAL_COG_DEMO_ID,
     NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
+use genegis_core::{Command, CommandEnvelope, CommandOrigin};
 use genegis_agent::{
     build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
     AgentOrchestrator, AgentRun, AgentRunConfig, AgentRole, AuditCollabSnapshot,
@@ -19,10 +21,15 @@ use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
 use genegis_query::verify_nagoya_densities;
 use genegis_workflow::{
-    external_stac_fetch_template, local_cog_metadata_template, nagoya_geoparquet_density_template,
-    nagoya_geoparquet_template, nagoya_population_density_template, remote_cog_metadata_template,
+    external_stac_fetch_template, federated_stac_search_template, local_cog_metadata_template,
+    nagoya_geoparquet_density_template, nagoya_geoparquet_template,
+    nagoya_population_density_template, remote_cog_metadata_template,
+    remote_geoparquet_range_template, stac_endpoint_registry_template,
 };
-use genegis_vector::{geoparquet_summary, read_geoparquet_uri};
+use genegis_vector::{
+    geoparquet_summary, read_geoparquet_uri, read_geoparquet_uri_with_options,
+    GeoParquetReadOptions,
+};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -1190,6 +1197,7 @@ fn handle_collab(args: &[String]) {
 
 fn handle_catalog(args: &[String]) {
     match args.first().map(String::as_str) {
+        Some("endpoint") => handle_stac_endpoint_registry(&args[1..]),
         Some("stac") => match args.get(1).map(String::as_str) {
             Some("list") => {
                 let collection = browse_alpha_stac_collection(&alpha_catalog());
@@ -1241,6 +1249,7 @@ fn handle_catalog(args: &[String]) {
                 eprintln!("       genegis catalog stac fetch URL");
                 eprintln!("       genegis catalog stac import ITEM_URL");
                 eprintln!("       genegis catalog stac search --endpoint ID=URL [OPTIONS]");
+                eprintln!("       genegis catalog endpoint add|list|remove");
                 process::exit(1);
             }
         },
@@ -1250,14 +1259,164 @@ fn handle_catalog(args: &[String]) {
             eprintln!("       genegis catalog stac fetch URL");
             eprintln!("       genegis catalog stac import ITEM_URL");
             eprintln!("       genegis catalog stac search --endpoint ID=URL [OPTIONS]");
+            eprintln!("       genegis catalog endpoint add|list|remove");
             process::exit(1);
         }
     }
 }
 
+fn handle_stac_endpoint_registry(args: &[String]) {
+    let path = catalog_registry_path_arg(args);
+    let mut registry = EndpointRegistry::load(&path).unwrap_or_else(|error| {
+        eprintln!("Endpoint registry error: {error}");
+        process::exit(1);
+    });
+
+    match args.first().map(String::as_str) {
+        Some("list") => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "path": path,
+                    "schema_version": registry.schema_version,
+                    "updated_at": registry.updated_at,
+                    "endpoints": registry.endpoints,
+                    "command_count": registry.command_history.len(),
+                    "workflow_count": registry.workflows.len(),
+                    "provenance_count": registry.provenance.entries.len(),
+                }))
+                .expect("endpoint registry json")
+            );
+        }
+        Some("add") => {
+            let Some(id) = args.get(1) else {
+                print_endpoint_registry_usage();
+                process::exit(1);
+            };
+            let Some(url) = args.get(2) else {
+                print_endpoint_registry_usage();
+                process::exit(1);
+            };
+            let title = catalog_named_option(args, "--title")
+                .map(str::to_string)
+                .unwrap_or_else(|| id.clone());
+            let (auth_kind, auth_env, auth_header) =
+                parse_endpoint_authentication_options(args);
+            let command = Command::RegisterStacEndpoint {
+                endpoint_id: id.clone(),
+                title,
+                url: url.clone(),
+                auth_kind,
+                auth_env,
+                auth_header,
+            };
+            registry
+                .apply(
+                    CommandEnvelope::new(CommandOrigin::Cli, command),
+                    stac_endpoint_registry_template("register", id),
+                )
+                .and_then(|_| registry.save(&path))
+                .unwrap_or_else(|error| {
+                    eprintln!("Endpoint registry error: {error}");
+                    process::exit(1);
+                });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(registry.get(id).expect("registered endpoint"))
+                    .expect("endpoint json")
+            );
+        }
+        Some("remove") => {
+            let Some(id) = args.get(1) else {
+                print_endpoint_registry_usage();
+                process::exit(1);
+            };
+            registry
+                .apply(
+                    CommandEnvelope::new(
+                        CommandOrigin::Cli,
+                        Command::RemoveStacEndpoint {
+                            endpoint_id: id.clone(),
+                        },
+                    ),
+                    stac_endpoint_registry_template("remove", id),
+                )
+                .and_then(|_| registry.save(&path))
+                .unwrap_or_else(|error| {
+                    eprintln!("Endpoint registry error: {error}");
+                    process::exit(1);
+                });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "removed": id,
+                    "path": path,
+                }))
+                .expect("remove json")
+            );
+        }
+        _ => {
+            print_endpoint_registry_usage();
+            process::exit(1);
+        }
+    }
+}
+
+fn catalog_registry_path_arg(args: &[String]) -> PathBuf {
+    catalog_named_option(args, "--registry")
+        .map(PathBuf::from)
+        .unwrap_or_else(endpoint_registry_path)
+}
+
+fn catalog_named_option<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|argument| argument == name)
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
+}
+
+fn parse_endpoint_authentication_options(
+    args: &[String],
+) -> (String, Option<String>, Option<String>) {
+    let bearer = catalog_named_option(args, "--auth-bearer-env");
+    let header = catalog_named_option(args, "--auth-header-env");
+    match (bearer, header) {
+        (Some(_), Some(_)) => {
+            eprintln!("Choose only one authentication option");
+            process::exit(1);
+        }
+        (Some(env_var), None) => ("bearer_env".into(), Some(env_var.into()), None),
+        (None, Some(spec)) => {
+            let (header, env_var) = spec.split_once('=').unwrap_or_else(|| {
+                eprintln!("Invalid --auth-header-env; expected HEADER=ENV_VAR");
+                process::exit(1);
+            });
+            (
+                "header_env".into(),
+                Some(env_var.into()),
+                Some(header.into()),
+            )
+        }
+        (None, None) => ("anonymous".into(), None, None),
+    }
+}
+
+fn print_endpoint_registry_usage() {
+    eprintln!(
+        "Usage: genegis catalog endpoint add ID URL [--title TITLE] [--auth-bearer-env ENV_VAR | --auth-header-env HEADER=ENV_VAR] [--registry FILE]"
+    );
+    eprintln!("       genegis catalog endpoint list [--registry FILE]");
+    eprintln!("       genegis catalog endpoint remove ID [--registry FILE]");
+}
+
 fn handle_federated_stac_search(args: &[String]) {
     let mut catalog = FederatedCatalog::new();
     let mut request = StacSearchRequest::default();
+    let registry_path = catalog_registry_path_arg(args);
+    let mut registry = EndpointRegistry::load(&registry_path).unwrap_or_else(|error| {
+        eprintln!("Endpoint registry error: {error}");
+        process::exit(1);
+    });
     let mut index = 0;
 
     while index < args.len() {
@@ -1273,6 +1432,15 @@ fn handle_federated_stac_search(args: &[String]) {
                     process::exit(1);
                 }
                 catalog.register(StacEndpoint::new(id, url));
+                index += 2;
+            }
+            "--endpoint-id" => {
+                let id = require_catalog_option(args, index, "--endpoint-id ID");
+                let endpoint = registry.get(id).cloned().unwrap_or_else(|| {
+                    eprintln!("Endpoint registry error: endpoint {id:?} not found");
+                    process::exit(1);
+                });
+                catalog.register(endpoint);
                 index += 2;
             }
             "--bbox" => {
@@ -1299,6 +1467,10 @@ fn handle_federated_stac_search(args: &[String]) {
                 }));
                 index += 2;
             }
+            "--registry" => {
+                require_catalog_option(args, index, "--registry FILE");
+                index += 2;
+            }
             unknown => {
                 eprintln!("Unknown STAC search option: {unknown}");
                 print_stac_search_usage();
@@ -1308,12 +1480,41 @@ fn handle_federated_stac_search(args: &[String]) {
     }
 
     if catalog.endpoints().is_empty() {
-        eprintln!("At least one --endpoint ID=URL is required");
-        print_stac_search_usage();
-        process::exit(1);
+        catalog = registry.federated_catalog(&[]).unwrap_or_else(|error| {
+            eprintln!("Endpoint registry error: {error}");
+            process::exit(1);
+        });
+        if catalog.endpoints().is_empty() {
+            eprintln!("No endpoints configured; add one or pass --endpoint ID=URL");
+            print_stac_search_usage();
+            process::exit(1);
+        }
     }
 
+    let endpoint_ids: Vec<_> = catalog
+        .endpoints()
+        .iter()
+        .map(|endpoint| endpoint.id.clone())
+        .collect();
+    let envelope = CommandEnvelope::new(
+        CommandOrigin::Cli,
+        Command::SearchFederatedStac {
+            endpoint_ids: endpoint_ids.clone(),
+            bbox: request.bbox,
+            datetime: request.datetime.clone(),
+            collections: request.collections.clone(),
+            limit: request.limit,
+        },
+    );
+    let workflow = federated_stac_search_template(&endpoint_ids);
     let result = catalog.search(&request);
+    registry
+        .record_search(envelope, workflow, &result)
+        .and_then(|_| registry.save(&registry_path))
+        .unwrap_or_else(|error| {
+            eprintln!("Endpoint registry provenance error: {error}");
+            process::exit(1);
+        });
     println!(
         "{}",
         serde_json::to_string_pretty(&result).expect("federated search json")
@@ -1355,7 +1556,7 @@ fn parse_catalog_bbox(value: &str) -> [f64; 4] {
 
 fn print_stac_search_usage() {
     eprintln!(
-        "Usage: genegis catalog stac search --endpoint ID=URL [--endpoint ID=URL ...] [--bbox MINX,MINY,MAXX,MAXY] [--datetime VALUE] [--collection ID] [--limit COUNT]"
+        "Usage: genegis catalog stac search [--endpoint ID=URL | --endpoint-id ID] [--registry FILE] [--bbox MINX,MINY,MAXX,MAXY] [--datetime VALUE] [--collection ID] [--limit COUNT]"
     );
 }
 
@@ -1364,9 +1565,49 @@ fn handle_vector(args: &[String]) {
         Some("geoparquet") => match args.get(1).map(String::as_str) {
             Some("info") => {
                 let Some(path) = args.get(2) else {
-                    eprintln!("Usage: genegis vector geoparquet info PATH");
+                    eprintln!(
+                        "Usage: genegis vector geoparquet info PATH|URL [--row-group INDEX ... | --all-row-groups]"
+                    );
                     process::exit(1);
                 };
+                if genegis_storage::is_remote_uri(path) {
+                    let all_row_groups = args.iter().any(|arg| arg == "--all-row-groups");
+                    let selected = parse_row_group_options(&args[3..]);
+                    let options = GeoParquetReadOptions {
+                        row_groups: if all_row_groups {
+                            None
+                        } else {
+                            Some(selected)
+                        },
+                    };
+                    let command_row_groups = options.row_groups.clone();
+                    let report =
+                        read_geoparquet_uri_with_options(path, options).unwrap_or_else(|err| {
+                            eprintln!("GeoParquet error: {err}");
+                            process::exit(1);
+                        });
+                    let command = CommandEnvelope::new(
+                        CommandOrigin::Cli,
+                        Command::ReadRemoteGeoParquet {
+                            uri: path.clone(),
+                            row_groups: command_row_groups.clone(),
+                        },
+                    );
+                    let workflow = remote_geoparquet_range_template(
+                        path,
+                        command_row_groups.as_deref(),
+                    );
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "command": command,
+                            "workflow": workflow,
+                            "report": report,
+                        }))
+                        .expect("geoparquet operation receipt")
+                    );
+                    return;
+                }
                 let dataset = read_geoparquet_uri(path).unwrap_or_else(|err| {
                     eprintln!("GeoParquet error: {err}");
                     process::exit(1);
@@ -1399,17 +1640,47 @@ fn handle_vector(args: &[String]) {
                 }
             }
             _ => {
-                eprintln!("Usage: genegis vector geoparquet info PATH");
+                eprintln!(
+                    "Usage: genegis vector geoparquet info PATH|URL [--row-group INDEX ... | --all-row-groups]"
+                );
                 eprintln!("       genegis vector geoparquet build-fixture");
                 process::exit(1);
             }
         },
         _ => {
-            eprintln!("Usage: genegis vector geoparquet info PATH");
+            eprintln!(
+                "Usage: genegis vector geoparquet info PATH|URL [--row-group INDEX ... | --all-row-groups]"
+            );
             eprintln!("       genegis vector geoparquet build-fixture");
             process::exit(1);
         }
     }
+}
+
+fn parse_row_group_options(args: &[String]) -> Vec<usize> {
+    let mut selected = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--row-group" => {
+                let value = args.get(index + 1).unwrap_or_else(|| {
+                    eprintln!("Missing --row-group INDEX");
+                    process::exit(1);
+                });
+                selected.push(value.parse().unwrap_or_else(|_| {
+                    eprintln!("Invalid row group index {value:?}");
+                    process::exit(1);
+                }));
+                index += 2;
+            }
+            "--all-row-groups" => index += 1,
+            unknown => {
+                eprintln!("Unknown GeoParquet option: {unknown}");
+                process::exit(1);
+            }
+        }
+    }
+    selected
 }
 
 fn handle_workflow(args: &[String]) {
@@ -1506,8 +1777,10 @@ Usage:
   genegis catalog stac get ITEM_ID                 Export one catalog dataset as STAC Item
   genegis catalog stac fetch URL                   Fetch external STAC Collection summary
   genegis catalog stac import ITEM_URL             Import STAC Item into catalog overlay
-  genegis catalog stac search --endpoint ID=URL    Search and deduplicate federated STAC APIs
+  genegis catalog endpoint add|list|remove         Persist named STAC endpoints + provenance
+  genegis catalog stac search --endpoint-id ID     Search registered federated STAC APIs
   genegis vector geoparquet info PATH              GeoParquet metadata JSON
+  genegis vector geoparquet info URL --row-group 0 HTTP-range selected row-group read
   genegis vector geoparquet build-fixture          Write Nagoya wards GeoParquet fixture
   genegis collab comment list                      List map-anchored review comments
   genegis collab comment add "..." [--author NAME] Add a comment

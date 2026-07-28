@@ -43,6 +43,73 @@ impl GeoWorkflow {
     }
 }
 
+/// Auditable endpoint registry mutation through Command + Workflow Graph.
+pub fn stac_endpoint_registry_template(action: &str, endpoint_id: &str) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("{action} STAC endpoint {endpoint_id}"));
+    workflow.inputs.push(serde_json::json!({
+        "endpoint_id": endpoint_id,
+        "crs": "EPSG:4326",
+        "units": "degrees",
+    }));
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "ValidateStacEndpoint",
+            serde_json::json!({ "endpoint_id": endpoint_id }),
+        ),
+        WorkflowStep::new(
+            "ApplyCatalogCommand",
+            serde_json::json!({ "action": action }),
+        ),
+        WorkflowStep::new("RecordProvenance", serde_json::json!({})),
+    ];
+    workflow
+}
+
+/// Federated search workflow retaining request CRS, units, and source identity.
+pub fn federated_stac_search_template(endpoint_ids: &[String]) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("Search federated STAC endpoints");
+    workflow.inputs.push(serde_json::json!({
+        "endpoint_ids": endpoint_ids,
+        "crs": "EPSG:4326",
+        "units": "degrees",
+    }));
+    workflow.steps = vec![
+        WorkflowStep::new("ResolveStacEndpoints", serde_json::json!({})),
+        WorkflowStep::new("SearchStacItems", serde_json::json!({ "method": "POST" })),
+        WorkflowStep::new("DeduplicateStacItems", serde_json::json!({})),
+        WorkflowStep::new("RecordProvenance", serde_json::json!({})),
+    ];
+    workflow
+}
+
+/// Cloud GeoParquet metadata probe or selected row-group execution.
+pub fn remote_geoparquet_range_template(uri: &str, row_groups: Option<&[usize]>) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("Read remote GeoParquet with HTTP ranges");
+    workflow.inputs.push(serde_json::json!({
+        "uri": uri,
+        "row_groups": row_groups,
+        "crs": "from GeoParquet metadata",
+        "units": "from declared CRS",
+    }));
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "ProbeGeoParquetMetadata",
+            serde_json::json!({ "read_mode": "http_range" }),
+        ),
+        WorkflowStep::new(
+            "SelectRowGroups",
+            serde_json::json!({ "row_groups": row_groups }),
+        ),
+        WorkflowStep::new("DecodeGeoParquet", serde_json::json!({})),
+        WorkflowStep::new(
+            "VerifyGeoParquet",
+            serde_json::json!({ "schema": true, "crs": true, "source_coverage": true }),
+        ),
+        WorkflowStep::new("RecordProvenance", serde_json::json!({})),
+    ];
+    workflow
+}
+
 /// MVP north-star workflow: Nagoya population density.
 pub fn nagoya_population_density_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("名古屋市の人口密度を表示");

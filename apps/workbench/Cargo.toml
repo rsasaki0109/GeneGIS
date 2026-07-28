@@ -17,7 +17,9 @@ genegis-agent = { path = "../../crates/genegis-agent" }
 genegis-ai = { path = "../../crates/genegis-ai" }
 genegis-catalog = { path = "../../crates/genegis-catalog" }
 genegis-collab = { path = "../../crates/genegis-collab" }
+genegis-core = { path = "../../crates/genegis-core" }
 genegis-plugin-host = { path = "../../crates/genegis-plugin-host" }
+genegis-workflow = { path = "../../crates/genegis-workflow" }
 open = "5"
 serde = { workspace = true }
 serde_json.workspace = true

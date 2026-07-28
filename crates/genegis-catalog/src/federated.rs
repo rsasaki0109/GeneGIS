@@ -6,6 +6,21 @@ use crate::error::CatalogError;
 use crate::external_stac::{fetch_json_bytes, resolve_catalog_url};
 use crate::stac::{StacItem, StacLink};
 
+/// Authentication material is resolved from the environment at request time.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StacAuthentication {
+    #[default]
+    Anonymous,
+    BearerEnv {
+        env_var: String,
+    },
+    HeaderEnv {
+        header: String,
+        env_var: String,
+    },
+}
+
 /// A named STAC API search endpoint.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StacEndpoint {
@@ -15,6 +30,9 @@ pub struct StacEndpoint {
     pub title: String,
     /// STAC API root, explicit `/search` URL, or local ItemCollection path.
     pub url: String,
+    /// Secret-free authentication configuration.
+    #[serde(default)]
+    pub authentication: StacAuthentication,
 }
 
 impl StacEndpoint {
@@ -25,7 +43,13 @@ impl StacEndpoint {
             title: id.clone(),
             id,
             url: url.into(),
+            authentication: StacAuthentication::Anonymous,
         }
+    }
+
+    pub fn with_authentication(mut self, authentication: StacAuthentication) -> Self {
+        self.authentication = authentication;
+        self
     }
 }
 
@@ -195,7 +219,8 @@ fn search_endpoint(
         let url = stac_search_url(&endpoint.url);
         let body = serde_json::to_vec(request)
             .map_err(|error| CatalogError::InvalidStac(format!("search request: {error}")))?;
-        genegis_storage::post_http_json_bytes(&url, &body)
+        let headers = authentication_headers(&endpoint.authentication)?;
+        genegis_storage::post_http_json_bytes_with_headers(&url, &body, &headers)
             .map_err(|error| CatalogError::Remote(error.to_string()))?
             .bytes
     } else {
@@ -218,6 +243,26 @@ fn search_endpoint(
         .into_iter()
         .filter(|item| matches_request(item, request))
         .collect())
+}
+
+fn authentication_headers(
+    authentication: &StacAuthentication,
+) -> Result<Vec<(String, String)>, CatalogError> {
+    match authentication {
+        StacAuthentication::Anonymous => Ok(Vec::new()),
+        StacAuthentication::BearerEnv { env_var } => {
+            let value = std::env::var(env_var).map_err(|_| {
+                CatalogError::Remote(format!("authentication environment variable {env_var:?} is not set"))
+            })?;
+            Ok(vec![("Authorization".into(), format!("Bearer {value}"))])
+        }
+        StacAuthentication::HeaderEnv { header, env_var } => {
+            let value = std::env::var(env_var).map_err(|_| {
+                CatalogError::Remote(format!("authentication environment variable {env_var:?} is not set"))
+            })?;
+            Ok(vec![(header.clone(), value)])
+        }
+    }
 }
 
 fn stac_search_url(url: &str) -> String {
@@ -262,7 +307,7 @@ fn item_key(item: &StacItem) -> String {
 #[cfg(test)]
 mod tests {
     use std::io::{Read, Write};
-    use std::net::TcpListener;
+    use std::net::{Shutdown, TcpListener};
     use std::thread;
 
     use super::*;
@@ -317,6 +362,8 @@ mod tests {
             );
             stream.write_all(response.as_bytes()).expect("headers");
             stream.write_all(&response_body).expect("body");
+            stream.flush().expect("flush");
+            let _ = stream.shutdown(Shutdown::Write);
         });
 
         format!("http://{address}")

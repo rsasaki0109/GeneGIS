@@ -2217,9 +2217,12 @@ dependencies = [
 name = "genegis-catalog"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "genegis-core",
  "genegis-geometry",
  "genegis-raster",
  "genegis-storage",
+ "genegis-workflow",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2234,6 +2237,7 @@ dependencies = [
  "genegis-analysis",
  "genegis-catalog",
  "genegis-collab",
+ "genegis-core",
  "genegis-plugin-host",
  "genegis-pointcloud",
  "genegis-query",
@@ -2453,6 +2457,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "bytes",
+ "chrono",
  "genegis-catalog",
  "genegis-geometry",
  "genegis-storage",
@@ -2486,7 +2491,9 @@ dependencies = [
  "genegis-analysis",
  "genegis-catalog",
  "genegis-collab",
+ "genegis-core",
  "genegis-plugin-host",
+ "genegis-workflow",
  "open",
  "serde",
  "serde_json",

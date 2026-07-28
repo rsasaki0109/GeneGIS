@@ -266,6 +266,38 @@ li.note {
   overflow: auto;
 }
 
+.federated-form {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.federated-form input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1218;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.endpoint-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.endpoint-row button {
+  padding: 4px 7px;
+}
+
+#federated-summary {
+  margin-top: 10px;
+}
+
 .agent-history {
   display: flex;
   flex-direction: column;
