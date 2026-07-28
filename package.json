@@ -6,7 +6,7 @@
   "packageManager": "npm@11.4.2",
   "scripts": {
     "dev": "vinext dev",
-    "build": "vinext build",
+    "build": "vinext build && node scripts/prepare-site-build.mjs",
     "check": "tsc --noEmit && vinext check",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "export:demo": "cargo run -p genegis-analysis --example export_playground -- public/demo"
