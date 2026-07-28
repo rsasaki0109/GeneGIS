@@ -1,0 +1,374 @@
+{
+  "schema_version": 1,
+  "demo_id": "nagoya-density",
+  "generated_by": "genegis-analysis",
+  "execution_mode": "verified_replay",
+  "prompt_aliases": [
+    "名古屋市の人口密度を表示",
+    "Show population density in Nagoya"
+  ],
+  "map_asset": "/demo/nagoya-density.png",
+  "command": {
+    "id": "98e4e9e8-9273-481e-b49d-cef22f45b0d0",
+    "origin": "ai",
+    "timestamp": "2026-07-28T11:16:18.961426300Z",
+    "command": {
+      "type": "run_workflow",
+      "workflow_id": "cc0f8e96-aab9-43cf-bbd4-3d8f20f65216"
+    }
+  },
+  "workflow": {
+    "id": "cc0f8e96-aab9-43cf-bbd4-3d8f20f65216",
+    "goal": "名古屋市の人口密度を表示",
+    "assumptions": [
+      "行政区域は ward または cho 粒度"
+    ],
+    "inputs": [],
+    "steps": [
+      {
+        "id": "20f647aa-f4fa-4b55-b2f2-ad6f8c68dfec",
+        "operation": "ResolvePlace",
+        "parameters": {
+          "name": "名古屋市"
+        },
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "6e941689-fb38-426f-a27f-a44bef574fc8",
+        "operation": "FindDataset",
+        "parameters": {
+          "area": "Nagoya",
+          "type": "admin_boundary"
+        },
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "ab984f7c-f518-4b2a-8e5b-45cf4f63dbae",
+        "operation": "FindDataset",
+        "parameters": {
+          "area": "Nagoya",
+          "type": "population"
+        },
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "cb635f42-c41e-436d-9d2e-73070fd4ab94",
+        "operation": "LoadBoundary",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "6d8756c8-1c25-4f70-b8a3-3275becc306a",
+        "operation": "LoadPopulation",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "2ecde3f7-5394-4e61-b200-98cbadd03f53",
+        "operation": "NormalizeSchema",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "99d6f2e0-b58c-49e9-bc78-b828034f9386",
+        "operation": "ReprojectForAreaCalculation",
+        "parameters": {
+          "method": "equal_area"
+        },
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "39fa3aca-8391-41a2-8844-c7620c229796",
+        "operation": "CalculateAreaKm2",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "76f1d9c7-4946-4b6a-ad70-0c6ae356e573",
+        "operation": "JoinPopulationToGeometry",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "311e34c3-70e2-44af-82f0-cf18bdb5b2f9",
+        "operation": "CalculateDensity",
+        "parameters": {
+          "formula": "population / area_km2"
+        },
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "8db3b826-8eb1-4c8a-96d6-da6831bb8001",
+        "operation": "GenerateChoropleth",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "e84cdd4b-f038-4938-8db5-48b1becb6dd7",
+        "operation": "VerifyUnits",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "9f62481e-188e-471f-8df8-d01925a4b6c0",
+        "operation": "RenderMap",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      },
+      {
+        "id": "5f0b964f-02c0-4d73-9887-1461b91dea4b",
+        "operation": "AttachSources",
+        "parameters": {},
+        "expected_schema": null,
+        "validation": null,
+        "provenance": null
+      }
+    ],
+    "outputs": [],
+    "citations": [
+      {
+        "title": "国土数値情報 行政区域 (N03) — 愛知県 名古屋市区",
+        "url": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03.html",
+        "license": "国土交通省 国土数値情報",
+        "retrieved_at": null
+      },
+      {
+        "title": "JapanCityGeoJson — N03 derived ward boundaries",
+        "url": "https://github.com/niiyz/JapanCityGeoJson",
+        "license": "Processed from MLIT N03 open data",
+        "retrieved_at": null
+      },
+      {
+        "title": "政府統計の総合窓口 e-Stat — 2020年国勢調査 人口",
+        "url": "https://www.e-stat.go.jp/stat-search/files?page=1&toukei=00200521&tstat=000001136464",
+        "license": "Government open data (Japan)",
+        "retrieved_at": null
+      },
+      {
+        "title": "名古屋市オープンデータカタログ",
+        "url": "https://www.data-nagoya.jp/",
+        "license": "City of Nagoya Open Data",
+        "retrieved_at": null
+      }
+    ],
+    "review_status": "executed"
+  },
+  "provenance": {
+    "entries": [
+      {
+        "id": "07b785cd-d6ca-4613-a74d-cfaeb6f7b6a7",
+        "timestamp": "2026-07-28T11:16:18.961463500Z",
+        "actor": "genegis-analysis",
+        "action": "execute_verified_workflow",
+        "target": "nagoya-wards-density",
+        "details": {
+          "command_id": "98e4e9e8-9273-481e-b49d-cef22f45b0d0",
+          "crs": "EPSG:4326",
+          "license": "Government open data (Japan) + MLIT N03",
+          "planner_mode": "rule_based_mvp",
+          "source_id": "nagoya-wards-density",
+          "source_uri": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-catalog/../../examples/nagoya-population-density/data/nagoya-wards.geojson",
+          "stac_item_id": "nagoya-wards-density",
+          "units": "persons/km²",
+          "verification_passed": true,
+          "verifier": "duckdb_verify"
+        },
+        "workflow_id": "cc0f8e96-aab9-43cf-bbd4-3d8f20f65216"
+      }
+    ]
+  },
+  "dataset": {
+    "id": "nagoya-wards-density",
+    "title": "Nagoya city wards — population density",
+    "description": "16 Nagoya wards with 2020 census population and N03-derived boundaries.",
+    "format": {
+      "kind": "geojson",
+      "media_type": "application/geo+json"
+    },
+    "crs": "EPSG:4326",
+    "bbox": {
+      "min": {
+        "x": 136.792,
+        "y": 35.034,
+        "z": null
+      },
+      "max": {
+        "x": 137.061,
+        "y": 35.26,
+        "z": null
+      }
+    },
+    "uri": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-catalog/../../examples/nagoya-population-density/data/nagoya-wards.geojson",
+    "license": "Government open data (Japan) + MLIT N03",
+    "tags": [
+      "nagoya",
+      "population",
+      "density",
+      "wards"
+    ]
+  },
+  "stac_item": {
+    "stac_version": "1.0.0",
+    "type": "Feature",
+    "id": "nagoya-wards-density",
+    "geometry": {
+      "coordinates": [
+        [
+          [
+            136.792,
+            35.034
+          ],
+          [
+            137.061,
+            35.034
+          ],
+          [
+            137.061,
+            35.26
+          ],
+          [
+            136.792,
+            35.26
+          ],
+          [
+            136.792,
+            35.034
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "bbox": [
+      136.792,
+      35.034,
+      137.061,
+      35.26
+    ],
+    "properties": {
+      "description": "16 Nagoya wards with 2020 census population and N03-derived boundaries.",
+      "genegis:crs": "EPSG:4326",
+      "genegis:format": "geojson",
+      "genegis:license": "Government open data (Japan) + MLIT N03",
+      "genegis:tags": [
+        "nagoya",
+        "population",
+        "density",
+        "wards"
+      ],
+      "title": "Nagoya city wards — population density"
+    },
+    "assets": {
+      "geojson": {
+        "href": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-catalog/../../examples/nagoya-population-density/data/nagoya-wards.geojson",
+        "type": "application/geo+json",
+        "roles": [
+          "data"
+        ],
+        "title": "Nagoya city wards — population density"
+      }
+    },
+    "links": [
+      {
+        "rel": "self",
+        "href": "catalog://nagoya-wards-density",
+        "type": "application/json"
+      }
+    ]
+  },
+  "verification": {
+    "crs": "EPSG:4326",
+    "area_method": "planar_wgs84_approx",
+    "density_unit": "persons/km²",
+    "checks": [
+      {
+        "name": "crs_declared",
+        "passed": true,
+        "detail": "CRS = EPSG:4326"
+      },
+      {
+        "name": "area_method_recorded",
+        "passed": true,
+        "detail": "PlanarWgs84Approx"
+      },
+      {
+        "name": "population_positive",
+        "passed": true,
+        "detail": "16 wards"
+      },
+      {
+        "name": "density_unit",
+        "passed": true,
+        "detail": "persons/km²"
+      },
+      {
+        "name": "feature_count",
+        "passed": true,
+        "detail": "Nagoya has 16 wards"
+      },
+      {
+        "name": "boundary_source",
+        "passed": true,
+        "detail": "国土数値情報 N03 行政区域 (via JapanCityGeoJson)"
+      }
+    ]
+  },
+  "summary": {
+    "crs": "EPSG:4326",
+    "dataset": {
+      "bbox": {
+        "max_x": 137.061,
+        "max_y": 35.26,
+        "min_x": 136.792,
+        "min_y": 35.034
+      },
+      "crs": "EPSG:4326",
+      "format": "geojson",
+      "id": "nagoya-wards-density",
+      "license": "Government open data (Japan) + MLIT N03",
+      "media_type": "application/geo+json",
+      "tags": [
+        "nagoya",
+        "population",
+        "density",
+        "wards"
+      ],
+      "title": "Nagoya city wards — population density",
+      "uri": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-catalog/../../examples/nagoya-population-density/data/nagoya-wards.geojson"
+    },
+    "density_unit": "persons/km²",
+    "goal": "名古屋市の人口密度を表示",
+    "top_density_ward": {
+      "density_per_km2": 75393.91544329425,
+      "ward_name": "港区"
+    },
+    "verification_passed": true,
+    "ward_count": 16
+  },
+  "confidence": 0.99999994
+}

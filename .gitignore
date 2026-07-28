@@ -1,8 +1,13 @@
 /target/
+/target-playground/
 **/target/
 node_modules/
 apps/desktop/node_modules/
 dist/
+.vinext/
+.wrangler/
+.next/
+*.tsbuildinfo
 *.wasm
 !plugins/demo-filter/*.wasm
 .env

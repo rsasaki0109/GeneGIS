@@ -12,6 +12,15 @@
 
 GeneGIS is **not a QGIS clone**. It is a next-generation GIS platform built around workflow graphs, AI agents, cloud-optimized formats, and GPU rendering — designed for spatial intelligence in the GeoAI era.
 
+<p align="center">
+  <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open the zero-install Playground →</strong></a>
+</p>
+
+No install and no API key: run the North Star prompt, inspect all 14 workflow
+operations, verify CRS and units, follow the sources, and share a reproducible
+result URL. The public alpha replays a committed artifact generated and verified
+by the Rust core.
+
 ## Why GeneGIS exists
 
 Traditional GIS asks you to find data, fix CRS, wire geoprocessing by hand, validate results yourself, and export maps elsewhere. GeneGIS inverts that:
@@ -36,82 +45,30 @@ GeneGIS resolves the place, discovers datasets, normalizes CRS, computes density
 | **Figma for GIS** | Collaboration, comments, branches, style systems at the center |
 | **VSCode for GIS** | WASM / TS / Rust / Python SDK + marketplace extensibility |
 
-## Quick start (Phase 0–1)
+## Try it in 30 seconds
+
+The fastest path is the [public Playground](https://genegis-playground.rsasaki0109.chatgpt.site).
+For local execution:
 
 ```bash
-# Build the workspace
-cargo build --workspace
-
-# Print the MVP workflow graph (IR only)
-cargo run -p genegis-cli -- workflow run nagoya-density
-
 # North-star one-liner (Intent → Workflow → Map)
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示"
 
-# Plan only (human-in-the-loop / Strict mode preview)
+# Inspect the workflow without executing it
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --plan-only
-
-# Execute analysis + DuckDB verification + summary JSON
-cargo run -p genegis-cli -- workflow run nagoya-density --execute
-
-# Execute and export choropleth HTML map
-cargo run -p genegis-cli -- workflow run nagoya-density -x --html -o nagoya-density.html
-
-# Execute and export choropleth PNG map
-cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --png --no-html
-
-# Rebuild ward boundaries from 国土数値情報 N03 (optional)
-python3 scripts/build-nagoya-wards.py
-
-# Full example (writes examples/nagoya-population-density/output/)
-cargo run -p nagoya-population-density
-
-# COPC metadata smoke (local PDAL fixture)
-cargo run -p copc-metadata
-
-# Plugin discovery smoke
-genegis plugin list
-
-# Collaboration smoke
-genegis collab comment list
-genegis collab export -o .genegis/collab.json
-
-# Agent orchestration smoke (offline rule planner + DuckDB verify)
-genegis agent run "名古屋市の人口密度を表示"
-genegis agent run "名古屋市の人口密度を表示" --json -o .genegis/agent-run.json
-genegis agent plan "名古屋市の人口密度を表示" && genegis agent execute
-genegis agent export-audit -o .genegis/audit-bundle.json
-
-# Second verified workflow (remote COG metadata via HTTP range-read)
-genegis agent run "リモートCOGデモのメタデータを表示"
-
-# Third verified workflow (local bundled COG — offline)
-genegis agent run "ローカルCOGデモのメタデータを表示"
-genegis catalog stac list
-
-# Multi-client collab demo (terminal 1: server, terminal 2: workbench)
-cargo run -p genegis-server
-cargo run -p genegis-workbench
-# CLI sync against server
-genegis collab pull
-genegis collab comment add "Check 中区 density" --author reviewer
-genegis collab push
-
-# Desktop workbench (Tauri — requires extra patches on Rust 1.94)
-cd apps/desktop && npm install && npm run dev
-
-# Local web workbench (recommended MVP launcher; no Tauri deps)
-cargo run -p genegis-workbench
-
-# Collab sync server (GET/PUT session JSON)
-cargo run -p genegis-server
-
-# WebGPU canvas prototype (requires GPU + display)
-cargo run -p genegis-render --example canvas_prototype
-
-# WebGPU choropleth — Nagoya population density (Phase 2 alpha)
-cargo run -p genegis-render --example choropleth_nagoya
 ```
+
+### Develop the public Playground
+
+```bash
+cargo run -p genegis-analysis --example export_playground -- public/demo
+npm ci
+npm run check
+npm run dev
+```
+
+See [`docs/adr/0005-public-playground.md`](docs/adr/0005-public-playground.md)
+for the verified-replay architecture.
 
 ## Architecture at a glance
 
@@ -136,19 +93,16 @@ docs/       Architecture, ADRs, RFCs, roadmap
 examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 ```
 
-## Roadmap → GitHub Stars
+## Roadmap
 
-| Phase | Theme | Star target |
-|-------|-------|-------------|
-| 0 | Foundation / Manifesto | 0 → 300 |
-| 1 | MVP: Nagoya density demo | 300 → 1,000 |
-| 2 | Alpha: GPU choropleth, GeoParquet, catalog | 1,000 → 2,500 |
-| 3 | Beta: STAC, COG, GPU workbench integration | 2,500 → 5,000 |
-| 4 | Plugins & COPC — SDK, WASM host, point cloud alpha | 5,000 → 7,500 | [`docs/roadmap/phase-4-plugins.md`](docs/roadmap/phase-4-plugins.md) |
-| 5 | Figma for GIS — comments, branches, collab sync | 7,500 → 10,000 | [`docs/roadmap/phase-5-collab.md`](docs/roadmap/phase-5-collab.md) |
-| 6 | Autonomous GIS platform — multi-agent orchestration | 10,000 → 15,000 | [`docs/roadmap/phase-6-autonomous.md`](docs/roadmap/phase-6-autonomous.md) |
-| 7 | Audit trail & release workbench — run history + provenance UI | 15,000 → 20,000 | [`docs/roadmap/phase-7-release.md`](docs/roadmap/phase-7-release.md) |
-| 8 | Intent expansion — multi-workflow agent verify beyond Nagoya | 20,000 → 30,000 | [`docs/roadmap/phase-8-intent-expansion.md`](docs/roadmap/phase-8-intent-expansion.md) |
+| Phase | Theme |
+|-------|-------|
+| 4 | [Plugins & COPC — SDK, WASM host, point cloud alpha](docs/roadmap/phase-4-plugins.md) |
+| 5 | [Figma for GIS — comments, branches, collab sync](docs/roadmap/phase-5-collab.md) |
+| 6 | [Autonomous GIS platform — multi-agent orchestration](docs/roadmap/phase-6-autonomous.md) |
+| 7 | [Audit trail & release workbench — run history + provenance UI](docs/roadmap/phase-7-release.md) |
+| 8 | [Intent expansion — multi-workflow agent verify beyond Nagoya](docs/roadmap/phase-8-intent-expansion.md) |
+| 10 | [Federated catalog search and cloud execution](docs/roadmap/phase-10-federated-catalog.md) |
 
 ## Tech stack (decisions)
 
