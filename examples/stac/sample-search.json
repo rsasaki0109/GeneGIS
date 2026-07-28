@@ -21,7 +21,10 @@
       "bbox": [136.792, 35.034, 137.061, 35.26],
       "properties": {
         "title": "Sample federated STAC item",
-        "description": "Nagoya fixture returned by the offline Phase 10 search endpoint."
+        "description": "Nagoya fixture returned by the offline Phase 10 search endpoint.",
+        "proj:code": "EPSG:4326",
+        "genegis:units": "degrees",
+        "license": "CC-BY-4.0"
       },
       "assets": {
         "data": {
@@ -29,6 +32,12 @@
           "type": "application/geo+json",
           "roles": ["data"],
           "title": "Nagoya wards GeoJSON"
+        },
+        "geoparquet": {
+          "href": "../../examples/nagoya-population-density/data/nagoya-wards.parquet",
+          "type": "application/vnd.apache.parquet",
+          "roles": ["data"],
+          "title": "Nagoya wards GeoParquet"
         }
       },
       "links": []

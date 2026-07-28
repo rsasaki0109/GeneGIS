@@ -5,18 +5,22 @@
 mod asset;
 mod error;
 mod http;
+mod policy;
 mod range;
 
 pub use asset::{
-    fetch_asset, is_remote_uri, read_asset_bytes, read_asset_range, read_local_bytes,
-    read_local_range, AssetFetchResult, COG_HEADER_PREFIX_BYTES,
+    fetch_asset, is_remote_uri, read_asset_bytes, read_asset_range,
+    read_asset_range_with_policy, read_local_bytes, read_local_range, AssetFetchResult,
+    COG_HEADER_PREFIX_BYTES,
 };
 pub use error::StorageError;
 pub use http::{
-    fetch_http_bytes, fetch_http_range, parse_content_range_total, post_http_json_bytes,
-    post_http_json_bytes_with_headers,
-    probe_http_content_length, HttpFetchResult,
+    fetch_http_bytes, fetch_http_bytes_with_policy, fetch_http_range,
+    fetch_http_range_with_policy, parse_content_range_total, post_http_json_bytes,
+    post_http_json_bytes_with_headers, post_http_json_bytes_with_policy,
+    probe_http_content_length, probe_http_content_length_with_policy, HttpFetchResult,
 };
+pub use policy::{RemoteAccessPolicy, REMOTE_ALLOWED_HOSTS_ENV};
 pub use range::ByteRange;
 
 #[cfg(test)]
@@ -38,6 +42,22 @@ mod tests {
             handle_http_request(&mut stream, &body, &hits);
         });
 
+        format!("http://{addr}/asset.bin")
+    }
+
+    fn spawn_raw_http_fixture(response: Vec<u8>, delay_ms: u64) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
+            if delay_ms > 0 {
+                thread::sleep(std::time::Duration::from_millis(delay_ms));
+            }
+            let _ = stream.write_all(&response);
+            finish_http_response(&mut stream);
+        });
         format!("http://{addr}/asset.bin")
     }
 
@@ -166,5 +186,40 @@ mod tests {
         let url = spawn_http_fixture(body);
         let len = probe_http_content_length(&url).expect("probe");
         assert_eq!(len, 5000);
+    }
+
+    #[test]
+    fn response_body_limit_is_enforced() {
+        let url = spawn_http_fixture(vec![7; 64]);
+        let policy = RemoteAccessPolicy {
+            max_response_bytes: 8,
+            ..RemoteAccessPolicy::from_env()
+        };
+        let error = fetch_http_bytes_with_policy(&url, &policy).expect_err("oversized body");
+        assert!(error.to_string().contains("larger than request limit"));
+    }
+
+    #[test]
+    fn redirects_are_not_followed_by_secure_default() {
+        let response =
+            b"HTTP/1.1 302 Found\r\nLocation: https://example.com/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .to_vec();
+        let url = spawn_raw_http_fixture(response, 0);
+        let error = fetch_http_bytes_with_policy(&url, &RemoteAccessPolicy::from_env())
+            .expect_err("redirect rejected");
+        assert!(error.to_string().contains("HTTP 302"));
+    }
+
+    #[test]
+    fn global_timeout_is_enforced() {
+        let response =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_vec();
+        let url = spawn_raw_http_fixture(response, 100);
+        let policy = RemoteAccessPolicy {
+            timeout_ms: 10,
+            ..RemoteAccessPolicy::from_env()
+        };
+        let error = fetch_http_bytes_with_policy(&url, &policy).expect_err("timeout");
+        assert!(error.to_string().to_ascii_lowercase().contains("timeout"));
     }
 }

@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use ureq::Error as UreqError;
 
 use crate::error::StorageError;
+use crate::policy::RemoteAccessPolicy;
 use crate::range::ByteRange;
 
 /// Result of an HTTP GET (full or ranged).
@@ -16,18 +19,36 @@ pub struct HttpFetchResult {
 
 /// Download the full resource body with a plain GET.
 pub fn fetch_http_bytes(url: &str) -> Result<HttpFetchResult, StorageError> {
-    let mut response = ureq::get(url)
+    fetch_http_bytes_with_policy(url, &RemoteAccessPolicy::default())
+}
+
+/// Download a full resource under an explicit remote access policy.
+pub fn fetch_http_bytes_with_policy(
+    url: &str,
+    policy: &RemoteAccessPolicy,
+) -> Result<HttpFetchResult, StorageError> {
+    policy.validate_url(url)?;
+    let agent = policy_agent(policy);
+    let mut response = agent
+        .get(url)
         .call()
         .map_err(map_transport_error)?;
 
     let status = response.status().as_u16();
     if status != 200 {
-        let detail = response.body_mut().read_to_string().unwrap_or_default();
+        let detail = response
+            .body_mut()
+            .with_config()
+            .limit(policy.max_response_bytes)
+            .read_to_string()
+            .unwrap_or_default();
         return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
     }
 
     let bytes = response
         .body_mut()
+        .with_config()
+        .limit(policy.max_response_bytes)
         .read_to_vec()
         .map_err(map_transport_error)?;
 
@@ -49,7 +70,26 @@ pub fn post_http_json_bytes_with_headers(
     body: &[u8],
     headers: &[(String, String)],
 ) -> Result<HttpFetchResult, StorageError> {
-    let mut request = ureq::post(url)
+    post_http_json_bytes_with_policy(url, body, headers, &RemoteAccessPolicy::default())
+}
+
+/// POST JSON under an explicit remote access policy.
+pub fn post_http_json_bytes_with_policy(
+    url: &str,
+    body: &[u8],
+    headers: &[(String, String)],
+    policy: &RemoteAccessPolicy,
+) -> Result<HttpFetchResult, StorageError> {
+    policy.validate_url(url)?;
+    if body.len() as u64 > policy.max_response_bytes {
+        return Err(StorageError::Http(format!(
+            "request body exceeds configured limit of {} bytes",
+            policy.max_response_bytes
+        )));
+    }
+    let agent = policy_agent(policy);
+    let mut request = agent
+        .post(url)
         .header("Content-Type", "application/json")
         .header("Content-Length", &body.len().to_string());
     for (name, value) in headers {
@@ -61,12 +101,19 @@ pub fn post_http_json_bytes_with_headers(
 
     let status = response.status().as_u16();
     if status < 200 || status >= 300 {
-        let detail = response.body_mut().read_to_string().unwrap_or_default();
+        let detail = response
+            .body_mut()
+            .with_config()
+            .limit(policy.max_response_bytes)
+            .read_to_string()
+            .unwrap_or_default();
         return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
     }
 
     let bytes = response
         .body_mut()
+        .with_config()
+        .limit(policy.max_response_bytes)
         .read_to_vec()
         .map_err(map_transport_error)?;
 
@@ -79,14 +126,37 @@ pub fn post_http_json_bytes_with_headers(
 
 /// Download a byte range using the HTTP `Range` header.
 pub fn fetch_http_range(url: &str, range: &ByteRange) -> Result<HttpFetchResult, StorageError> {
-    let mut response = ureq::get(url)
+    fetch_http_range_with_policy(url, range, &RemoteAccessPolicy::default())
+}
+
+/// Download a byte range under an explicit remote access policy.
+pub fn fetch_http_range_with_policy(
+    url: &str,
+    range: &ByteRange,
+    policy: &RemoteAccessPolicy,
+) -> Result<HttpFetchResult, StorageError> {
+    policy.validate_url(url)?;
+    if range.len() > policy.max_response_bytes {
+        return Err(StorageError::Http(format!(
+            "requested range exceeds configured limit of {} bytes",
+            policy.max_response_bytes
+        )));
+    }
+    let agent = policy_agent(policy);
+    let mut response = agent
+        .get(url)
         .header("Range", &range.header_value())
         .call()
         .map_err(map_transport_error)?;
 
     let status = response.status().as_u16();
     if status != 206 && status != 200 {
-        let detail = response.body_mut().read_to_string().unwrap_or_default();
+        let detail = response
+            .body_mut()
+            .with_config()
+            .limit(policy.max_response_bytes)
+            .read_to_string()
+            .unwrap_or_default();
         return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
     }
 
@@ -98,6 +168,8 @@ pub fn fetch_http_range(url: &str, range: &ByteRange) -> Result<HttpFetchResult,
 
     let bytes = response
         .body_mut()
+        .with_config()
+        .limit(policy.max_response_bytes)
         .read_to_vec()
         .map_err(map_transport_error)?;
 
@@ -124,7 +196,17 @@ pub fn parse_content_range_total(content_range: &str) -> Option<u64> {
 
 /// Probe remote object size via `Content-Length` (HEAD) or `Content-Range` (`bytes=0-0`).
 pub fn probe_http_content_length(url: &str) -> Result<u64, StorageError> {
-    if let Ok(head) = ureq::head(url).call() {
+    probe_http_content_length_with_policy(url, &RemoteAccessPolicy::default())
+}
+
+/// Probe object size under an explicit remote access policy.
+pub fn probe_http_content_length_with_policy(
+    url: &str,
+    policy: &RemoteAccessPolicy,
+) -> Result<u64, StorageError> {
+    policy.validate_url(url)?;
+    let agent = policy_agent(policy);
+    if let Ok(head) = agent.head(url).call() {
         if head.status().as_u16() == 200 {
             if let Some(len) = head
                 .headers()
@@ -137,7 +219,8 @@ pub fn probe_http_content_length(url: &str) -> Result<u64, StorageError> {
         }
     }
 
-    let response = ureq::get(url)
+    let response = agent
+        .get(url)
         .header("Range", "bytes=0-0")
         .call()
         .map_err(map_transport_error)?;
@@ -160,6 +243,15 @@ pub fn probe_http_content_length(url: &str) -> Result<u64, StorageError> {
             "unable to parse Content-Range total from {content_range:?}"
         ))
     })
+}
+
+fn policy_agent(policy: &RemoteAccessPolicy) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_millis(policy.timeout_ms)))
+        .max_redirects(policy.max_redirects)
+        .max_redirects_will_error(true)
+        .build()
+        .into()
 }
 
 fn map_transport_error(err: UreqError) -> StorageError {

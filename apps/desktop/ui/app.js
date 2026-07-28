@@ -388,23 +388,63 @@ async function searchFederatedStac() {
     if (!endpointIds.length) {
       throw new Error("Select at least one endpoint");
     }
+    const searchRequest = {
+      endpoint_ids: endpointIds,
+      bbox: parseFederatedBbox(),
+      limit: 25,
+    };
     const response = await fetch("/api/stac/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        endpoint_ids: endpointIds,
-        bbox: parseFederatedBbox(),
-        limit: 25,
-      }),
+      body: JSON.stringify(searchRequest),
     });
     const payload = await response.json();
     if (!payload.ok || !payload.result) {
       throw new Error(payload.error || "Federated search failed");
     }
     const result = payload.result;
+    const binding = payload.binding;
     const succeeded = result.endpoints.filter((endpoint) => !endpoint.error).length;
-    federatedSummaryEl.textContent =
-      `${result.items.length} items · ${succeeded}/${result.endpoints.length} endpoints`;
+    federatedSummaryEl.textContent = binding
+      ? `${result.items.length} items · ${succeeded}/${result.endpoints.length} endpoints · bound ${binding.selected.asset_key}`
+      : `${result.items.length} items · ${succeeded}/${result.endpoints.length} endpoints · no verified GeoParquet`;
+    if (binding) {
+      const decision = document.createElement("article");
+      decision.className = "stac-item";
+      const passed = binding.selected.verifications.filter((check) => check.passed).length;
+      decision.textContent =
+        `Selected ${binding.selected.asset_key} · ${passed}/${binding.selected.verifications.length} checks · score ${binding.selected.score}`;
+      decision.title = binding.selection_reason;
+      if (/^https?:\/\//.test(binding.selected.href)) {
+        const execute = document.createElement("button");
+        execute.type = "button";
+        execute.className = "secondary";
+        execute.textContent = "Range Read + verify";
+        execute.addEventListener("click", async () => {
+          execute.disabled = true;
+          execute.textContent = "Executing…";
+          try {
+            const executionResponse = await fetch("/api/stac/execute", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(searchRequest),
+            });
+            const receipt = await executionResponse.json();
+            if (!receipt.ok || !receipt.verification?.passed) {
+              throw new Error(receipt.error || "Execution verification failed");
+            }
+            execute.textContent =
+              `Verified · ${receipt.execution.range_requests} ranges · ${receipt.execution.dataset.features.length} features`;
+            setStatus("Federated GeoParquet verified");
+          } catch (error) {
+            execute.textContent = `Failed · ${error.message || error}`;
+            execute.disabled = false;
+          }
+        });
+        decision.appendChild(execute);
+      }
+      federatedResultsEl.appendChild(decision);
+    }
     for (const resultItem of result.items) {
       const card = document.createElement("article");
       card.className = "stac-item";

@@ -4,6 +4,7 @@ use std::io::{Read, Seek, SeekFrom};
 use crate::error::StorageError;
 use crate::http::{fetch_http_bytes, fetch_http_range};
 use crate::range::ByteRange;
+use crate::RemoteAccessPolicy;
 
 /// Recommended prefix size for COG / GeoTIFF header probes over HTTP.
 pub const COG_HEADER_PREFIX_BYTES: u64 = 65_536;
@@ -41,8 +42,17 @@ pub fn read_asset_bytes(uri: &str) -> Result<Vec<u8>, StorageError> {
 
 /// Read a byte range from a catalog asset (local path or HTTP URL).
 pub fn read_asset_range(uri: &str, range: &ByteRange) -> Result<Vec<u8>, StorageError> {
+    read_asset_range_with_policy(uri, range, &RemoteAccessPolicy::default())
+}
+
+/// Read a local or remote byte range under an explicit remote access policy.
+pub fn read_asset_range_with_policy(
+    uri: &str,
+    range: &ByteRange,
+    policy: &RemoteAccessPolicy,
+) -> Result<Vec<u8>, StorageError> {
     if is_remote_uri(uri) {
-        Ok(fetch_http_range(uri, range)?.bytes)
+        Ok(crate::fetch_http_range_with_policy(uri, range, policy)?.bytes)
     } else {
         read_local_range(uri, range)
     }

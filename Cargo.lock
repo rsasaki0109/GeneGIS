@@ -2224,6 +2224,7 @@ dependencies = [
  "genegis-geometry",
  "genegis-raster",
  "genegis-storage",
+ "genegis-vector",
  "genegis-workflow",
  "serde",
  "serde_json",
@@ -2425,6 +2426,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "ureq",
+ "url",
 ]
 
 [[package]]
@@ -2495,6 +2497,8 @@ dependencies = [
  "genegis-collab",
  "genegis-core",
  "genegis-plugin-host",
+ "genegis-storage",
+ "genegis-vector",
  "genegis-workflow",
  "open",
  "serde",

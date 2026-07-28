@@ -16,15 +16,21 @@ use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
 use genegis_catalog::{
     bind_stac_item, browse_alpha_stac_collection, endpoint_registry_path, extended_catalog,
-    fetch_stac_collection, import_stac_item_url, load_catalog_overlay, DatasetRecord,
-    EndpointRegistry, StacSearchRequest,
+    fetch_stac_collection, import_stac_item_url, load_catalog_overlay, AssetRequirements,
+    DatasetRecord, EndpointRegistry, StacSearchRequest,
 };
 use genegis_collab::{
     pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL,
 };
 use genegis_core::{Command, CommandEnvelope, CommandOrigin};
 use genegis_plugin_host::PluginHost;
-use genegis_workflow::{federated_stac_search_template, stac_endpoint_registry_template};
+use genegis_vector::{
+    read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions,
+};
+use genegis_workflow::{
+    federated_asset_execution_template, federated_stac_search_template,
+    stac_endpoint_registry_template,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
@@ -251,6 +257,7 @@ async fn main() {
         )
         .route("/api/stac/endpoints/remove", post(stac_endpoint_remove))
         .route("/api/stac/search", post(federated_stac_search))
+        .route("/api/stac/execute", post(execute_federated_stac_asset))
         .route("/api/plugins", get(list_plugins))
         .route("/api/collab", get(collab_snapshot))
         .route("/api/collab/comment", post(add_comment))
@@ -870,7 +877,14 @@ async fn federated_stac_search(
         },
     );
     let workflow = federated_stac_search_template(&endpoint_ids);
-    let result = catalog.search(&request);
+    let remote_policy = genegis_storage::RemoteAccessPolicy::default();
+    let result = catalog.search_with_policy(&request, &remote_policy);
+    let binding = result
+        .compare_and_bind(&AssetRequirements {
+            bbox: request.bbox,
+            ..AssetRequirements::default()
+        })
+        .ok();
     let persisted = {
         let mut registry = state
             .endpoint_registry
@@ -883,11 +897,139 @@ async fn federated_stac_search(
     match persisted {
         Ok(()) => (
             StatusCode::OK,
-            Json(serde_json::json!({ "ok": true, "result": result })),
+            Json(serde_json::json!({
+                "ok": true,
+                "result": result,
+                "binding": binding,
+                "remote_policy": remote_policy
+            })),
         ),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
+        ),
+    }
+}
+
+async fn execute_federated_stac_asset(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<FederatedSearchRequest>,
+) -> impl IntoResponse {
+    let request = StacSearchRequest {
+        bbox: body.bbox,
+        datetime: body.datetime,
+        collections: body.collections,
+        limit: body.limit,
+    };
+    let (catalog, endpoint_ids) = {
+        let registry = state
+            .endpoint_registry
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        match registry.federated_catalog(&body.endpoint_ids) {
+            Ok(catalog) => {
+                let ids = catalog
+                    .endpoints()
+                    .iter()
+                    .map(|endpoint| endpoint.id.clone())
+                    .collect::<Vec<_>>();
+                (catalog, ids)
+            }
+            Err(error) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "ok": false, "error": error.to_string() })),
+                );
+            }
+        }
+    };
+    let remote_policy = genegis_storage::RemoteAccessPolicy::default();
+    let search = catalog.search_with_policy(&request, &remote_policy);
+    let binding = match search.compare_and_bind(&AssetRequirements {
+        bbox: request.bbox,
+        ..AssetRequirements::default()
+    }) {
+        Ok(binding) => binding,
+        Err(error) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "ok": false,
+                    "error": error.to_string(),
+                    "search": search
+                })),
+            );
+        }
+    };
+    let uri = &binding.selected.href;
+    if !genegis_storage::is_remote_uri(uri) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "selected asset is not HTTP(S); Range Read execution requires a remote GeoParquet",
+                "binding": binding,
+            })),
+        );
+    }
+    let command = CommandEnvelope::new(
+        CommandOrigin::Ui,
+        Command::BindStacAsset {
+            stac_item_key: binding.selected.stac_item_key.clone(),
+            asset_key: binding.selected.asset_key.clone(),
+            source_endpoints: binding.selected.source_endpoints.clone(),
+            href: uri.clone(),
+            media_type: binding.selected.media_type.clone(),
+            crs: binding.crs.clone(),
+            units: binding.units.clone(),
+            license: binding.license.clone(),
+        },
+    );
+    let workflow = federated_asset_execution_template(
+        &endpoint_ids,
+        &binding.selected.stac_item_key,
+        &binding.selected.asset_key,
+        uri,
+    );
+    match read_geoparquet_uri_with_options_and_policy(
+        uri,
+        GeoParquetReadOptions {
+            row_groups: Some(vec![0]),
+        },
+        remote_policy.clone(),
+    ) {
+        Ok(execution) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": true,
+                "command": command,
+                "workflow": workflow,
+                "binding": binding,
+                "remote_policy": remote_policy,
+                "execution": execution,
+                "verification": {
+                    "passed": execution.range_requests > 0
+                        && execution.dataset.crs == binding.crs
+                        && !execution.schema_fields.is_empty(),
+                    "checks": {
+                        "http_range_requests": execution.range_requests,
+                        "schema_fields": execution.schema_fields.len(),
+                        "crs_matches_binding": execution.dataset.crs == binding.crs,
+                        "source_matches_binding": execution.source_uri == binding.selected.href,
+                    }
+                }
+            })),
+        ),
+        Err(error) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": error.to_string(),
+                "command": command,
+                "workflow": workflow,
+                "binding": binding,
+                "remote_policy": remote_policy,
+            })),
         ),
     }
 }

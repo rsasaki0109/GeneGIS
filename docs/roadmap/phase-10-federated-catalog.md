@@ -2,7 +2,7 @@
 
 **Goal:** Search and bind datasets across federated STAC endpoints and cloud GeoParquet assets.
 
-**Status:** Alpha complete; beta in progress.
+**Status:** Complete.
 
 ## Tracks
 
@@ -28,16 +28,16 @@
 ### Phase 10 beta — cloud execution
 
 - [x] Read remote GeoParquet metadata and selected row groups with HTTP range requests
-- [ ] Bind a discovered asset through Command + GeoWorkflow IR
-- [ ] Verify schema, CRS, units, license, and source coverage before execution
-- [ ] Record source URL, STAC identity, retrieval time, and verification provenance
+- [x] Bind a discovered asset through Command + GeoWorkflow IR
+- [x] Verify schema, CRS, units, license, and source coverage across binding and execution
+- [x] Record source URL, STAC identity, retrieval time, and verification provenance
 
 ### Phase 10 gamma — agent and release hardening
 
-- [ ] Let the planner compare compatible candidates and explain its selection
-- [ ] Add allowlisted domains, response-size limits, timeouts, and redirect policy
-- [ ] Add federated-search → bind → execute → verify E2E coverage
-- [ ] Keep the offline Nagoya north-star workflow passing in CI
+- [x] Let the planner compare compatible candidates and explain its selection
+- [x] Add allowlisted domains, response-size limits, timeouts, and redirect policy
+- [x] Add federated-search → bind → execute → verify E2E coverage
+- [x] Keep the offline Nagoya north-star workflow passing in CI
 
 ## Alpha CLI
 
@@ -51,6 +51,21 @@ genegis catalog stac search \
 HTTP endpoint URLs may be either a STAC API root or an explicit `/search` URL.
 Local endpoints are STAC ItemCollection / GeoJSON FeatureCollection fixtures and
 use the same request and result model as HTTP searches.
+
+The Workbench discovery panel shows the selected asset, verification count, and
+score. For remote GeoParquet assets, **Range Read + verify** returns the Command,
+GeoWorkflow, binding decision, execution report, and machine-readable checks in
+one receipt.
+
+External hosts are denied by default. Allow trusted STAC and asset hosts with:
+
+```bash
+GENEGIS_REMOTE_ALLOWED_HOSTS=earth-search.aws.element84.com,example-bucket.s3.amazonaws.com
+```
+
+Exact hostnames and `*.example.org` wildcard suffixes are supported. Loopback is
+allowed for local fixtures. The default policy rejects URL credentials and
+redirects, limits each response to 8 MiB, and applies a 15-second global timeout.
 
 ## North star (unchanged)
 

@@ -110,10 +110,70 @@ pub fn remote_geoparquet_range_template(uri: &str, row_groups: Option<&[usize]>)
     workflow
 }
 
+/// Federated search through verified asset binding and range-read execution.
+pub fn federated_asset_execution_template(
+    endpoint_ids: &[String],
+    stac_item_key: &str,
+    asset_key: &str,
+    uri: &str,
+) -> GeoWorkflow {
+    let mut workflow =
+        GeoWorkflow::new("Search, compare, bind, execute, and verify a federated STAC asset");
+    workflow.inputs.push(serde_json::json!({
+        "endpoint_ids": endpoint_ids,
+        "stac_item_key": stac_item_key,
+        "asset_key": asset_key,
+        "uri": uri,
+        "search_crs": "EPSG:4326",
+        "search_units": "degrees",
+    }));
+    workflow.steps = vec![
+        WorkflowStep::new(
+            "EnforceRemoteAccessPolicy",
+            serde_json::json!({
+                "allowed_hosts_env": "GENEGIS_REMOTE_ALLOWED_HOSTS",
+                "allow_loopback": true,
+                "max_response_bytes": 8388608,
+                "timeout_ms": 15000,
+                "max_redirects": 0,
+                "url_credentials": false
+            }),
+        ),
+        WorkflowStep::new("SearchStacItems", serde_json::json!({ "method": "POST" })),
+        WorkflowStep::new(
+            "CompareAssetCandidates",
+            serde_json::json!({ "policy": "deterministic_verified_score" }),
+        ),
+        WorkflowStep::new(
+            "VerifyAssetMetadata",
+            serde_json::json!({
+                "schema": true,
+                "crs": true,
+                "units": true,
+                "license": true,
+                "source_coverage": true
+            }),
+        ),
+        WorkflowStep::new(
+            "BindStacAsset",
+            serde_json::json!({ "stac_item_key": stac_item_key, "asset_key": asset_key }),
+        ),
+        WorkflowStep::new(
+            "ReadGeoParquetRanges",
+            serde_json::json!({ "read_mode": "http_range" }),
+        ),
+        WorkflowStep::new("VerifyExecution", serde_json::json!({ "provenance": true })),
+        WorkflowStep::new("RecordProvenance", serde_json::json!({})),
+    ];
+    workflow
+}
+
 /// MVP north-star workflow: Nagoya population density.
 pub fn nagoya_population_density_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("名古屋市の人口密度を表示");
-    workflow.assumptions.push("行政区域は ward または cho 粒度".into());
+    workflow
+        .assumptions
+        .push("行政区域は ward または cho 粒度".into());
     workflow.steps = vec![
         WorkflowStep::new("ResolvePlace", serde_json::json!({ "name": "名古屋市" })),
         WorkflowStep::new(
@@ -148,7 +208,9 @@ pub fn nagoya_population_density_template() -> GeoWorkflow {
 /// Remote COG / GeoTIFF metadata probe workflow (catalog + HTTP range-read demo).
 pub fn remote_cog_metadata_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("リモートCOGデモのメタデータを表示");
-    workflow.assumptions.push("Asset is fetched over HTTP range-read when remote".into());
+    workflow
+        .assumptions
+        .push("Asset is fetched over HTTP range-read when remote".into());
     workflow.steps = vec![
         WorkflowStep::new(
             "FindDataset",
@@ -167,7 +229,9 @@ pub fn remote_cog_metadata_template() -> GeoWorkflow {
 /// Local bundled COG metadata probe workflow (offline fixture).
 pub fn local_cog_metadata_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("ローカルCOGデモのメタデータを表示");
-    workflow.assumptions.push("Asset is read from bundled smoke GeoTIFF fixture".into());
+    workflow
+        .assumptions
+        .push("Asset is read from bundled smoke GeoTIFF fixture".into());
     workflow.steps = vec![
         WorkflowStep::new(
             "FindDataset",
@@ -186,13 +250,18 @@ pub fn local_cog_metadata_template() -> GeoWorkflow {
 /// Nagoya GeoParquet read + feature-count verification workflow (Phase 9 alpha).
 pub fn nagoya_geoparquet_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("名古屋 wards GeoParquet を検証");
-    workflow.assumptions.push("Bundled GeoParquet fixture with 16 Nagoya wards".into());
+    workflow
+        .assumptions
+        .push("Bundled GeoParquet fixture with 16 Nagoya wards".into());
     workflow.steps = vec![
         WorkflowStep::new(
             "FindDataset",
             serde_json::json!({ "tags": ["nagoya", "geoparquet", "demo"] }),
         ),
-        WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new(
+            "LoadGeoParquet",
+            serde_json::json!({ "format": "geoparquet" }),
+        ),
         WorkflowStep::new(
             "VerifyFeatureCount",
             serde_json::json!({ "expected": 16, "field": "ward_name" }),
@@ -205,13 +274,18 @@ pub fn nagoya_geoparquet_template() -> GeoWorkflow {
 /// Nagoya GeoParquet population density choropleth workflow (Phase 9 beta).
 pub fn nagoya_geoparquet_density_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("名古屋 GeoParquet 人口密度を表示");
-    workflow.assumptions.push("Density computed from bundled GeoParquet wards fixture".into());
+    workflow
+        .assumptions
+        .push("Density computed from bundled GeoParquet wards fixture".into());
     workflow.steps = vec![
         WorkflowStep::new(
             "FindDataset",
             serde_json::json!({ "tags": ["nagoya", "geoparquet", "density"] }),
         ),
-        WorkflowStep::new("LoadGeoParquet", serde_json::json!({ "format": "geoparquet" })),
+        WorkflowStep::new(
+            "LoadGeoParquet",
+            serde_json::json!({ "format": "geoparquet" }),
+        ),
         WorkflowStep::new("CalculateAreaKm2", serde_json::json!({})),
         WorkflowStep::new(
             "CalculateDensity",
@@ -228,7 +302,9 @@ pub fn nagoya_geoparquet_density_template() -> GeoWorkflow {
 /// External STAC collection fetch workflow (Phase 9 beta).
 pub fn external_stac_fetch_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("外部 STAC collection を fetch");
-    workflow.assumptions.push("Collection URL is extracted from the user prompt".into());
+    workflow
+        .assumptions
+        .push("Collection URL is extracted from the user prompt".into());
     workflow.steps = vec![
         WorkflowStep::new(
             "FindDataset",
