@@ -1,0 +1,38 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "stac_version": "1.0.0",
+      "type": "Feature",
+      "id": "genegis-sample-external-item",
+      "collection": "genegis-sample-external",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [136.792, 35.034],
+            [137.061, 35.034],
+            [137.061, 35.26],
+            [136.792, 35.26],
+            [136.792, 35.034]
+          ]
+        ]
+      },
+      "bbox": [136.792, 35.034, 137.061, 35.26],
+      "properties": {
+        "title": "Sample federated STAC item",
+        "description": "Nagoya fixture returned by the offline Phase 10 search endpoint."
+      },
+      "assets": {
+        "data": {
+          "href": "../../examples/nagoya-population-density/data/nagoya-wards.geojson",
+          "type": "application/geo+json",
+          "roles": ["data"],
+          "title": "Nagoya wards GeoJSON"
+        }
+      },
+      "links": []
+    }
+  ],
+  "links": []
+}

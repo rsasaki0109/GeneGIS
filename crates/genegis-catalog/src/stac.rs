@@ -32,10 +32,13 @@ pub struct StacItem {
     #[serde(rename = "type")]
     pub item_type: String,
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection: Option<String>,
     pub geometry: Value,
     pub bbox: [f64; 4],
     pub properties: Value,
     pub assets: HashMap<String, StacAsset>,
+    #[serde(default)]
     pub links: Vec<StacLink>,
 }
 
@@ -44,6 +47,7 @@ pub struct StacAsset {
     pub href: String,
     #[serde(rename = "type")]
     pub media_type: String,
+    #[serde(default)]
     pub roles: Vec<String>,
     pub title: Option<String>,
 }
@@ -64,6 +68,7 @@ impl DatasetRecord {
             stac_version: "1.0.0".into(),
             item_type: "Feature".into(),
             id: self.id.clone(),
+            collection: None,
             geometry: bbox_polygon_geometry(bbox),
             bbox,
             properties: stac_properties(self),

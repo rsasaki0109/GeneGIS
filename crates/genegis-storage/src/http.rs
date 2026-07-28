@@ -38,6 +38,32 @@ pub fn fetch_http_bytes(url: &str) -> Result<HttpFetchResult, StorageError> {
     })
 }
 
+/// POST a JSON request and return the response body.
+pub fn post_http_json_bytes(url: &str, body: &[u8]) -> Result<HttpFetchResult, StorageError> {
+    let mut response = ureq::post(url)
+        .header("Content-Type", "application/json")
+        .header("Content-Length", &body.len().to_string())
+        .send(body)
+        .map_err(map_transport_error)?;
+
+    let status = response.status().as_u16();
+    if status < 200 || status >= 300 {
+        let detail = response.body_mut().read_to_string().unwrap_or_default();
+        return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
+    }
+
+    let bytes = response
+        .body_mut()
+        .read_to_vec()
+        .map_err(map_transport_error)?;
+
+    Ok(HttpFetchResult {
+        status,
+        bytes,
+        content_range: None,
+    })
+}
+
 /// Download a byte range using the HTTP `Range` header.
 pub fn fetch_http_range(url: &str, range: &ByteRange) -> Result<HttpFetchResult, StorageError> {
     let mut response = ureq::get(url)

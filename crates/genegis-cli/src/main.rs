@@ -7,7 +7,8 @@ use genegis_analysis::{
 };
 use genegis_catalog::{
     alpha_catalog, bind_stac_item, browse_alpha_stac_collection, fetch_stac_collection,
-    import_stac_item_url, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+    import_stac_item_url, FederatedCatalog, StacEndpoint, StacSearchRequest, LOCAL_COG_DEMO_ID,
+    NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
 use genegis_agent::{
     build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
@@ -1233,11 +1234,13 @@ fn handle_catalog(args: &[String]) {
                 });
                 println!("{}", serde_json::to_string_pretty(&record.summary_json()).expect("json"));
             }
+            Some("search") => handle_federated_stac_search(&args[2..]),
             _ => {
                 eprintln!("Usage: genegis catalog stac list");
                 eprintln!("       genegis catalog stac get ITEM_ID");
                 eprintln!("       genegis catalog stac fetch URL");
                 eprintln!("       genegis catalog stac import ITEM_URL");
+                eprintln!("       genegis catalog stac search --endpoint ID=URL [OPTIONS]");
                 process::exit(1);
             }
         },
@@ -1246,9 +1249,114 @@ fn handle_catalog(args: &[String]) {
             eprintln!("       genegis catalog stac get ITEM_ID");
             eprintln!("       genegis catalog stac fetch URL");
             eprintln!("       genegis catalog stac import ITEM_URL");
+            eprintln!("       genegis catalog stac search --endpoint ID=URL [OPTIONS]");
             process::exit(1);
         }
     }
+}
+
+fn handle_federated_stac_search(args: &[String]) {
+    let mut catalog = FederatedCatalog::new();
+    let mut request = StacSearchRequest::default();
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--endpoint" => {
+                let value = require_catalog_option(args, index, "--endpoint ID=URL");
+                let (id, url) = value.split_once('=').unwrap_or_else(|| {
+                    eprintln!("Invalid --endpoint {value:?}; expected ID=URL");
+                    process::exit(1);
+                });
+                if id.is_empty() || url.is_empty() {
+                    eprintln!("Invalid --endpoint {value:?}; ID and URL must not be empty");
+                    process::exit(1);
+                }
+                catalog.register(StacEndpoint::new(id, url));
+                index += 2;
+            }
+            "--bbox" => {
+                let value = require_catalog_option(args, index, "--bbox MINX,MINY,MAXX,MAXY");
+                request.bbox = Some(parse_catalog_bbox(value));
+                index += 2;
+            }
+            "--datetime" => {
+                request.datetime =
+                    Some(require_catalog_option(args, index, "--datetime VALUE").to_string());
+                index += 2;
+            }
+            "--collection" => {
+                request
+                    .collections
+                    .push(require_catalog_option(args, index, "--collection ID").to_string());
+                index += 2;
+            }
+            "--limit" => {
+                let value = require_catalog_option(args, index, "--limit COUNT");
+                request.limit = Some(value.parse::<usize>().unwrap_or_else(|_| {
+                    eprintln!("Invalid --limit {value:?}; expected a non-negative integer");
+                    process::exit(1);
+                }));
+                index += 2;
+            }
+            unknown => {
+                eprintln!("Unknown STAC search option: {unknown}");
+                print_stac_search_usage();
+                process::exit(1);
+            }
+        }
+    }
+
+    if catalog.endpoints().is_empty() {
+        eprintln!("At least one --endpoint ID=URL is required");
+        print_stac_search_usage();
+        process::exit(1);
+    }
+
+    let result = catalog.search(&request);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result).expect("federated search json")
+    );
+
+    if result.successful_endpoints() == 0 {
+        process::exit(1);
+    }
+}
+
+fn require_catalog_option<'a>(args: &'a [String], index: usize, usage: &str) -> &'a str {
+    args.get(index + 1).map(String::as_str).unwrap_or_else(|| {
+        eprintln!("Missing value: {usage}");
+        process::exit(1);
+    })
+}
+
+fn parse_catalog_bbox(value: &str) -> [f64; 4] {
+    let values: Vec<_> = value
+        .split(',')
+        .map(|part| part.trim().parse::<f64>())
+        .collect();
+    if values.len() != 4 || values.iter().any(Result::is_err) {
+        eprintln!("Invalid --bbox {value:?}; expected MINX,MINY,MAXX,MAXY");
+        process::exit(1);
+    }
+    let bbox = [
+        *values[0].as_ref().expect("validated"),
+        *values[1].as_ref().expect("validated"),
+        *values[2].as_ref().expect("validated"),
+        *values[3].as_ref().expect("validated"),
+    ];
+    if bbox[0] > bbox[2] || bbox[1] > bbox[3] {
+        eprintln!("Invalid --bbox {value:?}; minimums must not exceed maximums");
+        process::exit(1);
+    }
+    bbox
+}
+
+fn print_stac_search_usage() {
+    eprintln!(
+        "Usage: genegis catalog stac search --endpoint ID=URL [--endpoint ID=URL ...] [--bbox MINX,MINY,MAXX,MAXY] [--datetime VALUE] [--collection ID] [--limit COUNT]"
+    );
 }
 
 fn handle_vector(args: &[String]) {
@@ -1398,6 +1506,7 @@ Usage:
   genegis catalog stac get ITEM_ID                 Export one catalog dataset as STAC Item
   genegis catalog stac fetch URL                   Fetch external STAC Collection summary
   genegis catalog stac import ITEM_URL             Import STAC Item into catalog overlay
+  genegis catalog stac search --endpoint ID=URL    Search and deduplicate federated STAC APIs
   genegis vector geoparquet info PATH              GeoParquet metadata JSON
   genegis vector geoparquet build-fixture          Write Nagoya wards GeoParquet fixture
   genegis collab comment list                      List map-anchored review comments

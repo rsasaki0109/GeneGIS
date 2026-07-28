@@ -13,8 +13,8 @@ pub use asset::{
 };
 pub use error::StorageError;
 pub use http::{
-    fetch_http_bytes, fetch_http_range, parse_content_range_total, probe_http_content_length,
-    HttpFetchResult,
+    fetch_http_bytes, fetch_http_range, parse_content_range_total, post_http_json_bytes,
+    probe_http_content_length, HttpFetchResult,
 };
 pub use range::ByteRange;
 
@@ -66,12 +66,43 @@ mod tests {
 
     fn handle_http_request(stream: &mut TcpStream, body: &[u8], hits: &AtomicUsize) {
         let mut buffer = [0u8; 4096];
-        let read = stream.read(&mut buffer).unwrap_or(0);
-        if read == 0 {
+        let mut request_bytes = Vec::new();
+        loop {
+            let read = stream.read(&mut buffer).unwrap_or(0);
+            if read == 0 {
+                break;
+            }
+            request_bytes.extend_from_slice(&buffer[..read]);
+
+            let Some(header_end) = request_bytes
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .map(|position| position + 4)
+            else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&request_bytes[..header_end]);
+            let content_length = header_value(&headers, "Content-Length")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(0);
+            if request_bytes.len() >= header_end + content_length {
+                break;
+            }
+        }
+        if request_bytes.is_empty() {
             return;
         }
-        let request = String::from_utf8_lossy(&buffer[..read]);
+        let request = String::from_utf8_lossy(&request_bytes);
         hits.fetch_add(1, Ordering::SeqCst);
+
+        if request.starts_with("HEAD ") {
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+            return;
+        }
 
         if let Some(spec) = header_value(&request, "Range") {
             let spec = spec.strip_prefix("bytes=").unwrap_or(spec);
@@ -107,6 +138,17 @@ mod tests {
         let result = fetch_http_range(&url, &range).expect("fetch");
         assert_eq!(result.status, 206);
         assert_eq!(result.bytes, body[128..=255]);
+    }
+
+    #[test]
+    fn post_http_json_returns_response_body() {
+        let response_body = br#"{"type":"FeatureCollection","features":[]}"#.to_vec();
+        let url = spawn_http_fixture(response_body.clone());
+        thread::sleep(Duration::from_millis(50));
+
+        let result = post_http_json_bytes(&url, br#"{"limit":10}"#).expect("post");
+        assert_eq!(result.status, 200);
+        assert_eq!(result.bytes, response_body);
     }
 
     #[test]
