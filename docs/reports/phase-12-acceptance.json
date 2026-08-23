@@ -5,6 +5,7 @@
   "measured_at": "2026-08-23",
   "source_revision": {
     "implementation_commit": "54df4a0",
+    "trust_ux_readiness_commit": "1696c82",
     "worktree_at_integration": "clean",
     "note": "The report itself is finalized in the immediately following documentation commit to avoid a self-referential commit hash."
   },
