@@ -8,6 +8,31 @@
 
 **AI-native · Cloud-native · GPU-native open geospatial workbench**
 
+## See GeneGIS in motion
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/feature-cloud.gif" alt="Federated STAC search and range-aware access to GeoParquet, COG, COPC, and PMTiles" width="100%" /><br />
+      <sub><strong>Cloud-native data</strong><br />Federated STAC · scored assets · bounded range reads · I/O receipts</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/feature-adapters.gif" alt="Typed and sandboxed PostGIS, GRASS, and QGIS Processing adapters" width="100%" /><br />
+      <sub><strong>Real OSS engine adapters</strong><br />PostGIS · GRASS · QGIS Processing · cross-engine verification</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="docs/assets/feature-trust.gif" alt="Trust Debugger tracing a failing CRS contract through a workflow to affected artifacts" width="100%" /><br />
+      <sub><strong>Trust Debugger</strong><br />Failure trace · blast radius · semantic diff · offline capsule</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="docs/assets/feature-collab.gif" alt="Map-anchored comments, project branches, Automerge synchronization, and shared provenance" width="100%" /><br />
+      <sub><strong>Spatial collaboration</strong><br />Map comments · branches · Automerge CRDT · shared provenance</sub>
+    </td>
+  </tr>
+</table>
+
 > If GIS were invented in 2026, it would not look like a 2000s desktop app.
 
 GeneGIS is **not a QGIS clone**. It is a next-generation GIS platform built around workflow graphs, AI agents, cloud-optimized formats, and GPU rendering — designed for spatial intelligence in the GeoAI era.
