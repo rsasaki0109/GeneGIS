@@ -1,14 +1,8 @@
 # GeneGIS
 
-<p align="center">
-  <img src="docs/assets/workbench-hero.gif" alt="GeneGIS workbench — intent, typed workflow, cloud execution, independent verification, and source assurance for a Nagoya population-density map" width="960" />
-</p>
-
-<p align="center"><sub>Intent → typed Workflow DAG → range-aware execution → independent checks → offline-verifiable Source Assurance</sub></p>
-
 **AI-native · Cloud-native · GPU-native open geospatial workbench**
 
-## See GeneGIS in motion
+## Feature showcase
 
 <table>
   <tr>
@@ -32,6 +26,14 @@
     </td>
   </tr>
 </table>
+
+### End-to-end verified workflow
+
+<p align="center">
+  <img src="docs/assets/workbench-hero.gif" alt="GeneGIS workbench — intent, typed workflow, cloud execution, independent verification, and source assurance for a Nagoya population-density map" width="960" />
+</p>
+
+<p align="center"><sub>Intent → typed Workflow DAG → range-aware execution → independent checks → offline-verifiable Source Assurance</sub></p>
 
 > If GIS were invented in 2026, it would not look like a 2000s desktop app.
 
