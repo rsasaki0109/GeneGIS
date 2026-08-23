@@ -11,10 +11,10 @@ use genegis_server::store::{CollabStore, DEFAULT_COLLAB_PATH};
 
 #[tokio::main]
 async fn main() {
-    let collab_path = std::env::var("GENEGIS_COLLAB_PATH")
-        .unwrap_or_else(|_| DEFAULT_COLLAB_PATH.into());
-    let agent_runs_dir = std::env::var("GENEGIS_AGENT_RUNS_DIR")
-        .unwrap_or_else(|_| DEFAULT_AGENT_RUNS_DIR.into());
+    let collab_path =
+        std::env::var("GENEGIS_COLLAB_PATH").unwrap_or_else(|_| DEFAULT_COLLAB_PATH.into());
+    let agent_runs_dir =
+        std::env::var("GENEGIS_AGENT_RUNS_DIR").unwrap_or_else(|_| DEFAULT_AGENT_RUNS_DIR.into());
     let agent_latest_path = std::env::var("GENEGIS_AGENT_LATEST_PATH")
         .unwrap_or_else(|_| DEFAULT_AGENT_LATEST_PATH.into());
 

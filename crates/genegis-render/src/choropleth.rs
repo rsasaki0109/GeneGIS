@@ -106,6 +106,12 @@ impl ChoroplethMesh {
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty() || self.indices.is_empty()
     }
+
+    /// Exact vertex and index bytes uploaded by [`ChoroplethGpu`].
+    pub fn upload_bytes(&self) -> u64 {
+        (self.vertices.len() * std::mem::size_of::<Vertex>()
+            + self.indices.len() * std::mem::size_of::<u32>()) as u64
+    }
 }
 
 pub(crate) fn build_mesh_from_features(

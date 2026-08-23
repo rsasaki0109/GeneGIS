@@ -203,7 +203,9 @@ pub fn bind_catalog_dataset(
 
 fn map_catalog_error(err: CatalogError) -> AiError {
     match err {
-        CatalogError::NotFound(id) => AiError::Unresolved(format!("catalog dataset not found: {id}")),
+        CatalogError::NotFound(id) => {
+            AiError::Unresolved(format!("catalog dataset not found: {id}"))
+        }
         CatalogError::NoMatch(tags) => {
             AiError::Unresolved(format!("no catalog dataset matches tags: {tags:?}"))
         }
@@ -231,8 +233,8 @@ mod tests {
     use super::*;
     use crate::intent::ParsedIntent;
     use genegis_catalog::{
-        EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID,
-        REMOTE_COG_DEMO_ID,
+        EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID,
+        NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
     };
 
     #[test]
@@ -277,9 +279,7 @@ mod tests {
 
     #[test]
     fn resolves_external_stac_demo() {
-        let intent = ParsedIntent::parse(
-            "外部STAC examples/stac/sample-collection.json を fetch",
-        );
+        let intent = ParsedIntent::parse("外部STAC examples/stac/sample-collection.json を fetch");
         let resolved = resolve_workflow(&intent).expect("resolve");
         assert_eq!(resolved.workflow_id, WorkflowId::ExternalStacDemo);
         assert_eq!(resolved.dataset_id, EXTERNAL_STAC_DEMO_ID);

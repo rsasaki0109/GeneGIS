@@ -1,6 +1,6 @@
 use genegis_agent::{
-    AgentOrchestrator, AgentRun, AgentRunConfig, AgentRunSummary, DEFAULT_AGENT_RUN_PATH,
-    DEFAULT_AGENT_RUNS_DIR,
+    AgentOrchestrator, AgentRun, AgentRunConfig, AgentRunSummary, DEFAULT_AGENT_RUNS_DIR,
+    DEFAULT_AGENT_RUN_PATH,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
@@ -65,10 +65,7 @@ fn list_plugins() -> Result<PluginsResponse, String> {
     let host = PluginHost::new();
     match host.discover_plugins(&plugin_root) {
         Ok(entries) => {
-            let plugins = entries
-                .iter()
-                .map(|entry| entry.summary_json())
-                .collect();
+            let plugins = entries.iter().map(|entry| entry.summary_json()).collect();
             Ok(PluginsResponse {
                 ok: true,
                 error: None,
@@ -138,7 +135,8 @@ fn agent_runs_list() -> Result<AgentRunListResponse, String> {
 #[tauri::command]
 fn agent_run_get(id: String) -> Result<AgentRunResponse, String> {
     let id = Uuid::parse_str(id.trim()).map_err(|err| err.to_string())?;
-    let run = AgentRun::load_from_runs_dir(DEFAULT_AGENT_RUNS_DIR, id).map_err(|err| err.to_string())?;
+    let run =
+        AgentRun::load_from_runs_dir(DEFAULT_AGENT_RUNS_DIR, id).map_err(|err| err.to_string())?;
     Ok(AgentRunResponse {
         ok: true,
         error: None,
@@ -167,7 +165,8 @@ fn agent_plan(prompt: String) -> Result<AgentRunResponse, String> {
 
 #[tauri::command]
 fn agent_execute() -> Result<AgentRunResponse, String> {
-    let plan = PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH).map_err(|err| err.to_string())?;
+    let plan =
+        PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH).map_err(|err| err.to_string())?;
     let mut run = AgentOrchestrator::new()
         .with_config(AgentRunConfig::rule_based_offline())
         .execute_plan(plan)
@@ -183,7 +182,8 @@ fn agent_execute() -> Result<AgentRunResponse, String> {
 #[tauri::command]
 fn agent_retry() -> Result<AgentRunResponse, String> {
     agent_execute().or_else(|_| {
-        let latest = AgentRun::load_from_path(DEFAULT_AGENT_RUN_PATH).map_err(|err| err.to_string())?;
+        let latest =
+            AgentRun::load_from_path(DEFAULT_AGENT_RUN_PATH).map_err(|err| err.to_string())?;
         let mut run = AgentOrchestrator::new()
             .with_config(AgentRunConfig::rule_based_offline().with_verify_retries(2))
             .run(&latest.prompt)
@@ -230,8 +230,12 @@ fn collab_response(session: &CollabSession) -> CollabResponse {
         summary: session
             .summary_json()
             .unwrap_or_else(|err| serde_json::json!({ "error": err.to_string() })),
-        comments: session.comments_json().unwrap_or_else(|_| serde_json::json!([])),
-        provenance: session.provenance_json().unwrap_or_else(|_| serde_json::json!([])),
+        comments: session
+            .comments_json()
+            .unwrap_or_else(|_| serde_json::json!([])),
+        provenance: session
+            .provenance_json()
+            .unwrap_or_else(|_| serde_json::json!([])),
         sync: CollabSyncMeta {
             source: "local".into(),
             synced: true,

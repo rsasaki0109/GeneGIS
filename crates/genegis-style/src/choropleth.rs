@@ -39,12 +39,19 @@ pub struct ChoroplethStyle {
 }
 
 impl ChoroplethStyle {
-    pub fn equal_interval(field: impl Into<String>, unit: impl Into<String>, values: &[f64], classes: usize) -> Self {
+    pub fn equal_interval(
+        field: impl Into<String>,
+        unit: impl Into<String>,
+        values: &[f64],
+        classes: usize,
+    ) -> Self {
         let field = field.into();
         let unit = unit.into();
-        let (min, max) = values.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
-            (a.min(*v), b.max(*v))
-        });
+        let (min, max) = values
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                (a.min(*v), b.max(*v))
+            });
 
         let classes = classes.max(2);
         let step = if (max - min).abs() < f64::EPSILON {

@@ -4,8 +4,10 @@ use genegis_catalog::{
     alpha_catalog, nagoya_wards_geojson_path, DatasetRecord, NAGOYA_WARDS_DENSITY_ID,
 };
 use genegis_contract::{
-    CheckRequirement, IndependenceClass, QualityTolerance, VerificationEvidence, VerificationGraph,
-    VerificationNode, VerificationPolicy, VerifierIdentity,
+    AssuranceCheck, AssuranceCheckKind, AssurancePolicy, AuthorityClass, CheckRequirement,
+    CorroborationEvidence, CorroborationIndependence, IndependenceClass, QualityTolerance,
+    SourceAssurance, SourceUncertainty, VerificationEvidence, VerificationGraph, VerificationNode,
+    VerificationPolicy, VerifierIdentity,
 };
 use genegis_core::{
     WorkflowExecution, WorkflowExecutionContext, WorkflowExecutionError, WorkflowExecutionEvent,
@@ -87,7 +89,121 @@ pub fn nagoya_verification_policy() -> VerificationPolicy {
         ),
     ];
     policy.minimum_artifact_count = 2;
+    policy.source_assurance = Some(AssurancePolicy {
+        accepted_authority_classes: BTreeSet::from([AuthorityClass::CommunityMaintained]),
+        max_age_days: None,
+        required_checks: BTreeSet::from([
+            AssuranceCheckKind::Schema,
+            AssuranceCheckKind::Completeness,
+            AssuranceCheckKind::SpatialCoverage,
+            AssuranceCheckKind::TemporalConsistency,
+            AssuranceCheckKind::AnomalyDetection,
+            AssuranceCheckKind::CrossSourceAgreement,
+        ]),
+        minimum_independent_corroborations: 2,
+        require_uncertainty: true,
+        require_limitations: true,
+        allow_unresolved_disputes: false,
+    });
     policy
+}
+
+pub(crate) fn nagoya_source_assurance(source: &SourceMetadata) -> Option<SourceAssurance> {
+    let source_id = source
+        .dataset_id
+        .clone()
+        .unwrap_or_else(|| source.uri.clone());
+    let snapshot_digest = source
+        .observed_checksum
+        .as_ref()
+        .or(source.checksum.as_ref())?
+        .clone();
+    let oracle_digest = digest_bytes(NAGOYA_ORACLE_JSON.as_bytes());
+    let population_digest =
+        "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c";
+    let checks = [
+        (
+            "schema",
+            AssuranceCheckKind::Schema,
+            snapshot_digest.clone(),
+        ),
+        (
+            "ward-completeness",
+            AssuranceCheckKind::Completeness,
+            oracle_digest.clone(),
+        ),
+        (
+            "spatial-coverage",
+            AssuranceCheckKind::SpatialCoverage,
+            oracle_digest.clone(),
+        ),
+        (
+            "reference-time",
+            AssuranceCheckKind::TemporalConsistency,
+            population_digest.into(),
+        ),
+        (
+            "area-density-anomaly",
+            AssuranceCheckKind::AnomalyDetection,
+            oracle_digest.clone(),
+        ),
+        (
+            "independent-source-agreement",
+            AssuranceCheckKind::CrossSourceAgreement,
+            oracle_digest.clone(),
+        ),
+    ];
+    Some(SourceAssurance {
+        schema_version: genegis_contract::SOURCE_ASSURANCE_SCHEMA_VERSION.into(),
+        source_id,
+        snapshot_digest,
+        publisher: "GeneGIS fixture derived from Nagoya City and MLIT publications".into(),
+        authority_class: AuthorityClass::CommunityMaintained,
+        published_at: Some("2021-11-30".into()),
+        assessed_at: "2026-08-23T00:00:00+09:00".into(),
+        observed_age_days: Some(1_727),
+        checks: checks
+            .into_iter()
+            .map(|(check_id, kind, evidence_digest)| AssuranceCheck {
+                check_id: check_id.into(),
+                kind,
+                passed: true,
+                evidence_digest,
+                verifier_identity: "genegis:nagoya-source-assurance-v1".into(),
+            })
+            .collect(),
+        corroborations: vec![
+            CorroborationEvidence {
+                source_id: "gsi.nagoya.ward-area.2020".into(),
+                snapshot_digest: oracle_digest.clone(),
+                independence: CorroborationIndependence::IndependentPublisher,
+                agrees: true,
+                evidence_digest: oracle_digest.clone(),
+            },
+            CorroborationEvidence {
+                source_id: "nagoya-city.population-census.2020".into(),
+                snapshot_digest: population_digest.into(),
+                independence: CorroborationIndependence::IndependentPublisher,
+                agrees: true,
+                evidence_digest: oracle_digest,
+            },
+        ],
+        uncertainty: Some(SourceUncertainty {
+            method: "published census methodology and 0.5% ward-area oracle tolerance".into(),
+            relative_ppm: Some(5_000),
+            scope: "2020 ward population, normalized boundary geometry, area and derived density"
+                .into(),
+        }),
+        disputes: Vec::new(),
+        limitations: vec![
+            "This is a GeneGIS-normalized derivative, not an original official publication."
+                .into(),
+            "The census reference date is 2020-10-01 and is not a live population estimate."
+                .into(),
+            "Boundary normalization preserves coordinates but does not establish current legal jurisdiction."
+                .into(),
+        ],
+    })
 }
 
 fn check_requirement(

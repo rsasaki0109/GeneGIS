@@ -7,7 +7,7 @@ use uuid::Uuid;
 ///
 /// This identifier is part of the workflow IR and is therefore deliberately
 /// independent from the UUID assigned to a particular execution instance.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct WorkflowNodeId(pub String);
 
@@ -25,12 +25,6 @@ impl WorkflowNodeId {
     /// Return whether this is an empty identifier.
     pub fn is_empty(&self) -> bool {
         self.0.trim().is_empty()
-    }
-}
-
-impl Default for WorkflowNodeId {
-    fn default() -> Self {
-        Self(String::new())
     }
 }
 
@@ -250,7 +244,7 @@ fn canonical_json(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Object(map) => {
             let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(key, _)| *key);
             let mut output = String::from("{");
             for (index, (key, value)) in entries.into_iter().enumerate() {
                 if index > 0 {

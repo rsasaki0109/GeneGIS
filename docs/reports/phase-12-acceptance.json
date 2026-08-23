@@ -1,0 +1,247 @@
+{
+  "report_schema_version": "0.1.0",
+  "phase": "12-13",
+  "status": "in_progress",
+  "measured_at": "2026-08-23",
+  "source_revision": {
+    "git_head": "5e211ff6391676c339570f41c1bc9b066be5ad99",
+    "worktree": "modified",
+    "note": "Evidence includes uncommitted Phase 12 implementation and must be refreshed before release."
+  },
+  "requirements_source": "/home/sasaki/workspace/GeneGIS/docs/rfcs/0004-operational-verification-workbench.md",
+  "environment": {
+    "docker_client_server": "29.6.2",
+    "docker_server_os": "Ubuntu 24.04.4 LTS",
+    "host_postgis_tools": "not_installed",
+    "host_grass": "not_installed",
+    "host_qgis_process": "not_installed",
+    "host_gdal_ogr": "not_installed",
+    "adapter_execution_strategy": "pinned_container_digest"
+  },
+  "foundation": {
+    "source_assurance": {
+      "status": "pass",
+      "schema_version": "0.1.0",
+      "policy_integration": "pass",
+      "tests": 5,
+      "false_policy_passes": 0,
+      "scope_statement": "Assessment verifies declared evidence against a use-case policy; it does not prove universal truth."
+    },
+    "adapter_manifest": {
+      "status": "pass",
+      "schema_version": "0.1.0",
+      "committed_json_schema": "/home/sasaki/workspace/GeneGIS/crates/genegis-adapter/schema/adapter-manifest-v0.schema.json",
+      "admission_tests": 5,
+      "false_admissions": 0
+    }
+  },
+  "gate_a_editing_cartography": {
+    "status": "pass",
+    "supported_operations": ["create", "update", "delete", "split", "multipart_merge", "repair", "set_evidence_map_style"],
+    "command_dag_undo_redo": "pass",
+    "negative_cases": 30,
+    "negative_cases_caught": 30,
+    "false_accepted_edits": 0,
+    "hundred_command_replay": "pass_project_workflow_svg_digest_match",
+    "artifact_provenance": "pass_source_crs_units_style_font_renderer_provenance",
+    "report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-editing-cartography.json"
+  },
+  "gate_b_real_adapters": {
+    "status": "pass",
+    "postgis": {
+      "status": "pass",
+      "image": "docker.io/postgis/postgis:18-3.6",
+      "container_digest": "sha256:db8c151a4e1f4686b1a985a3490cf96f9f8c8c2725f58a46ef7a57e52f167cc3",
+      "postgresql": "18.6",
+      "postgis": "3.6.4 94d984b",
+      "geos": "3.13.1-CAPI-1.19.2",
+      "proj": "9.6.0 network_disabled",
+      "manifest_digest": "sha256:86fc55db6dd7d4aead3a357316296de31c1ae432f560172d09f4b113b2b6a1a3",
+      "positive_cases": 5,
+      "negative_cases": 5,
+      "negative_cases_caught": 5,
+      "false_accepts": 0,
+      "projected_area_square_metres": 1000000,
+      "read_only_ddl": "rejected",
+      "conformance_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-postgis-conformance.json"
+    },
+    "grass": {
+      "status": "pass",
+      "image": "docker.io/osgeo/grass-gis:releasebranch_8_5-alpine",
+      "container_digest": "sha256:dbefc741e2cb03dcb0def2f2fbb077d2bf06656801e37285fd29624c5745940e",
+      "grass": "8.5.1dev",
+      "gdal": "3.13.2 Iowa City",
+      "proj": "9.8.1",
+      "manifest_digest": "sha256:c9ce32410658b4d9cae51e0575f1b9e21c88a7a347b3fb883c3d6624820719b1",
+      "positive_cases": 6,
+      "negative_cases": 5,
+      "negative_cases_caught": 5,
+      "false_accepts": 0,
+      "sandbox": "network_none_read_only_non_root_cap_drop_no_new_privileges_no_host_mounts",
+      "conformance_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-grass-conformance.json"
+    },
+    "qgis_processing": {
+      "status": "pass",
+      "image": "docker.io/qgis/qgis:3.44-noble",
+      "container_digest": "sha256:4389d5ed64d7fc89647ac5cea45f97274a7e85b35d8bb7869810be297667ed79",
+      "qgis": "3.44.13-Solothurn",
+      "gdal": "3.8.4",
+      "proj": "9.4.0",
+      "geos": "3.12.1-CAPI-1.18.1",
+      "manifest_digest": "sha256:fad009011bf209e150214bddb8db1c25bf85d7dd2305b5f6e6a24c8849fed1f3",
+      "positive_cases": 5,
+      "negative_cases": 5,
+      "negative_cases_caught": 5,
+      "false_accepts": 0,
+      "sandbox": "network_none_read_only_non_root_cap_drop_no_new_privileges_read_only_input_approved_output",
+      "conformance_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-qgis-conformance.json"
+    },
+    "false_admissions": 0,
+    "cross_adapter_equivalence": {
+      "status": "pass",
+      "native_duckdb_gdal_cases": 33,
+      "real_adapter_observations": 6,
+      "maximum_native_independent_delta_ppm": 0,
+      "report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-cross-adapter-conformance.json"
+    }
+  },
+  "gate_c_large_objects": {
+    "status": "pass",
+    "formats": {
+      "cog": "pass_ci_and_pinned_public_full",
+      "geoparquet": "pass_ci_and_pinned_public_full",
+      "copc": "pass_ci_and_pinned_public_full",
+      "pmtiles": "pass_ci_and_pinned_public_full"
+    },
+    "minimum_object_bytes": 268435456,
+    "minimum_logical_dataset_bytes": 1073741824,
+    "maximum_selected_transfer_ratio": 0.2,
+    "maximum_response_bytes": 8388608,
+    "maximum_peak_rss_bytes": 1073741824,
+    "maximum_local_first_frame_ms": 2000,
+    "performance_metrics": "pass_ci_and_full_p50_p95_rss_transfer_first_frame_upload_fps",
+    "ci_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-cloud-io-ci.json",
+    "full_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-cloud-io-full.json",
+    "full_fixture_status": "pass_4_of_4_zero_budget_failures",
+    "remote_identity_drift": "fail_closed_on_content_length_etag_or_last_modified_mismatch",
+    "identity_digest_limitation": "URL and response metadata identity digest; not full-content SHA-256"
+  },
+  "gate_d_diverse_verification": {
+    "status": "pass",
+    "required_domains": [
+      "administrative_boundaries",
+      "population_statistics",
+      "raster_observation",
+      "point_cloud",
+      "temporal_change"
+    ],
+    "implemented_domains": [
+      "administrative_boundaries",
+      "population_statistics",
+      "raster_observation",
+      "point_cloud",
+      "temporal_change"
+    ],
+    "positive_releasable_domains": 3,
+    "intentional_real_data_fail_closed_domains": {
+      "raster_observation": "source bytes declared but not observed offline",
+      "point_cloud": "embedded CRS inconsistent; spatial semantics unavailable"
+    },
+    "mutation_cases": 112,
+    "mutation_score": 1.0,
+    "minimum_mutation_score": 0.95,
+    "false_verified_or_attested": 0,
+    "report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-real-data-corpus.json"
+  },
+  "gate_e_human_trust_ux": {
+    "status": "not_measured",
+    "minimum_human_reviewers": 3,
+    "minimum_tasks": 12,
+    "minimum_correctness": 0.9,
+    "maximum_median_diagnosis_seconds": 120,
+    "maximum_median_interactions": 2,
+    "human_report": null,
+    "automated_sessions_can_pass": false
+  },
+  "gate_f_source_truth_boundaries": {
+    "status": "pass",
+    "capsule_binding": "pass_snapshot_assurance_and_exact_file_digests",
+    "release_sources_with_assurance": "1_of_1_current_release_sources",
+    "mirror_independence_rule": "pass_unit",
+    "stale_check_limit_identity_dispute_mutations": "pass_unit_and_capsule",
+    "unknown_freshness_fails_closed": true,
+    "user_facing_non_truth_claim": "pass_review_model_and_report",
+    "offline_without_external_llm": true,
+    "report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-source-assurance-capsule.json"
+  },
+  "test_evidence": [
+    {
+      "command": "cargo test -p genegis-contract",
+      "passed": 23,
+      "failed": 0
+    },
+    {
+      "command": "cargo test -p genegis-adapter",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "command": "cargo test --workspace --exclude genegis-desktop --no-fail-fast",
+      "status": "pass",
+      "ignored": 1
+    },
+    {
+      "command": "docker exec genegis-postgis-conformance psql ... BEGIN READ ONLY",
+      "positive_cases": 1,
+      "negative_cases": 1,
+      "status": "pass",
+      "note": "Ephemeral container removed after version, area, and denied-DDL observations."
+    },
+    {
+      "command": "cargo test -p genegis-adapter --test postgis_real -- --ignored --nocapture",
+      "passed": 1,
+      "positive_cases": 5,
+      "negative_cases": 5,
+      "false_accepts": 0
+    },
+    {
+      "command": "cargo test -p genegis-adapter --test grass_real -- --ignored --nocapture",
+      "passed": 1,
+      "positive_cases": 6,
+      "negative_cases": 5,
+      "false_accepts": 0
+    },
+    {
+      "command": "cargo test -p genegis-adapter --test qgis_real -- --ignored --nocapture",
+      "passed": 1,
+      "positive_cases": 5,
+      "negative_cases": 5,
+      "false_accepts": 0
+    },
+    {
+      "command": "cargo test -p genegis-storage -p genegis-testkit --no-fail-fast",
+      "passed": 26,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "command": "cargo test -p genegis-testkit public_full_size_objects_pass_phase_12_budgets -- --ignored --nocapture",
+      "passed": 1,
+      "failed": 0,
+      "elapsed_seconds": 134.29,
+      "formats": 4,
+      "budget_failures": 0
+    },
+    {
+      "command": "cargo clippy -p genegis-crs -p genegis-contract -p genegis-storage -p genegis-style -p genegis-workflow -p genegis-core -p genegis-vector --all-targets -- -D warnings",
+      "status": "pass"
+    },
+    {
+      "command": "cargo test -p genegis-crs -p genegis-contract -p genegis-storage -p genegis-style -p genegis-workflow -p genegis-core -p genegis-vector -p genegis-catalog --no-fail-fast",
+      "status": "pass",
+      "note": "Post-lint-refactor targeted regression; all unit, integration, and doc tests passed."
+    }
+  ],
+  "completion_decision": "no_go_requirements_remain_not_measured"
+}

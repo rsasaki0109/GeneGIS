@@ -13,7 +13,7 @@ pub use audit::{
 pub use error::AgentError;
 pub use model::{
     AgentRole, AgentRun, AgentRunConfig, AgentRunSummary, AgentStep, ToolCall,
-    DEFAULT_AGENT_RUN_PATH, DEFAULT_AGENT_RUNS_DIR,
+    DEFAULT_AGENT_RUNS_DIR, DEFAULT_AGENT_RUN_PATH,
 };
 pub use orchestrator::AgentOrchestrator;
 pub use remote::{

@@ -1,0 +1,112 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-testkit cloud_io -- --nocapture",
+  "lane": "deterministic_ci",
+  "status": "pass_ci_only",
+  "budget": {
+    "maximum_transfer_ratio": 0.2,
+    "maximum_response_bytes": 8388608,
+    "maximum_peak_rss_bytes": 1073741824,
+    "maximum_first_frame_ns": 2000000000,
+    "whole_object_fallback_allowed": false
+  },
+  "formats": [
+    {
+      "format": "cog",
+      "object_bytes": 2097152,
+      "logical_dataset_bytes": 8388608,
+      "selection": "base-level 8x8 pixel window",
+      "requests": 1,
+      "transferred_bytes": 262144,
+      "transfer_ratio": 0.125,
+      "maximum_response_bytes": 262144,
+      "decoded_items": 64,
+      "p50_ns": 2282754,
+      "p95_ns": 4154459,
+      "peak_rss_bytes": 95002624,
+      "whole_object_fallback": false,
+      "status": "pass"
+    },
+    {
+      "format": "geoparquet",
+      "object_bytes": 4496865,
+      "logical_dataset_bytes": 17987460,
+      "selection": "row group 0 of 16",
+      "requests": 7,
+      "transferred_bytes": 433633,
+      "transfer_ratio": 0.0964300833,
+      "maximum_response_bytes": 65536,
+      "decoded_items": 16,
+      "p50_ns": 14823175,
+      "p95_ns": 15684309,
+      "peak_rss_bytes": 95125504,
+      "whole_object_fallback": false,
+      "status": "pass"
+    },
+    {
+      "format": "copc",
+      "object_bytes": 16777216,
+      "logical_dataset_bytes": 67108864,
+      "selection": "root metadata and hierarchy nodes",
+      "requests": 2,
+      "transferred_bytes": 66016,
+      "transfer_ratio": 0.0039348602,
+      "maximum_response_bytes": 65536,
+      "decoded_items": 15,
+      "p50_ns": 3955537,
+      "p95_ns": 4193292,
+      "peak_rss_bytes": 95125504,
+      "whole_object_fallback": false,
+      "status": "pass"
+    },
+    {
+      "format": "pmtiles",
+      "object_bytes": 1048576,
+      "logical_dataset_bytes": 4194304,
+      "selection": "tile 0/0/0",
+      "requests": 3,
+      "transferred_bytes": 137,
+      "transfer_ratio": 0.0001306534,
+      "maximum_response_bytes": 127,
+      "decoded_items": 1,
+      "p50_ns": 4658795,
+      "p95_ns": 4975074,
+      "peak_rss_bytes": 95125504,
+      "whole_object_fallback": false,
+      "status": "pass"
+    }
+  ],
+  "gpu": {
+    "adapter": "Intel(R) Iris(R) Xe Graphics (TGL GT2)",
+    "device_type": "hardware",
+    "backend": "vulkan",
+    "upload_bytes": 627264,
+    "upload_ns": 13543845,
+    "first_frame_ns": 94004893,
+    "measured_frames": 30,
+    "steady_state_fps": 654.8123370049316,
+    "status": "pass"
+  },
+  "defect_observation": {
+    "issue": "GeoParquet overlapping range amplification",
+    "before_same_small_object_bytes": 281767,
+    "before_transferred_bytes": 741842,
+    "before_transfer_ratio": 2.632826,
+    "after_same_small_object_transferred_bytes": 281767,
+    "after_same_small_object_transfer_ratio": 1.0,
+    "remediation": "shared 64 KiB aligned physical block cache",
+    "selected_multi_row_group_fixture_transfer_ratio": 0.0964300833
+  },
+  "full_lane": {
+    "minimum_object_bytes": 268435456,
+    "minimum_logical_dataset_bytes": 1073741824,
+    "status": "not_measured"
+  },
+  "summary": {
+    "ci_formats_passed": 4,
+    "ci_formats_failed": 0,
+    "whole_object_fallbacks": 0,
+    "full_gate_satisfied": false
+  }
+}

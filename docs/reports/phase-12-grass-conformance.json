@@ -1,0 +1,85 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-adapter --test grass_real -- --ignored --nocapture",
+  "adapter_id": "org.genegis.grass.sandbox",
+  "adapter_version": "0.1.0",
+  "manifest_digest": "sha256:c9ce32410658b4d9cae51e0575f1b9e21c88a7a347b3fb883c3d6624820719b1",
+  "image": "docker.io/osgeo/grass-gis:releasebranch_8_5-alpine",
+  "image_digest": "sha256:dbefc741e2cb03dcb0def2f2fbb077d2bf06656801e37285fd29624c5745940e",
+  "runtime": {
+    "grass": "8.5.1dev",
+    "gdal": "3.13.2 Iowa City",
+    "proj": "9.8.1"
+  },
+  "sandbox": {
+    "network": "none",
+    "read_only_root": true,
+    "user": "65534:65534",
+    "all_linux_capabilities_dropped": true,
+    "no_new_privileges": true,
+    "pids_limit": 128,
+    "memory_mib": 512,
+    "cpus": 1,
+    "host_mounts": 0,
+    "tmpfs": ["/tmp", "/grassdb"]
+  },
+  "positive_cases": [
+    {
+      "operation_id": "grass.region.grid",
+      "result": { "rows": 100, "cols": 100, "cells": 10000 },
+      "output_digest": "sha256:db333a420d068b823779d6fd4a08bf55ddceb3d41c0c8bd8c4e931a53c528fe6",
+      "elapsed_ns": 1181640627
+    },
+    {
+      "operation_id": "grass.projection.info",
+      "result": { "srid": "EPSG:6675", "unit": "meter" },
+      "output_digest": "sha256:e0eaa0c8117ad0870757534c0c703a92a150618fa0a14da990264939dfc68683",
+      "elapsed_ns": 1100735394
+    },
+    {
+      "operation_id": "grass.transform.point",
+      "result": { "x": -23686.12661195, "y": -90773.69864382, "z": 0.0 },
+      "output_digest": "sha256:280587167a914fcd54ea4f31a4186b38428080dc2f1332109ba6940ba1fe5675",
+      "elapsed_ns": 1364789787
+    },
+    {
+      "operation_id": "grass.measure.geodesic",
+      "result": { "length_metres": 1435.982679 },
+      "output_digest": "sha256:549612a61116fbe2842974a7c4cdf9d9b95cdc7dab74f6f1f34f146fb64e82aa",
+      "elapsed_ns": 867551829
+    },
+    {
+      "operation_id": "grass.raster.constant-stats",
+      "result": { "cells": 100, "mean": 7.0, "sum": 700.0, "null_cells": 0 },
+      "output_digest": "sha256:cbf095b83afa840d7ea6ecde5e158bfa387c72048268605d1beebe566345e458",
+      "elapsed_ns": 1572383748
+    },
+    {
+      "operation_id": "grass.vector.seeded-points",
+      "result": { "points": 5, "primitives": 5 },
+      "output_digest": "sha256:bcaf89f2bf16dfe13a69ee4394e46c0d7af37f4ccabc12fb52bcfa5fc695cb7a",
+      "elapsed_ns": 1307385173
+    }
+  ],
+  "negative_cases": [
+    { "case": "crs_outside_operation_contract", "expected": "pre_spawn_contract_reject", "caught": true },
+    { "case": "coordinate_out_of_range", "expected": "pre_spawn_contract_reject", "caught": true },
+    { "case": "raster_resource_budget_exceeded", "expected": "pre_spawn_contract_reject", "caught": true },
+    { "case": "adapter_not_accepted", "expected": "pre_spawn_admission_reject", "caught": true },
+    { "case": "container_image_digest_drift", "expected": "runtime_identity_reject", "caught": true }
+  ],
+  "cross_engine_observation": {
+    "operation": "EPSG:4326 to EPSG:6675 point transformation",
+    "postgis": { "x": -23686.126611951717, "y": -90773.69864382397 },
+    "grass": { "x": -23686.12661195, "y": -90773.69864382 },
+    "absolute_delta": { "x": 1.7162165022455156e-9, "y": 3.9726728573441505e-9 }
+  },
+  "summary": {
+    "positive_cases": 6,
+    "negative_cases": 5,
+    "negative_cases_caught": 5,
+    "false_accepts": 0,
+    "status": "pass"
+  }
+}

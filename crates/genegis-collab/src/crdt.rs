@@ -52,12 +52,12 @@ impl CollabCrdt {
     pub fn project_document(&self) -> Result<CollabDocument, CollabError> {
         let schema_version = read_u64(&self.doc, &ROOT, KEY_SCHEMA_VERSION)?
             .unwrap_or(COLLAB_SCHEMA_VERSION as u64) as u32;
-        let active_branch = read_string(&self.doc, &ROOT, KEY_ACTIVE_BRANCH)?
-            .unwrap_or_else(|| "main".into());
+        let active_branch =
+            read_string(&self.doc, &ROOT, KEY_ACTIVE_BRANCH)?.unwrap_or_else(|| "main".into());
         let project_json = read_string(&self.doc, &ROOT, KEY_PROJECT_JSON)?
             .ok_or_else(|| CollabError::Automerge("missing project_json".into()))?;
-        let project: Project =
-            serde_json::from_str(&project_json).map_err(|err| CollabError::Json(err.to_string()))?;
+        let project: Project = serde_json::from_str(&project_json)
+            .map_err(|err| CollabError::Json(err.to_string()))?;
 
         Ok(CollabDocument {
             schema_version,
@@ -232,7 +232,9 @@ fn read_string(
             if let Some(number) = value.to_i64() {
                 return Ok(Some(number.to_string()));
             }
-            Err(CollabError::Automerge(format!("{key} must be a string or integer")))
+            Err(CollabError::Automerge(format!(
+                "{key} must be a string or integer"
+            )))
         }
         Some(_) => Err(CollabError::Automerge(format!("{key} must be a scalar"))),
         None => Ok(None),

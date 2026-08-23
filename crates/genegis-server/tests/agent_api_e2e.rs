@@ -87,9 +87,7 @@ async fn agent_run_api_round_trip_north_star() {
         Some(run.id.to_string().as_str())
     );
     assert_eq!(
-        runs[0]
-            .get("verification_passed")
-            .and_then(Value::as_bool),
+        runs[0].get("verification_passed").and_then(Value::as_bool),
         Some(true)
     );
 
@@ -106,7 +104,10 @@ async fn agent_run_api_round_trip_north_star() {
     assert_eq!(response.status(), StatusCode::OK);
     let fetched = read_json_body(response.into_body()).await;
     assert_eq!(
-        fetched.pointer("/run/steps").and_then(Value::as_array).map(Vec::len),
+        fetched
+            .pointer("/run/steps")
+            .and_then(Value::as_array)
+            .map(Vec::len),
         Some(4)
     );
 
@@ -164,11 +165,12 @@ async fn agent_run_api_records_plan_only_runs() {
         .and_then(Value::as_array)
         .expect("runs array");
     assert_eq!(runs.len(), 1);
-    assert_eq!(runs[0].get("plan_only").and_then(Value::as_bool), Some(true));
     assert_eq!(
-        runs[0]
-            .get("verification_passed")
-            .and_then(Value::as_bool),
+        runs[0].get("plan_only").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        runs[0].get("verification_passed").and_then(Value::as_bool),
         Some(false)
     );
 }

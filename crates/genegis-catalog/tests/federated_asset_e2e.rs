@@ -5,9 +5,7 @@ use std::thread;
 
 use genegis_catalog::{AssetRequirements, FederatedCatalog, StacEndpoint, StacSearchRequest};
 use genegis_core::{Command, CommandEnvelope, CommandOrigin};
-use genegis_vector::{
-    read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions,
-};
+use genegis_vector::{read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions};
 use genegis_workflow::federated_asset_execution_template;
 
 #[test]

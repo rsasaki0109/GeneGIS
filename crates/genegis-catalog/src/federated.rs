@@ -218,7 +218,7 @@ impl FederatedSearchResult {
                         "source_coverage",
                         requirements
                             .bbox
-                            .is_none_or(|bbox| bbox_intersects(federated.item.bbox, bbox)),
+                            .map_or(true, |bbox| bbox_intersects(federated.item.bbox, bbox)),
                         &format!("{:?}", federated.item.bbox),
                     ),
                 ];
@@ -689,10 +689,7 @@ mod tests {
     #[test]
     fn rejects_remote_endpoint_outside_explicit_allowlist() {
         let mut catalog = FederatedCatalog::new();
-        catalog.register(StacEndpoint::new(
-            "blocked",
-            "https://blocked.invalid/stac",
-        ));
+        catalog.register(StacEndpoint::new("blocked", "https://blocked.invalid/stac"));
         let policy = genegis_storage::RemoteAccessPolicy {
             allowed_hosts: vec![],
             allow_loopback: false,

@@ -6,6 +6,19 @@ use crate::error::StorageError;
 use crate::policy::RemoteAccessPolicy;
 use crate::range::ByteRange;
 
+/// Stable HTTP metadata used to identify and budget a remote range object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpObjectMetadata {
+    /// Encoded object length from `Content-Length`.
+    pub content_length: u64,
+    /// Server entity tag, when supplied.
+    pub etag: Option<String>,
+    /// Server publication/modification observation, when supplied.
+    pub last_modified: Option<String>,
+    /// Whether the server explicitly advertises byte ranges.
+    pub accepts_byte_ranges: bool,
+}
+
 /// Result of an HTTP GET (full or ranged).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpFetchResult {
@@ -29,10 +42,7 @@ pub fn fetch_http_bytes_with_policy(
 ) -> Result<HttpFetchResult, StorageError> {
     policy.validate_url(url)?;
     let agent = policy_agent(policy);
-    let mut response = agent
-        .get(url)
-        .call()
-        .map_err(map_transport_error)?;
+    let mut response = agent.get(url).call().map_err(map_transport_error)?;
 
     let status = response.status().as_u16();
     if status != 200 {
@@ -95,12 +105,10 @@ pub fn post_http_json_bytes_with_policy(
     for (name, value) in headers {
         request = request.header(name, value);
     }
-    let mut response = request
-        .send(body)
-        .map_err(map_transport_error)?;
+    let mut response = request.send(body).map_err(map_transport_error)?;
 
     let status = response.status().as_u16();
-    if status < 200 || status >= 300 {
+    if !(200..300).contains(&status) {
         let detail = response
             .body_mut()
             .with_config()
@@ -242,6 +250,47 @@ pub fn probe_http_content_length_with_policy(
         StorageError::Http(format!(
             "unable to parse Content-Range total from {content_range:?}"
         ))
+    })
+}
+
+/// Probe object length and immutable-version headers with a HEAD request.
+pub fn probe_http_object_metadata(url: &str) -> Result<HttpObjectMetadata, StorageError> {
+    probe_http_object_metadata_with_policy(url, &RemoteAccessPolicy::default())
+}
+
+/// Probe object metadata under an explicit remote access policy.
+pub fn probe_http_object_metadata_with_policy(
+    url: &str,
+    policy: &RemoteAccessPolicy,
+) -> Result<HttpObjectMetadata, StorageError> {
+    policy.validate_url(url)?;
+    let response = policy_agent(policy)
+        .head(url)
+        .call()
+        .map_err(map_transport_error)?;
+    if response.status().as_u16() != 200 {
+        return Err(StorageError::Http(format!(
+            "HTTP {} while probing {url}",
+            response.status().as_u16()
+        )));
+    }
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string)
+    };
+    let content_length = header("Content-Length")
+        .and_then(|value| value.parse::<u64>().ok())
+        .ok_or_else(|| StorageError::Http(format!("missing Content-Length for {url}")))?;
+    let accepts_byte_ranges =
+        header("Accept-Ranges").is_some_and(|value| value.eq_ignore_ascii_case("bytes"));
+    Ok(HttpObjectMetadata {
+        content_length,
+        etag: header("ETag"),
+        last_modified: header("Last-Modified"),
+        accepts_byte_ranges,
     })
 }
 

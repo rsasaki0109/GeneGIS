@@ -1,5 +1,5 @@
-use geotiff_reader::GeoTiffFile;
 use geotiff_reader::cog::{HttpGeoTiffFile, HttpOpenOptions};
+use geotiff_reader::GeoTiffFile;
 use serde::{Deserialize, Serialize};
 
 use crate::error::RasterError;
@@ -253,12 +253,7 @@ mod tests {
                         thread::sleep(Duration::from_millis(5));
                         continue;
                     };
-                    handle_request(
-                        &mut stream,
-                        &payload,
-                        &sent_thread,
-                        &range_thread,
-                    );
+                    handle_request(&mut stream, &payload, &sent_thread, &range_thread);
                 }
             });
 

@@ -2,14 +2,20 @@
 
 #![deny(missing_docs)]
 
+mod cloud_io;
 mod equivalence;
 mod error;
 mod external_benchmark;
 mod harness;
 mod pipeline;
+mod real_data;
 mod render;
 mod review_tasks;
 
+pub use cloud_io::{
+    run_cloud_io_benchmark, run_full_cloud_io_benchmark, CloudFormatBenchmark,
+    CloudIoBenchmarkReport,
+};
 pub use equivalence::{run_cross_engine_equivalence, EquivalenceCase, EquivalenceReport};
 pub use error::TestkitError;
 pub use external_benchmark::{
@@ -20,6 +26,7 @@ pub use harness::{
     DEFAULT_WARMUP, NORTH_STAR_PROMPT,
 };
 pub use pipeline::benchmark_pipeline;
+pub use real_data::{run_real_data_corpus, DomainVerification, RealDataCorpusReport};
 pub use render::benchmark_render_mesh;
 pub use review_tasks::{
     review_median_seconds, review_task_corpus, ReviewTask, ReviewTaskResult, ReviewTimingReport,

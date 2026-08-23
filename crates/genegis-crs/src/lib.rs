@@ -25,6 +25,12 @@ pub const WEB_MERCATOR_EPSG: u32 = 3857;
 /// EPSG identifier for WGS 84 / UTM zone 17N.
 pub const UTM_17N_EPSG: u32 = 32617;
 
+/// EPSG identifier for WGS 84 / UTM zone 18N.
+///
+/// This definition is required by the pinned real-imagery Rasterio fixture in
+/// the multi-domain conformance corpus.
+pub const UTM_18N_EPSG: u32 = 32618;
+
 /// EPSG identifier for WGS 84 / UTM zone 54N.
 pub const UTM_54N_EPSG: u32 = 32654;
 
@@ -191,6 +197,12 @@ impl Crs {
                 kind: CrsKind::Projected,
                 unit: CoordinateUnit::Metres,
             }),
+            UTM_18N_EPSG => Some(CrsDefinition {
+                code: UTM_18N_EPSG,
+                name: "WGS 84 / UTM zone 18N",
+                kind: CrsKind::Projected,
+                unit: CoordinateUnit::Metres,
+            }),
             UTM_54N_EPSG => Some(CrsDefinition {
                 code: UTM_54N_EPSG,
                 name: "WGS 84 / UTM zone 54N",
@@ -242,10 +254,10 @@ impl Crs {
         if !x.is_finite() || !y.is_finite() {
             return Err(CrsError::NonFiniteCoordinate { x, y });
         }
-        if definition.code == WGS84_EPSG || definition.code == JGD2011_EPSG {
-            if !(-180.0..=180.0).contains(&x) || !(-90.0..=90.0).contains(&y) {
-                return Err(CrsError::CoordinateOutOfRange { x, y });
-            }
+        if (definition.code == WGS84_EPSG || definition.code == JGD2011_EPSG)
+            && (!(-180.0..=180.0).contains(&x) || !(-90.0..=90.0).contains(&y))
+        {
+            return Err(CrsError::CoordinateOutOfRange { x, y });
         }
         Ok(())
     }
@@ -362,7 +374,7 @@ impl fmt::Display for SourceVersion {
 /// but the current adapter did not download the complete content and could
 /// not compare it. Local files and complete downloads use `Verified` after
 /// computing SHA-256. `Mismatch` records a failed comparison.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChecksumVerification {
     /// The observed bytes matched the declared checksum, or were hashed from
@@ -371,15 +383,10 @@ pub enum ChecksumVerification {
     /// A checksum was declared but has not been compared with complete bytes.
     Declared,
     /// No checksum was available for this source snapshot.
+    #[default]
     Unknown,
     /// Observed bytes did not match the declared checksum.
     Mismatch,
-}
-
-impl Default for ChecksumVerification {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl ChecksumVerification {

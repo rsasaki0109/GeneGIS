@@ -13,12 +13,19 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 
 mod policy;
+mod source_assurance;
 mod verification;
 
 pub use policy::{
     AttestationEvidence, CheckRequirement, ContractEvidence, IndependenceClass, ReplayEvidence,
     SourceEvidence, TrustAssessment, TrustEvidence, TrustFailure, TrustGate, TrustLevel,
     VerificationEvidence, VerificationPolicy, VERIFICATION_POLICY_SCHEMA_VERSION,
+};
+pub use source_assurance::{
+    AssuranceCheck, AssuranceCheckKind, AssuranceFailure, AssuranceLevel, AssurancePolicy,
+    AssuranceReport, AuthorityClass, CorroborationEvidence, CorroborationIndependence,
+    DisputeRecord, DisputeStatus, SourceAssurance, SourceUncertainty,
+    SOURCE_ASSURANCE_SCHEMA_VERSION,
 };
 pub use verification::{
     VerificationGraph, VerificationGraphError, VerificationNode, VerifierIdentity,

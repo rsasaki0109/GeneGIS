@@ -1,0 +1,94 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "status": "pass",
+  "native_oracle_runner": "cargo run -q -p genegis-cli -- bench equivalence --json",
+  "native_oracle": {
+    "engine": "genegis-native/0.1.0",
+    "independent_engines": ["DuckDB SQL/bundled", "GDAL/OGR 3.8.4"],
+    "cases": 33,
+    "passed": 33,
+    "failed": 0,
+    "false_accepts": 0,
+    "maximum_delta_ppm": 0,
+    "categories": [
+      "geometry",
+      "area",
+      "joins",
+      "nulls",
+      "multipart",
+      "ordering",
+      "crs_units_axis",
+      "density"
+    ]
+  },
+  "real_adapter_observations": [
+    {
+      "case": "projected_area_1000m_square",
+      "semantic_category": "geometry_area_units",
+      "native_oracle_square_metres": 1000000,
+      "postgis_square_metres": 1000000,
+      "relative_delta_ppm": 0,
+      "passed": true
+    },
+    {
+      "case": "wgs84_to_epsg6675_nagoya_point",
+      "semantic_category": "reprojection_axis",
+      "postgis": { "x": -23686.126611951717, "y": -90773.69864382397 },
+      "grass": { "x": -23686.12661195, "y": -90773.69864382 },
+      "absolute_delta": { "x": 1.7162165022455156e-9, "y": 3.9726728573441505e-9 },
+      "tolerance": 1e-8,
+      "passed": true
+    },
+    {
+      "case": "epsg6675_to_wgs84_grid_vertex",
+      "semantic_category": "reprojection_axis_geometry",
+      "source_coordinate": { "x": 0, "y": 1000 },
+      "fixed_oracle_crs84": { "longitude": 137.166666666667, "latitude": 36.00901323237347 },
+      "postgis_crs84": { "longitude": 137.166666666667, "latitude": 36.00901323237347 },
+      "qgis_crs84": { "longitude": 137.166666666666998, "latitude": 36.009013232373469 },
+      "absolute_tolerance_degrees": 1e-12,
+      "feature_count_before": 100,
+      "feature_count_after": 100,
+      "passed": true
+    },
+    {
+      "case": "multipart_part_count",
+      "semantic_category": "multipart_geometry",
+      "native_oracle": 2,
+      "postgis": 2,
+      "passed": true
+    },
+    {
+      "case": "nullable_integer_ordering",
+      "semantic_category": "nulls_ordering",
+      "native_oracle": [1, 2, 3, null],
+      "postgis": [1, 2, 3, null],
+      "passed": true
+    },
+    {
+      "case": "polygon_buffer_and_repair_preservation",
+      "semantic_category": "geometry_topology",
+      "qgis_input_features": 100,
+      "qgis_buffer_features": 100,
+      "qgis_repaired_features": 100,
+      "qgis_buffer_geometry": "MultiPolygon",
+      "qgis_repaired_geometry": "MultiPolygon",
+      "passed": true
+    }
+  ],
+  "admission_matrix": {
+    "typed_positive_cases": 16,
+    "typed_negative_cases": 15,
+    "typed_negative_cases_caught": 15,
+    "false_admissions": 0,
+    "opaque_inherits_verified": false,
+    "backend_drift_inherits_verified": false,
+    "capability_underdeclaration_admitted": false
+  },
+  "limitations": [
+    "Not every semantic operation is implemented by every backend; unsupported operations remain absent rather than being reported as equivalent.",
+    "The fixed coordinate oracle is scoped to the recorded EPSG registry/runtime versions and stated tolerance.",
+    "This report establishes conformance for the committed corpus, not universal equivalence among GIS engines."
+  ]
+}

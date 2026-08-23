@@ -9,11 +9,25 @@ rust-version.workspace = true
 
 [dependencies]
 genegis-analysis = { path = "../genegis-analysis" }
+genegis-contract = { path = "../genegis-contract" }
 genegis-crs = { path = "../genegis-crs" }
 genegis-geometry = { path = "../genegis-geometry" }
+genegis-pointcloud = { path = "../genegis-pointcloud" }
+genegis-raster = { path = "../genegis-raster" }
+genegis-storage = { path = "../genegis-storage" }
+genegis-tile = { path = "../genegis-tile" }
+genegis-vector = { path = "../genegis-vector" }
+arrow-array = "58"
+arrow-schema = "58"
+geo-types = "0.7"
+geoarrow-array = "0.8"
+geoarrow-schema = "0.8"
+geoparquet = "0.8"
+parquet = { version = "58", default-features = false, features = ["arrow", "zstd"] }
 duckdb.workspace = true
 gdal = "0.19"
 genegis-render = { path = "../genegis-render" }
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

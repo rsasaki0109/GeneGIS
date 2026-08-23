@@ -111,12 +111,8 @@ mod tests {
             .expect("save run");
         run.save_to_path(&latest_path).expect("save latest");
 
-        let bundle = build_audit_bundle(
-            &AuditCollabSnapshot::empty(),
-            &runs_dir,
-            &latest_path,
-        )
-        .expect("bundle");
+        let bundle = build_audit_bundle(&AuditCollabSnapshot::empty(), &runs_dir, &latest_path)
+            .expect("bundle");
 
         assert_eq!(
             bundle.get("schema").and_then(Value::as_str),
@@ -149,9 +145,7 @@ mod tests {
             .expect("agent_runs array");
         assert_eq!(runs.len(), 1);
         assert_eq!(
-            runs[0]
-                .get("verification_passed")
-                .and_then(Value::as_bool),
+            runs[0].get("verification_passed").and_then(Value::as_bool),
             Some(true)
         );
     }
@@ -163,11 +157,9 @@ mod tests {
             .pointer("/alpha/items")
             .and_then(Value::as_array)
             .expect("items");
-        assert!(
-            items
-                .iter()
-                .any(|item| item.get("id").and_then(Value::as_str) == Some(LOCAL_COG_DEMO_ID))
-        );
+        assert!(items
+            .iter()
+            .any(|item| item.get("id").and_then(Value::as_str) == Some(LOCAL_COG_DEMO_ID)));
     }
 
     #[test]
@@ -185,7 +177,10 @@ mod tests {
         );
         assert!(bundle.get("stac").is_some());
         assert_eq!(
-            bundle.get("agent_runs").and_then(Value::as_array).map(Vec::len),
+            bundle
+                .get("agent_runs")
+                .and_then(Value::as_array)
+                .map(Vec::len),
             Some(0)
         );
     }

@@ -56,9 +56,7 @@ pub fn discover_plugins(
     }
 
     let mut entries = Vec::new();
-    for child in std::fs::read_dir(root)
-        .map_err(|err| PluginHostError::Bundle(err.to_string()))?
-    {
+    for child in std::fs::read_dir(root).map_err(|err| PluginHostError::Bundle(err.to_string()))? {
         let child = child.map_err(|err| PluginHostError::Bundle(err.to_string()))?;
         if !child.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;

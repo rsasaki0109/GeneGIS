@@ -1,0 +1,84 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-adapter --test qgis_real -- --ignored --nocapture",
+  "adapter_id": "org.genegis.qgis-processing.sandbox",
+  "adapter_version": "0.1.0",
+  "manifest_digest": "sha256:fad009011bf209e150214bddb8db1c25bf85d7dd2305b5f6e6a24c8849fed1f3",
+  "image": "docker.io/qgis/qgis:3.44-noble",
+  "image_digest": "sha256:4389d5ed64d7fc89647ac5cea45f97274a7e85b35d8bb7869810be297667ed79",
+  "runtime": {
+    "qgis": "3.44.13-Solothurn",
+    "qgis_code_revision": "2c8a7782a96",
+    "gdal": "3.8.4",
+    "proj": "9.4.0",
+    "geos": "3.12.1-CAPI-1.18.1",
+    "provider": "QGIS (native c++)"
+  },
+  "sandbox": {
+    "network": "none",
+    "read_only_root": true,
+    "user": "65534:65534",
+    "all_linux_capabilities_dropped": true,
+    "no_new_privileges": true,
+    "pids_limit": 256,
+    "memory_mib": 1024,
+    "cpus": 1,
+    "input_mount": "read_only",
+    "output_mount": "approved_directory_only",
+    "tmpfs": ["/tmp"],
+    "python": "disabled",
+    "plugins": "not_loaded"
+  },
+  "positive_cases": [
+    {
+      "operation_id": "qgis.native.create-grid",
+      "algorithm_id": "native:creategrid",
+      "result": { "features": 100, "geometry": "Polygon", "crs": "EPSG:6675", "bytes": 29369 },
+      "output_digest": "sha256:c40e0ac4713dd80152f091091f80c9c27887145db1a923176f82560b060645b6"
+    },
+    {
+      "operation_id": "qgis.native.buffer",
+      "algorithm_id": "native:buffer",
+      "result": { "features": 100, "geometry": "MultiPolygon", "crs": "EPSG:6675", "bytes": 165501 },
+      "output_digest": "sha256:3632756118587b2c2240bff7175eef63f06bfbe862de4580e3210860bcffaa93"
+    },
+    {
+      "operation_id": "qgis.native.reproject-layer",
+      "algorithm_id": "native:reprojectlayer",
+      "result": { "features": 100, "geometry": "Polygon", "crs": "OGC:CRS84", "bytes": 42820 },
+      "output_digest": "sha256:84f71710c6bf5a74076b4ba5236659209b055b98de4a0e66bc5941a9fecd7313"
+    },
+    {
+      "operation_id": "qgis.native.centroids",
+      "algorithm_id": "native:centroids",
+      "result": { "features": 100, "geometry": "Point", "crs": "EPSG:6675", "bytes": 21204 },
+      "output_digest": "sha256:5c5f48097210f4d29ef6976a1efd3680766151164c80298b805ce7c879ccd33b"
+    },
+    {
+      "operation_id": "qgis.native.fix-geometries",
+      "algorithm_id": "native:fixgeometries",
+      "result": { "features": 100, "geometry": "MultiPolygon", "crs": "EPSG:6675", "bytes": 165500 },
+      "output_digest": "sha256:67644183f419def8ba7ad4f426a514b01a55735b7c3324708875d180cef1f5cc"
+    }
+  ],
+  "negative_cases": [
+    { "case": "grid_resource_budget_exceeded", "expected": "pre_spawn_contract_reject", "caught": true },
+    { "case": "adapter_not_accepted", "expected": "pre_spawn_admission_reject", "caught": true },
+    { "case": "container_image_digest_drift", "expected": "runtime_identity_reject", "caught": true },
+    { "case": "input_crs_outside_operation_contract", "expected": "file_boundary_reject", "caught": true },
+    { "case": "existing_output_overwrite", "expected": "file_boundary_reject", "caught": true }
+  ],
+  "observations": {
+    "crs84": "GeoJSON serializes EPSG:4326 longitude/latitude as OGC:CRS84; the adapter accepts this explicit equivalent only for the reviewed reproject output.",
+    "read_only_input_warning": "QGIS/GDAL attempted an input-side open mode unavailable on the read-only mount; processing succeeded and the warning is preserved in every affected receipt.",
+    "host_paths_in_receipts": false
+  },
+  "summary": {
+    "positive_cases": 5,
+    "negative_cases": 5,
+    "negative_cases_caught": 5,
+    "false_accepts": 0,
+    "status": "pass"
+  }
+}

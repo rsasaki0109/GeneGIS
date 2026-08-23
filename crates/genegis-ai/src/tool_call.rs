@@ -1,4 +1,6 @@
-use genegis_catalog::{alpha_catalog, browse_alpha_stac_collection, bind_stac_item, fetch_stac_collection};
+use genegis_catalog::{
+    alpha_catalog, bind_stac_item, browse_alpha_stac_collection, fetch_stac_collection,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::intent::ParsedIntent;
@@ -30,7 +32,10 @@ impl PlannerToolCall {
     }
 }
 
-pub fn rule_based_tool_calls(intent: &ParsedIntent, resolved: &ResolvedWorkflow) -> Vec<PlannerToolCall> {
+pub fn rule_based_tool_calls(
+    intent: &ParsedIntent,
+    resolved: &ResolvedWorkflow,
+) -> Vec<PlannerToolCall> {
     let catalog = alpha_catalog();
     let collection = browse_alpha_stac_collection(&catalog);
     let stac_item = bind_stac_item(&catalog, &resolved.dataset_id).ok();
@@ -86,9 +91,7 @@ pub fn rule_based_tool_calls(intent: &ParsedIntent, resolved: &ResolvedWorkflow)
     if let Some(url) = extract_catalog_url(&intent.raw_prompt) {
         let fetch_output = fetch_stac_collection(&url)
             .map(|collection| collection.summary_json())
-            .unwrap_or_else(|err| {
-                serde_json::json!({ "error": err.to_string(), "url": url })
-            });
+            .unwrap_or_else(|err| serde_json::json!({ "error": err.to_string(), "url": url }));
         let ok = fetch_output.get("error").is_none();
         calls.push(PlannerToolCall::new(
             "stac_fetch",
@@ -101,7 +104,10 @@ pub fn rule_based_tool_calls(intent: &ParsedIntent, resolved: &ResolvedWorkflow)
     calls
 }
 
-pub fn llm_tool_calls(resolved: &ResolvedWorkflow, raw: &[PlannerToolCall]) -> Vec<PlannerToolCall> {
+pub fn llm_tool_calls(
+    resolved: &ResolvedWorkflow,
+    raw: &[PlannerToolCall],
+) -> Vec<PlannerToolCall> {
     if raw.is_empty() {
         return llm_synthetic_tool_calls(resolved);
     }
@@ -167,9 +173,7 @@ mod tests {
 
     #[test]
     fn rule_based_emits_stac_fetch_for_external_url() {
-        let intent = ParsedIntent::parse(
-            "外部STAC examples/stac/sample-collection.json を fetch",
-        );
+        let intent = ParsedIntent::parse("外部STAC examples/stac/sample-collection.json を fetch");
         let resolved = resolve_workflow(&intent).expect("resolve");
         let calls = rule_based_tool_calls(&intent, &resolved);
         assert_eq!(calls.len(), 5);
@@ -179,7 +183,8 @@ mod tests {
 
     #[test]
     fn llm_synthetic_when_payload_empty() {
-        let resolved = resolve_workflow(&ParsedIntent::parse("名古屋市の人口密度を表示")).expect("resolve");
+        let resolved =
+            resolve_workflow(&ParsedIntent::parse("名古屋市の人口密度を表示")).expect("resolve");
         let calls = llm_tool_calls(&resolved, &[]);
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[0].tool, "llm_plan_workflow");

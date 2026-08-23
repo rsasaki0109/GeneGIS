@@ -18,12 +18,18 @@ fn main() {
 
     match read_copc_uri(&uri) {
         Ok(info) => {
-            println!("{}", serde_json::to_string_pretty(&info.summary_json()).expect("json"));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&info.summary_json()).expect("json")
+            );
             println!();
             println!("COPC metadata read OK");
             println!("  points: {}", info.point_count);
             println!("  hierarchy entries: {}", info.hierarchy_entries);
-            println!("  read_mode: {}", info.read_mode.as_deref().unwrap_or("unknown"));
+            println!(
+                "  read_mode: {}",
+                info.read_mode.as_deref().unwrap_or("unknown")
+            );
         }
         Err(err) => {
             eprintln!("COPC read failed: {err}");

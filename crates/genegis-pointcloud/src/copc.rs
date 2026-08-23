@@ -65,8 +65,7 @@ pub fn read_copc_path(path: &str) -> Result<CopcInfo, PointcloudError> {
 
 /// Read COPC metadata from in-memory bytes.
 pub fn read_copc_bytes(bytes: &[u8]) -> Result<CopcInfo, PointcloudError> {
-    let reader = block_on(CopcStreamingReader::open(bytes))
-        .map_err(map_copc_error)?;
+    let reader = block_on(CopcStreamingReader::open(bytes)).map_err(map_copc_error)?;
     Ok(build_info(None, &reader, Some("bytes".into())))
 }
 
@@ -139,10 +138,7 @@ mod tests {
     use std::time::Duration;
 
     fn fixture_path() -> &'static str {
-        concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/testdata/lone-star.copc.laz"
-        )
+        concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/lone-star.copc.laz")
     }
 
     struct HttpCopcFixture {
@@ -177,11 +173,7 @@ mod tests {
         }
     }
 
-    fn handle_request(
-        stream: &mut TcpStream,
-        body: &[u8],
-        range_requests: &AtomicUsize,
-    ) {
+    fn handle_request(stream: &mut TcpStream, body: &[u8], range_requests: &AtomicUsize) {
         let mut buffer = [0u8; 4096];
         let read = stream.read(&mut buffer).unwrap_or(0);
         if read == 0 {

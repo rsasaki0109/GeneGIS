@@ -16,7 +16,7 @@ geo-traits = "0.3"
 geo-types = "0.7"
 geojson.workspace = true
 geoparquet = "0.8"
-parquet = { version = "58", default-features = false, features = ["arrow"] }
+parquet = { version = "58", default-features = false, features = ["arrow", "zstd"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

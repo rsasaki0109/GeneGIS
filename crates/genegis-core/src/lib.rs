@@ -3,6 +3,7 @@
 //! UI, AI, and CLI all emit [`Command`]s. The core stays independent of UX and AI.
 
 pub mod command;
+pub mod edit;
 pub mod layer;
 pub mod project;
 pub mod provenance;
@@ -14,6 +15,11 @@ pub use command::{
     Command, CommandBus, CommandEnvelope, CommandError, CommandExecution, CommandLog,
     CommandOrigin, InputSnapshot, WorkflowDigest, WorkflowExecution, WorkflowExecutionContext,
     WorkflowExecutionError, WorkflowExecutionEvent, WorkflowExecutionRecord, WorkflowExecutor,
+};
+pub use edit::{
+    AttributeField, AttributeType, AttributeValue, EditError, EditReceipt, EditableFeature,
+    EditableGeometryKind, EditableLayer, FeatureDraft, FeatureEdit, FeatureGeometry, FeatureSchema,
+    MutationWorkflowBinding,
 };
 pub use layer::{Layer, LayerId, LayerKind, LayerStatistics};
 pub use project::{Project, ProjectManifest};

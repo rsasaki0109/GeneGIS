@@ -1,0 +1,149 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-testkit public_full_size_objects_pass_phase_12_budgets -- --ignored --nocapture",
+  "lane": "public_full_size",
+  "status": "pass",
+  "identity_rule": {
+    "inputs": ["url", "content_length", "etag", "last_modified"],
+    "digest_meaning": "SHA-256 of the JSON identity tuple, not a full-content SHA-256",
+    "etag_warning": "Observed multipart ETags are object version observations, not asserted content hashes.",
+    "drift_behavior": "The executable benchmark pins all four observed values and fails before measurement on any mismatch."
+  },
+  "budget": {
+    "minimum_object_bytes": 268435456,
+    "minimum_logical_dataset_bytes": 1073741824,
+    "maximum_transfer_ratio": 0.2,
+    "maximum_response_bytes": 8388608,
+    "maximum_peak_rss_bytes": 1073741824,
+    "maximum_first_frame_ns": 2000000000,
+    "hardware_gpu_required": true,
+    "whole_object_fallback_allowed": false
+  },
+  "formats": [
+    {
+      "format": "cog",
+      "url": "https://s3-west.nrp-nautilus.io/public-land-cover/cgls-lc100-2019-cog.tif",
+      "content_length": 2421291146,
+      "etag": "\"97b8b9611c38020d66b92b40adab091a-462\"",
+      "last_modified": "Sun, 05 Apr 2026 20:37:55 GMT",
+      "identity_digest": "sha256:5859f023022a10f5d9e07e323151d851c2b8d2e350c67442270a5598c59db11e",
+      "logical_dataset_bytes": 2421291146,
+      "logical_size_basis": "conservative encoded object size; the selected public object itself exceeds 1 GiB",
+      "samples_ns": [11907914912, 11931866630, 11953459494, 12123203330, 13301041173],
+      "p50_ns": 11953459494,
+      "p95_ns": 13301041173,
+      "final_receipt": {
+        "request_ranges_inclusive": [[0,262143],[262144,524287],[524288,786431],[786432,1048575],[1048576,1310719],[1310720,1572863],[1572864,1835007],[1835008,2097151],[2097152,2359295],[788004864,788267007]],
+        "transferred_bytes": 2621440,
+        "maximum_response_bytes": 262144,
+        "decoded_items": 64,
+        "elapsed_ns": 11931866630,
+        "peak_rss_bytes": 63905792,
+        "whole_object_fallback": false
+      },
+      "budget_failures": []
+    },
+    {
+      "format": "geoparquet",
+      "url": "https://data.source.coop/youssef-harby/geoparquet-overviews/v0.3.0/nls_rakennus_overviews.parquet",
+      "content_length": 290358319,
+      "etag": "\"514daa2404ceadb3787e6a9cc5e03b15-6\"",
+      "last_modified": "Thu, 09 Jul 2026 18:51:22 GMT",
+      "identity_digest": "sha256:d2a363db16c68f5e9d4159fddc56f218f005132e30dba8b976577d1a08f37d9e",
+      "logical_dataset_bytes": 1215939122,
+      "logical_size_basis": "sum of Parquet row-group total_byte_size metadata",
+      "samples_ns": [10303002891, 10385914803, 10724077423, 10746291497, 10990395165],
+      "p50_ns": 10724077423,
+      "p95_ns": 10990395165,
+      "final_receipt": {
+        "request_ranges_inclusive": [[290324480,290358318],[289996800,290062335],[290062336,290127871],[290127872,290193407],[290193408,290258943],[290258944,290324479],[0,65535],[65536,131071],[131072,196607],[393216,458751],[458752,524287],[524288,589823],[589824,655359],[655360,720895],[720896,786431],[196608,262143],[262144,327679],[327680,393215]],
+        "transferred_bytes": 1147951,
+        "maximum_response_bytes": 65536,
+        "decoded_items": 8535,
+        "elapsed_ns": 10303002891,
+        "peak_rss_bytes": 101666816,
+        "whole_object_fallback": false
+      },
+      "budget_failures": []
+    },
+    {
+      "format": "copc",
+      "url": "https://hobu-lidar.s3.amazonaws.com/sofi.copc.laz",
+      "content_length": 2029696615,
+      "etag": "\"5d92a180a4c9890a51ba04a6fb107f26-242\"",
+      "last_modified": "Mon, 29 Nov 2021 22:12:42 GMT",
+      "identity_digest": "sha256:656aa9d1439c191d5b53034950f6ad1c174b58ff48745c5459008aaba89874d8",
+      "logical_dataset_bytes": 2029696615,
+      "logical_size_basis": "conservative encoded object size; the selected public object itself exceeds 1 GiB",
+      "samples_ns": [1742427044, 1750379094, 1764278518, 1944921373, 1981577735],
+      "p50_ns": 1764278518,
+      "p95_ns": 1981577735,
+      "final_receipt": {
+        "request_ranges_inclusive": [[0,65535],[2029609895,2029696614]],
+        "transferred_bytes": 152256,
+        "maximum_response_bytes": 86720,
+        "decoded_items": 2599,
+        "elapsed_ns": 1750379094,
+        "peak_rss_bytes": 101666816,
+        "whole_object_fallback": false
+      },
+      "budget_failures": []
+    },
+    {
+      "format": "pmtiles",
+      "url": "https://r2-public.protomaps.com/protomaps-sample-datasets/terrarium-z12.pmtiles",
+      "content_length": 159822873635,
+      "etag": "\"2c65d40064244bed8874cdf03739bf61-596\"",
+      "last_modified": "Tue, 21 Feb 2023 12:06:55 GMT",
+      "identity_digest": "sha256:07e805bc3b972e0303e2b37704a1bd32df0164143f4e06aea5b37dbaf013b356",
+      "logical_dataset_bytes": 159822873635,
+      "logical_size_basis": "conservative encoded archive size; the selected public object itself exceeds 1 GiB",
+      "samples_ns": [1460670741, 1540847160, 1557490614, 1606598742, 1606727699],
+      "p50_ns": 1557490614,
+      "p95_ns": 1606727699,
+      "final_receipt": {
+        "request_ranges_inclusive": [[0,126],[127,10481],[10589,20970],[23050234,23108495]],
+        "transferred_bytes": 79126,
+        "maximum_response_bytes": 58262,
+        "decoded_items": 1,
+        "elapsed_ns": 1460670741,
+        "peak_rss_bytes": 101666816,
+        "whole_object_fallback": false
+      },
+      "budget_failures": []
+    }
+  ],
+  "gpu": {
+    "adapter": "Intel(R) Iris(R) Xe Graphics (TGL GT2)",
+    "device_type": "integratedgpu",
+    "backend": "vulkan",
+    "upload_bytes": 627264,
+    "upload_ns": 12646920,
+    "first_frame_ns": 115066919,
+    "steady_state_fps": 657.2257502100493,
+    "status": "pass"
+  },
+  "source_attribution_review": {
+    "purpose": "performance fixtures only; not automatically admitted as release data",
+    "cog": "The filename identifies a Copernicus Global Land Service product and the official CLMS policy is full/open/free with source and modification notices. The mirror-to-official-product lineage was not independently established, so redistribution remains blocked pending that link.",
+    "geoparquet": "Source Cooperative identifies the exact public object and the name identifies an NLS building derivative. NLS publishes building data under CC BY 4.0, but this derivative's lineage and notices were not exposed on the object page; redistribution remains blocked pending them.",
+    "copc": "The official COPC example page identifies this exact SoFi object and credits US Army Corps of Engineers Remote Sensing & GIS Center of Expertise / National Center for Airborne Laser Mapping. It does not state a dataset redistribution license; redistribution remains blocked.",
+    "pmtiles": "The official PMTiles discussion identifies this exact performance object. The PMTiles repository says sample tilesets have their own terms, while the exact Terrarium object page does not establish them; product use and redistribution remain blocked pending attribution and license evidence.",
+    "primary_sources": [
+      "https://land.copernicus.eu/en/data-policy",
+      "https://source.coop/youssef-harby/geoparquet-overviews/v0.3.0/nls_rakennus_overviews.parquet",
+      "https://www.maanmittauslaitos.fi/en/maps-and-spatial-data/datasets-and-interfaces/product-descriptions/buildings-3d",
+      "https://github.com/copcio/copcio.github.io",
+      "https://github.com/protomaps/PMTiles/discussions/465",
+      "https://github.com/protomaps/PMTiles/blob/main/LICENSE"
+    ]
+  },
+  "summary": {
+    "formats_passed": 4,
+    "formats_failed": 0,
+    "whole_object_fallbacks": 0,
+    "hardware_gpu": true,
+    "failed_gates": 0
+  }
+}

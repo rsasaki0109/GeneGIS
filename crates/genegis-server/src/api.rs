@@ -3,6 +3,8 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::agent_store::AgentRunStore;
+use crate::store::CollabStore;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -12,8 +14,6 @@ use axum::{
 };
 use genegis_agent::{AgentRun, AgentRunSummary};
 use genegis_collab::{CollabApiPayload, CollabUpload};
-use crate::agent_store::AgentRunStore;
-use crate::store::CollabStore;
 use serde::Serialize;
 use tower_http::cors::CorsLayer;
 use uuid::Uuid;
@@ -54,10 +54,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/collab", get(get_collab).put(put_collab))
         .route("/api/agent/runs/latest", get(get_latest_agent_run))
         .route("/api/agent/runs/{id}", get(get_agent_run_by_id))
-        .route(
-            "/api/agent/runs",
-            get(list_agent_runs).post(post_agent_run),
-        )
+        .route("/api/agent/runs", get(list_agent_runs).post(post_agent_run))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }

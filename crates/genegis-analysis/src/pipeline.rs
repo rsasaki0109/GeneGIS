@@ -29,8 +29,8 @@ use crate::error::AnalysisError;
 use crate::export::{export_html_map, export_png_map};
 use crate::nagoya::{
     canonical_nagoya_execution_digest, nagoya_population_density_workflow_for_dataset,
-    nagoya_verification_observations, verify_nagoya_analysis, NagoyaArtifactDigests,
-    NagoyaExecutionOutput, NagoyaWorkflowExecutor,
+    nagoya_source_assurance, nagoya_verification_observations, verify_nagoya_analysis,
+    NagoyaArtifactDigests, NagoyaExecutionOutput, NagoyaWorkflowExecutor,
 };
 use crate::result::{
     AnalysisResult, EngineIdentity, ExecutionReceipt, VerificationCheck, VerificationReport,
@@ -617,20 +617,33 @@ fn nagoya_trust_evidence(
         contracts,
         sources: sources
             .iter()
-            .map(|source| SourceEvidence {
-                source_id: source
+            .map(|source| {
+                let source_id = source
                     .dataset_id
                     .clone()
-                    .unwrap_or_else(|| source.uri.clone()),
-                checksum_status: source.checksum_status,
-                source_version_present: source
-                    .source_version
+                    .unwrap_or_else(|| source.uri.clone());
+                let assurance = nagoya_source_assurance(source);
+                let assurance_digest = assurance
                     .as_ref()
-                    .is_some_and(|version| !version.is_empty()),
-                license_present: source
-                    .license
-                    .as_deref()
-                    .is_some_and(|license| !license.trim().is_empty()),
+                    .and_then(|assurance| assurance.digest().ok());
+                SourceEvidence {
+                    source_id,
+                    checksum_status: source.checksum_status,
+                    source_version_present: source
+                        .source_version
+                        .as_ref()
+                        .is_some_and(|version| !version.is_empty()),
+                    license_present: source
+                        .license
+                        .as_deref()
+                        .is_some_and(|license| !license.trim().is_empty()),
+                    snapshot_digest: source
+                        .observed_checksum
+                        .clone()
+                        .or_else(|| source.checksum.clone()),
+                    assurance,
+                    assurance_digest,
+                }
             })
             .collect(),
         checks: nagoya_verification_observations(analysis),

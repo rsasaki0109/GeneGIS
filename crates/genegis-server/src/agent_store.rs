@@ -58,8 +58,7 @@ impl AgentRunStore {
     }
 
     pub fn save(&self, run: &AgentRun) -> Result<AgentRun, AgentError> {
-        std::fs::create_dir_all(&self.runs_dir)
-            .map_err(|err| AgentError::Json(err.to_string()))?;
+        std::fs::create_dir_all(&self.runs_dir).map_err(|err| AgentError::Json(err.to_string()))?;
 
         let run_path = self.runs_dir.join(format!("{}.json", run.id));
         run.save_to_path(&run_path)?;
@@ -106,9 +105,6 @@ mod tests {
 
         store.save(&run).expect("save");
         assert_eq!(store.list().expect("list").len(), 1);
-        assert_eq!(
-            store.get(run.id).expect("get").expect("run").id,
-            run.id
-        );
+        assert_eq!(store.get(run.id).expect("get").expect("run").id, run.id);
     }
 }

@@ -21,12 +21,12 @@ impl ByteSource for HttpByteSource {
         if length == 0 {
             return Ok(Vec::new());
         }
-        let end = offset
-            .checked_add(length - 1)
-            .ok_or_else(|| CopcError::Io(std::io::Error::new(
+        let end = offset.checked_add(length - 1).ok_or_else(|| {
+            CopcError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("read_range overflow: offset={offset}, length={length}"),
-            )))?;
+            ))
+        })?;
         let range = ByteRange::new(offset, end).map_err(map_storage_error)?;
         let result = fetch_http_range(&self.url, &range).map_err(map_storage_error)?;
         Ok(result.bytes)

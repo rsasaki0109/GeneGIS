@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "source_query": "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=2020-01-01&endtime=2020-01-02&minmagnitude=5&orderby=time-asc",
+  "snapshot_basis": "USGS ComCat response observed 2026-08-23; mutable generated and updated fields excluded from the canonical event snapshot",
+  "reference_period": "2020-01-01T00:00:00Z/2020-01-02T00:00:00Z",
+  "minimum_magnitude": 5.0,
+  "crs": "OGC:CRS84",
+  "axis_order": "longitude_latitude",
+  "event_count": 9,
+  "events": [
+    {"id":"us70006t13","magnitude":5.1,"origin_time_ms":1577838500289,"longitude":152.5514,"latitude":-5.3245,"depth_km":40.24},
+    {"id":"us70006t2a","magnitude":5.0,"origin_time_ms":1577850809023,"longitude":159.1614,"latitude":52.6367,"depth_km":58.46},
+    {"id":"us70006t3c","magnitude":5.4,"origin_time_ms":1577867484136,"longitude":-172.5044,"latitude":-17.4280,"depth_km":10.0},
+    {"id":"us70006t6a","magnitude":5.0,"origin_time_ms":1577896499178,"longitude":9.5001,"latitude":-53.0907,"depth_km":10.0},
+    {"id":"us70006t6h","magnitude":5.0,"origin_time_ms":1577897492285,"longitude":-71.5582,"latitude":-30.2857,"depth_km":40.88},
+    {"id":"us70006t7e","magnitude":5.1,"origin_time_ms":1577902211727,"longitude":170.3548,"latitude":53.2522,"depth_km":10.0},
+    {"id":"us70006t8d","magnitude":5.4,"origin_time_ms":1577906930580,"longitude":-178.3339,"latitude":-32.9622,"depth_km":10.0},
+    {"id":"us70006t8t","magnitude":5.0,"origin_time_ms":1577908887231,"longitude":-178.2297,"latitude":-33.2120,"depth_km":10.0},
+    {"id":"us70006tcn","magnitude":5.0,"origin_time_ms":1577920374126,"longitude":-172.0991,"latitude":-18.8187,"depth_km":10.0}
+  ],
+  "oracle": {
+    "event_count": 9,
+    "minimum_origin_time_ms": 1577838500289,
+    "maximum_origin_time_ms": 1577920374126,
+    "magnitude_sum_tenths": 460,
+    "longitude_bounds": [-178.3339, 170.3548],
+    "latitude_bounds": [-53.0907, 53.2522]
+  },
+  "limitations": [
+    "ComCat event parameters can be revised after publication; this fixture is a content-addressed derived snapshot, not a claim about the current catalog.",
+    "Catalog completeness is not uniform worldwide and a magnitude threshold does not imply equal detectability."
+  ]
+}

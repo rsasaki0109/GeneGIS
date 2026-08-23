@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "measured_at": "2026-08-23T00:00:00+09:00",
+  "commands": [
+    "cargo test -p genegis-contract",
+    "cargo test -p genegis-analysis --no-fail-fast",
+    "cargo test -p genegis-capsule --no-fail-fast",
+    "cargo run -q -p genegis-cli -- capsule seal <empty-directory>",
+    "cargo run -q -p genegis-cli -- capsule verify <capsule-directory>"
+  ],
+  "release_source": {
+    "source_id": "nagoya-wards-density",
+    "publisher": "GeneGIS fixture derived from Nagoya City and MLIT publications",
+    "authority_class": "community_maintained",
+    "snapshot_digest": "sha256:d0f8958813fe28e9428169ca7c638a0ea3b3ed7ae526750156d3f94e1308d30e",
+    "assurance_semantic_digest": "sha256:c39e05f04346836881ac95b5e9bc0c65e80b98c8c5c3fd5355461a791d577e69",
+    "capsule_path": "metadata/source-assurance/000.json",
+    "capsule_file_digest_for_measured_run": "sha256:6f1721ed07edf46653438c79e54d7a5e1f8999be2e4f6898b979c2b70d8a8e2d",
+    "capsule_file_bytes": 3278,
+    "limitations": 3,
+    "unresolved_disputes": 0,
+    "independent_corroborations": [
+      "gsi.nagoya.ward-area.2020",
+      "nagoya-city.population-census.2020"
+    ]
+  },
+  "release_policy": {
+    "accepted_authority_classes": ["community_maintained"],
+    "required_checks": ["schema", "completeness", "spatial_coverage", "temporal_consistency", "anomaly_detection", "cross_source_agreement"],
+    "minimum_independent_corroborations": 2,
+    "require_uncertainty": true,
+    "require_limitations": true,
+    "allow_unresolved_disputes": false,
+    "maximum_age_days": null
+  },
+  "bindings": {
+    "source_admission_to_assurance_snapshot_digest": "pass",
+    "trust_evidence_to_assurance_semantic_digest": "pass",
+    "capsule_manifest_to_exact_assurance_file_bytes": "pass",
+    "capsule_assurance_subject_to_receipt_dossier": "pass",
+    "offline_policy_reassessment": "pass"
+  },
+  "offline_verification": {
+    "result_digest_for_measured_run": "sha256:643a39b0b7d6420831aee6ff5a9c684288537c0a662756ab33fda9908efdda4c",
+    "verification_graph_digest": "sha256:c2b170a978425a25a1098709ef6e5e090f69cfc5af21a6fe10c06be184bade39",
+    "verified_entries": 10,
+    "trust_level": "verified",
+    "external_llm_or_server_required": false
+  },
+  "fail_closed_evidence": {
+    "unknown_publication_age_satisfies_freshness": false,
+    "same_publication_mirror_counts_as_independent": false,
+    "tampered_assurance_file_retains_verified": false,
+    "mutated_assurance_digest_retains_verified": false,
+    "mutated_assurance_snapshot_binding_retains_verified": false,
+    "open_dispute_allowed_by_release_policy": false
+  },
+  "review_surface": {
+    "assurance_level_visible_without_raw_json": true,
+    "assurance_digest_visible": true,
+    "limitations_visible": true,
+    "unresolved_dispute_count_visible": true
+  },
+  "status": "pass",
+  "scope_statement": "The capsule proves integrity and policy satisfaction for the recorded evidence. It does not prove that the source is universally true or current beyond its declared reference period."
+}

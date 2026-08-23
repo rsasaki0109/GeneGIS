@@ -30,6 +30,13 @@ impl ByteRange {
         self.end - self.start + 1
     }
 
+    /// Return whether this inclusive range is empty.
+    ///
+    /// Construction rejects inverted bounds, so a valid range is never empty.
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
+
     /// Render the HTTP `Range` header value (`bytes=start-end`).
     pub fn header_value(&self) -> String {
         format!("bytes={}-{}", self.start, self.end)
@@ -38,9 +45,7 @@ impl ByteRange {
     /// Parse `START-END` or `bytes=START-END`.
     pub fn parse(input: &str) -> Result<Self, StorageError> {
         let trimmed = input.trim();
-        let spec = trimmed
-            .strip_prefix("bytes=")
-            .unwrap_or(trimmed);
+        let spec = trimmed.strip_prefix("bytes=").unwrap_or(trimmed);
         let (start, end) = spec.split_once('-').ok_or_else(|| {
             StorageError::InvalidRange(format!("expected START-END, got {input:?}"))
         })?;
@@ -49,9 +54,10 @@ impl ByteRange {
 }
 
 fn parse_u64(value: &str) -> Result<u64, StorageError> {
-    value.trim().parse::<u64>().map_err(|err| {
-        StorageError::InvalidRange(format!("invalid offset {value:?}: {err}"))
-    })
+    value
+        .trim()
+        .parse::<u64>()
+        .map_err(|err| StorageError::InvalidRange(format!("invalid offset {value:?}: {err}")))
 }
 
 #[cfg(test)]

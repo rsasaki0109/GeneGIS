@@ -33,7 +33,13 @@ impl ParsedIntent {
 
         let has_geoparquet = contains_any(
             &normalized,
-            &["geoparquet", "geo parquet", "geo-parquet", "パーケット", "parquet"],
+            &[
+                "geoparquet",
+                "geo parquet",
+                "geo-parquet",
+                "パーケット",
+                "parquet",
+            ],
         );
         let has_density = contains_any(
             &normalized,
@@ -74,7 +80,9 @@ impl ParsedIntent {
             score += 0.35;
         } else if has_density {
             signals.metric = Some("population_density".into());
-            signals.matched_tokens.push("metric:population_density".into());
+            signals
+                .matched_tokens
+                .push("metric:population_density".into());
             score += 0.35;
         }
 
@@ -143,9 +151,7 @@ mod tests {
 
     #[test]
     fn parses_external_stac_prompt() {
-        let intent = ParsedIntent::parse(
-            "外部STAC examples/stac/sample-collection.json を fetch",
-        );
+        let intent = ParsedIntent::parse("外部STAC examples/stac/sample-collection.json を fetch");
         assert_eq!(intent.signals.metric.as_deref(), Some("external_stac"));
     }
 }

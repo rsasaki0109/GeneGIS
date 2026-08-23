@@ -1,7 +1,7 @@
 //! WebGPU choropleth preview — Nagoya ward population density (Phase 2 alpha).
 
 use genegis_analysis::{default_nagoya_data_path, run_nagoya_population_density};
-use genegis_render::{ChoroplethMap, run_choropleth_window};
+use genegis_render::{run_choropleth_window, ChoroplethMap};
 
 fn main() {
     let analysis = run_nagoya_population_density(default_nagoya_data_path()).expect("analysis");

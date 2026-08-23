@@ -69,7 +69,10 @@ impl PluginHost {
     }
 
     /// Validate, gate, and compile the WASM module for a plugin bundle.
-    pub fn load_bundle(&self, bundle_dir: impl AsRef<Path>) -> Result<LoadedPlugin, PluginHostError> {
+    pub fn load_bundle(
+        &self,
+        bundle_dir: impl AsRef<Path>,
+    ) -> Result<LoadedPlugin, PluginHostError> {
         let entry = self.discover_bundle(&bundle_dir)?;
         let wasm_path = entry.wasm_path().ok_or_else(|| {
             PluginHostError::Bundle(format!(

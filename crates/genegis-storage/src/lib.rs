@@ -5,20 +5,25 @@
 mod asset;
 mod error;
 mod http;
+mod io_receipt;
 mod policy;
 mod range;
 
 pub use asset::{
-    fetch_asset, is_remote_uri, read_asset_bytes, read_asset_range,
-    read_asset_range_with_policy, read_local_bytes, read_local_range, AssetFetchResult,
-    COG_HEADER_PREFIX_BYTES,
+    fetch_asset, is_remote_uri, read_asset_bytes, read_asset_range, read_asset_range_with_policy,
+    read_local_bytes, read_local_range, AssetFetchResult, COG_HEADER_PREFIX_BYTES,
 };
 pub use error::StorageError;
 pub use http::{
-    fetch_http_bytes, fetch_http_bytes_with_policy, fetch_http_range,
-    fetch_http_range_with_policy, parse_content_range_total, post_http_json_bytes,
-    post_http_json_bytes_with_headers, post_http_json_bytes_with_policy,
-    probe_http_content_length, probe_http_content_length_with_policy, HttpFetchResult,
+    fetch_http_bytes, fetch_http_bytes_with_policy, fetch_http_range, fetch_http_range_with_policy,
+    parse_content_range_total, post_http_json_bytes, post_http_json_bytes_with_headers,
+    post_http_json_bytes_with_policy, probe_http_content_length,
+    probe_http_content_length_with_policy, probe_http_object_metadata,
+    probe_http_object_metadata_with_policy, HttpFetchResult, HttpObjectMetadata,
+};
+pub use io_receipt::{
+    CloudFormat, GpuFrameMetrics, IoBudget, IoBudgetFailure, IoReceipt, IoRequestEvidence,
+    IoSelection,
 };
 pub use policy::{RemoteAccessPolicy, REMOTE_ALLOWED_HOSTS_ENV};
 pub use range::ByteRange;
@@ -186,6 +191,21 @@ mod tests {
         let url = spawn_http_fixture(body);
         let len = probe_http_content_length(&url).expect("probe");
         assert_eq!(len, 5000);
+    }
+
+    #[test]
+    fn probe_http_object_metadata_preserves_version_headers() {
+        let response = b"HTTP/1.1 200 OK\r\nContent-Length: 4242\r\nAccept-Ranges: bytes\r\nETag: \"fixture-v1\"\r\nLast-Modified: Sun, 23 Aug 2026 00:00:00 GMT\r\nConnection: close\r\n\r\n"
+            .to_vec();
+        let url = spawn_raw_http_fixture(response, 0);
+        let metadata = probe_http_object_metadata(&url).expect("metadata probe");
+        assert_eq!(metadata.content_length, 4242);
+        assert_eq!(metadata.etag.as_deref(), Some("\"fixture-v1\""));
+        assert_eq!(
+            metadata.last_modified.as_deref(),
+            Some("Sun, 23 Aug 2026 00:00:00 GMT")
+        );
+        assert!(metadata.accepts_byte_ranges);
     }
 
     #[test]

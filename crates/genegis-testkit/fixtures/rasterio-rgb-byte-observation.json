@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "source_asset": "https://raw.githubusercontent.com/rasterio/rasterio/9709d1fce53b8c11ace1741ef25cfe427b197fb8/tests/data/RGB.byte.tif",
+  "source_sha256": "sha256:d7cbe932c7ed74a627706a9e9df99f706df3e5abc7d45a49e9d00677a6b09eb4",
+  "source_revision": "9709d1fce53b8c11ace1741ef25cfe427b197fb8",
+  "width": 791,
+  "height": 718,
+  "band_count": 3,
+  "crs": "EPSG:32618",
+  "axis_order": "xy",
+  "coordinate_unit": "metres",
+  "bounds": [101985.0, 2611485.0, 339315.0, 2826915.0],
+  "pixel_size": [300.0379266750948, 300.041782729805],
+  "oracle_method": "TIFF tags and GeoTIFF keys parsed independently from the GeneGIS render path",
+  "limitations": [
+    "This Rasterio test asset is a real imagery subset, but its upstream scene and acquisition timestamp are not encoded in this snapshot.",
+    "Pixel values are digital numbers and are not asserted to be surface reflectance."
+  ]
+}

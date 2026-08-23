@@ -3,8 +3,8 @@
 pub mod dataset;
 pub mod error;
 pub mod geojson;
-pub mod geoparquet;
 mod geometry;
+pub mod geoparquet;
 
 pub use dataset::{FeatureRecord, VectorDataset};
 pub use error::VectorError;

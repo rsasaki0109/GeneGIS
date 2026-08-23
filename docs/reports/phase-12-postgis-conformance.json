@@ -1,0 +1,70 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-adapter --test postgis_real -- --ignored --nocapture",
+  "adapter_id": "org.genegis.postgis.read-only",
+  "adapter_version": "0.1.0",
+  "manifest_digest": "sha256:86fc55db6dd7d4aead3a357316296de31c1ae432f560172d09f4b113b2b6a1a3",
+  "image": "docker.io/postgis/postgis:18-3.6",
+  "image_digest": "sha256:db8c151a4e1f4686b1a985a3490cf96f9f8c8c2725f58a46ef7a57e52f167cc3",
+  "runtime": {
+    "postgresql": "18.6 (Debian 18.6-1.pgdg13+2)",
+    "postgis": "3.6.4 94d984b",
+    "geos": "3.13.1-CAPI-1.19.2",
+    "proj": "9.6.0",
+    "proj_network": "disabled",
+    "transaction_read_only": true,
+    "isolation_level": "repeatable_read"
+  },
+  "positive_cases": [
+    {
+      "operation_id": "postgis.area.projected",
+      "output": { "area_square_metres": 1000000.0 },
+      "query_plan_digest": "sha256:95db5d2fc787acdc01611cb973be48e48e7abdfcc5d09f3e16592fdd5c0c326f",
+      "output_digest": "sha256:619af48b2b59ba9d2e3effb6af166eaafd91ae0fd6aabe3131f13a05b5edafe9",
+      "elapsed_ns": 22044719
+    },
+    {
+      "operation_id": "postgis.transform.point",
+      "output": { "x": -23686.126611951717, "y": -90773.69864382397 },
+      "query_plan_digest": "sha256:1e4702dc4814f3d0f40a6a75d8199f1927178ee2ee305c0ab476fd8a5901b266",
+      "output_digest": "sha256:c4c63f6bd9bc13df0f4b7d2cddaa0edba776a261d5d10de07db5abf682de7b25",
+      "elapsed_ns": 29013970
+    },
+    {
+      "operation_id": "postgis.intersects",
+      "output": { "intersects": true },
+      "query_plan_digest": "sha256:85e8e735ba48fb496f828c64a4a1cbff83ee29b7e1384d077aabc1ed9eccccee",
+      "output_digest": "sha256:c4fc217612f2624f96c4b0c974dc7d5dc9c40349b057e20465e431a9c34d3d8b",
+      "elapsed_ns": 23043877
+    },
+    {
+      "operation_id": "postgis.multipart.part-count",
+      "output": { "part_count": 2 },
+      "query_plan_digest": "sha256:ef847f430881e115c7313086f1f79d5de744a9e22a439b29a517df5e34f9f5ef",
+      "output_digest": "sha256:246ad02aad9505dfed119cc4b98f7c9265459a8fd330a74d0edf987dc5fe7698",
+      "elapsed_ns": 22237110
+    },
+    {
+      "operation_id": "postgis.null-ordering",
+      "output": { "values": [1, 2, 3, null] },
+      "query_plan_digest": "sha256:f4c69df44835020356bd6aa94e4ce0a6ff6dfeb2544dcfd50189397e1462fda3",
+      "output_digest": "sha256:bdf4a79b643dc089a7fcc8344620609851c4b2db02784a81bc331e065553a6ce",
+      "elapsed_ns": 21195582
+    }
+  ],
+  "negative_cases": [
+    { "case": "malformed_wkt", "expected": "database_reject", "caught": true },
+    { "case": "crs_outside_operation_contract", "expected": "pre_connection_contract_reject", "caught": true },
+    { "case": "adapter_not_accepted", "expected": "pre_connection_admission_reject", "caught": true },
+    { "case": "runtime_backend_version_drift", "expected": "runtime_identity_reject", "caught": true },
+    { "case": "ddl_in_read_only_transaction", "expected": "database_reject", "caught": true }
+  ],
+  "summary": {
+    "positive_cases": 5,
+    "negative_cases": 5,
+    "negative_cases_caught": 5,
+    "false_accepts": 0,
+    "status": "pass"
+  }
+}

@@ -9,8 +9,8 @@ use axum::{
 };
 use genegis_agent::{
     get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run, AgentOrchestrator,
-    AgentRun, AgentRunConfig, AgentRole, AgentRunSummary, DEFAULT_AGENT_RUN_PATH,
-    DEFAULT_AGENT_RUNS_DIR,
+    AgentRole, AgentRun, AgentRunConfig, AgentRunSummary, DEFAULT_AGENT_RUNS_DIR,
+    DEFAULT_AGENT_RUN_PATH,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
@@ -19,14 +19,10 @@ use genegis_catalog::{
     fetch_stac_collection, import_stac_item_url, load_catalog_overlay, AssetRequirements,
     DatasetRecord, EndpointRegistry, StacSearchRequest,
 };
-use genegis_collab::{
-    pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL,
-};
+use genegis_collab::{pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL};
 use genegis_core::{Command, CommandEnvelope, CommandOrigin};
 use genegis_plugin_host::PluginHost;
-use genegis_vector::{
-    read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions,
-};
+use genegis_vector::{read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions};
 use genegis_workflow::{
     federated_asset_execution_template, federated_stac_search_template,
     stac_endpoint_registry_template,
@@ -217,13 +213,14 @@ async fn main() {
     let agent_runs_dir = std::env::var("GENEGIS_AGENT_RUNS_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_AGENT_RUNS_DIR));
-    let server_url = std::env::var("GENEGIS_SERVER_URL")
-        .unwrap_or_else(|_| DEFAULT_SERVER_URL.into());
+    let server_url =
+        std::env::var("GENEGIS_SERVER_URL").unwrap_or_else(|_| DEFAULT_SERVER_URL.into());
     let endpoint_registry_path = endpoint_registry_path();
-    let endpoint_registry = EndpointRegistry::load(&endpoint_registry_path).unwrap_or_else(|error| {
-        eprintln!("Endpoint registry warning: {error}");
-        EndpointRegistry::default()
-    });
+    let endpoint_registry =
+        EndpointRegistry::load(&endpoint_registry_path).unwrap_or_else(|error| {
+            eprintln!("Endpoint registry warning: {error}");
+            EndpointRegistry::default()
+        });
 
     let (collab, sync) = load_initial_collab(&collab_path, &server_url).await;
     let agent_run_path_for_load = agent_run_path.clone();
@@ -318,7 +315,10 @@ async fn load_initial_agent_run(agent_run_path: &PathBuf, server_url: &str) -> O
     .flatten()
 }
 
-async fn load_initial_collab(collab_path: &PathBuf, server_url: &str) -> (CollabSession, SyncStatus) {
+async fn load_initial_collab(
+    collab_path: &PathBuf,
+    server_url: &str,
+) -> (CollabSession, SyncStatus) {
     let collab_path = collab_path.clone();
     let server_url = server_url.to_string();
 
@@ -408,17 +408,23 @@ fn automerge_path_for(json_path: &PathBuf) -> PathBuf {
 }
 
 fn push_to_server(session: &CollabSession, server_url: &str) -> Result<(), String> {
-    push_session(server_url, session).map(|_| ()).map_err(|err| err.to_string())
+    push_session(server_url, session)
+        .map(|_| ())
+        .map_err(|err| err.to_string())
 }
 
 fn collab_response(session: &CollabSession, sync: &SyncStatus) -> CollabResponse {
     CollabResponse {
         ok: true,
-        summary: session.summary_json().unwrap_or_else(|err| {
-            serde_json::json!({ "error": err.to_string() })
-        }),
-        comments: session.comments_json().unwrap_or_else(|_| serde_json::json!([])),
-        provenance: session.provenance_json().unwrap_or_else(|_| serde_json::json!([])),
+        summary: session
+            .summary_json()
+            .unwrap_or_else(|err| serde_json::json!({ "error": err.to_string() })),
+        comments: session
+            .comments_json()
+            .unwrap_or_else(|_| serde_json::json!([])),
+        provenance: session
+            .provenance_json()
+            .unwrap_or_else(|_| serde_json::json!([])),
         sync: CollabSyncMeta {
             source: sync.source.clone(),
             server_url: sync.server_url.clone(),
@@ -478,7 +484,11 @@ async fn add_comment(
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         return (
             StatusCode::BAD_REQUEST,
-            Json(collab_error_response(None, &sync, "author and body are required")),
+            Json(collab_error_response(
+                None,
+                &sync,
+                "author and body are required",
+            )),
         );
     }
 
@@ -500,7 +510,11 @@ async fn add_comment(
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             return (
                 StatusCode::BAD_REQUEST,
-                Json(collab_error_response(Some(&session), &sync, &err.to_string())),
+                Json(collab_error_response(
+                    Some(&session),
+                    &sync,
+                    &err.to_string(),
+                )),
             );
         }
 
@@ -531,10 +545,7 @@ async fn add_comment(
         }
     }
 
-    (
-        StatusCode::OK,
-        Json(collab_response(&snapshot, &sync)),
-    )
+    (StatusCode::OK, Json(collab_response(&snapshot, &sync)))
 }
 
 async fn sync_collab(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -590,7 +601,11 @@ async fn sync_collab(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 
 async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
     let path = state.static_dir.join("index.html");
-    Html(tokio::fs::read_to_string(path).await.unwrap_or_else(|_| fallback_index()))
+    Html(
+        tokio::fs::read_to_string(path)
+            .await
+            .unwrap_or_else(|_| fallback_index()),
+    )
 }
 
 async fn ask(Json(body): Json<AskRequest>) -> impl IntoResponse {
@@ -615,10 +630,7 @@ async fn ask(Json(body): Json<AskRequest>) -> impl IntoResponse {
 }
 
 async fn gpu_preview(Json(body): Json<GpuPreviewRequest>) -> impl IntoResponse {
-    let workflow_id = body
-        .workflow_id
-        .as_deref()
-        .unwrap_or("nagoya-density");
+    let workflow_id = body.workflow_id.as_deref().unwrap_or("nagoya-density");
     match spawn_gpu_preview_for_workflow(workflow_id) {
         Ok(message) => (
             StatusCode::OK,
@@ -1038,10 +1050,7 @@ async fn list_plugins(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let host = PluginHost::new();
     match host.discover_plugins(&state.plugin_root) {
         Ok(entries) => {
-            let plugins = entries
-                .iter()
-                .map(|entry| entry.summary_json())
-                .collect();
+            let plugins = entries.iter().map(|entry| entry.summary_json()).collect();
             (
                 StatusCode::OK,
                 Json(PluginsResponse {
@@ -1074,10 +1083,11 @@ async fn latest_agent_run(State(state): State<Arc<AppState>>) -> impl IntoRespon
 async fn list_agent_runs_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let server_url = state.server_url.clone();
     let runs_dir = state.agent_runs_dir.clone();
-    let result = tokio::task::spawn_blocking(move || list_agent_runs_for_workbench(&server_url, &runs_dir))
-        .await
-        .map_err(|err| err.to_string())
-        .and_then(|inner| inner);
+    let result =
+        tokio::task::spawn_blocking(move || list_agent_runs_for_workbench(&server_url, &runs_dir))
+            .await
+            .map_err(|err| err.to_string())
+            .and_then(|inner| inner);
 
     match result {
         Ok(runs) => (
@@ -1105,10 +1115,12 @@ async fn get_agent_run_by_id(
 ) -> impl IntoResponse {
     let server_url = state.server_url.clone();
     let runs_dir = state.agent_runs_dir.clone();
-    let result = tokio::task::spawn_blocking(move || get_agent_run_for_workbench(&server_url, &runs_dir, id))
-        .await
-        .map_err(|err| err.to_string())
-        .and_then(|inner| inner);
+    let result = tokio::task::spawn_blocking(move || {
+        get_agent_run_for_workbench(&server_url, &runs_dir, id)
+    })
+    .await
+    .map_err(|err| err.to_string())
+    .and_then(|inner| inner);
 
     match result {
         Ok(run) => agent_run_ok(run),
@@ -1128,9 +1140,7 @@ fn list_agent_runs_for_workbench(
     runs_dir: &PathBuf,
 ) -> Result<Vec<AgentRunSummary>, String> {
     list_agent_runs(server_url)
-        .or_else(|_| {
-            AgentRun::list_from_dir(runs_dir).map_err(|err| err.to_string())
-        })
+        .or_else(|_| AgentRun::list_from_dir(runs_dir).map_err(|err| err.to_string()))
 }
 
 fn get_agent_run_for_workbench(
@@ -1241,11 +1251,9 @@ async fn retry_agent(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let agent_run_path = state.agent_run_path.clone();
     let collab_path = state.collab_path.clone();
     let server_url = state.server_url.clone();
-    let result = tokio::task::spawn_blocking(move || retry_agent_run(
-        &agent_run_path,
-        &collab_path,
-        &server_url,
-    ))
+    let result = tokio::task::spawn_blocking(move || {
+        retry_agent_run(&agent_run_path, &collab_path, &server_url)
+    })
     .await
     .map_err(|err| genegis_agent::AgentError::Message(err.to_string()))
     .and_then(|inner| inner);
@@ -1375,6 +1383,5 @@ fn load_collab_from_disk(collab_path: &PathBuf) -> CollabSession {
 }
 
 fn fallback_index() -> String {
-    "<html><body><h1>GeneGIS Workbench</h1><p>Static UI not found.</p></body></html>"
-        .into()
+    "<html><body><h1>GeneGIS Workbench</h1><p>Static UI not found.</p></body></html>".into()
 }

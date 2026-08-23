@@ -96,7 +96,7 @@ fn canonical_json(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Object(map) => {
             let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(key, _)| *key);
             let mut output = String::from("{");
             for (index, (key, value)) in entries.into_iter().enumerate() {
                 if index > 0 {

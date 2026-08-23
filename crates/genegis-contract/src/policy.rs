@@ -1,4 +1,4 @@
-use crate::{CompatibilityStatus, GEO_CONTRACT_SCHEMA_VERSION};
+use crate::{AssurancePolicy, CompatibilityStatus, SourceAssurance, GEO_CONTRACT_SCHEMA_VERSION};
 use genegis_crs::ChecksumVerification;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -79,6 +79,9 @@ pub struct VerificationPolicy {
     /// Require a declared license for every admitted source.
     #[serde(default)]
     pub require_license: bool,
+    /// Optional use-case policy for authority, freshness, corroboration, and limitations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_assurance: Option<AssurancePolicy>,
     /// Minimum number of content-addressed result artifacts.
     #[serde(default)]
     pub minimum_artifact_count: u32,
@@ -99,6 +102,7 @@ impl VerificationPolicy {
             require_verified_sources: true,
             require_source_version: true,
             require_license: true,
+            source_assurance: None,
             minimum_artifact_count: 1,
             accepted_attesters: BTreeSet::new(),
         }
@@ -154,6 +158,16 @@ pub struct SourceEvidence {
     pub source_version_present: bool,
     /// Whether license/usage terms are present.
     pub license_present: bool,
+    /// Digest of the exact source snapshot represented by this evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_digest: Option<String>,
+    /// Evidence dossier assessing authority, freshness, checks, and known limits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance: Option<SourceAssurance>,
+    /// Digest of the complete assurance dossier, binding it independently of
+    /// the enclosing receipt serialization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance_digest: Option<String>,
 }
 
 /// Outcome and provenance for one verification claim.
@@ -433,6 +447,56 @@ fn verification_failures(
                 "source license is missing",
             ));
         }
+        if let Some(assurance) = source.assurance.as_ref() {
+            if source.snapshot_digest.as_deref() != Some(assurance.snapshot_digest.as_str()) {
+                failures.push(failure(
+                    TrustGate::Verification,
+                    "source_assurance_snapshot_mismatch",
+                    &source.source_id,
+                    "source assurance snapshot digest differs from source admission evidence",
+                ));
+            }
+            match assurance.digest() {
+                Ok(digest) if source.assurance_digest.as_deref() == Some(digest.as_str()) => {}
+                _ => failures.push(failure(
+                    TrustGate::Verification,
+                    "source_assurance_digest_mismatch",
+                    &source.source_id,
+                    "source assurance dossier is not bound by its computed digest",
+                )),
+            }
+        }
+        if let Some(assurance_policy) = policy.source_assurance.as_ref() {
+            match source.assurance.as_ref() {
+                None => failures.push(failure(
+                    TrustGate::Verification,
+                    "missing_source_assurance",
+                    &source.source_id,
+                    "policy requires a source assurance dossier",
+                )),
+                Some(assurance) if assurance.source_id != source.source_id => {
+                    failures.push(failure(
+                        TrustGate::Verification,
+                        "source_assurance_identity_mismatch",
+                        &source.source_id,
+                        "source assurance dossier identifies a different source",
+                    ));
+                }
+                Some(assurance) => {
+                    let report = assurance_policy.assess(assurance);
+                    if !report.passed {
+                        failures.extend(report.failures.into_iter().map(|assurance_failure| {
+                            failure(
+                                TrustGate::Verification,
+                                &format!("source_assurance_{}", assurance_failure.code),
+                                &assurance_failure.subject,
+                                &assurance_failure.detail,
+                            )
+                        }));
+                    }
+                }
+            }
+        }
     }
     if (policy.require_verified_sources || policy.require_source_version || policy.require_license)
         && evidence.sources.is_empty()
@@ -603,6 +667,9 @@ mod tests {
                 checksum_status: ChecksumVerification::Verified,
                 source_version_present: true,
                 license_present: true,
+                snapshot_digest: Some(DIGEST.into()),
+                assurance: None,
+                assurance_digest: None,
             }],
             checks: vec![VerificationEvidence {
                 check_id: "area-oracle".into(),
@@ -663,6 +730,42 @@ mod tests {
         let mut incompatible = evidence();
         incompatible.contracts[0].compatibility = CompatibilityStatus::Indeterminate;
         assert_eq!(policy().assess(&incompatible).level, TrustLevel::Replayable);
+    }
+
+    #[test]
+    fn required_source_assurance_is_part_of_verified_trust() {
+        let mut policy = policy();
+        policy.source_assurance = Some(AssurancePolicy {
+            accepted_authority_classes: BTreeSet::from([crate::AuthorityClass::PrimaryOfficial]),
+            max_age_days: Some(365),
+            required_checks: BTreeSet::new(),
+            minimum_independent_corroborations: 0,
+            require_uncertainty: false,
+            require_limitations: true,
+            allow_unresolved_disputes: false,
+        });
+
+        let missing = policy.assess(&evidence());
+        assert_eq!(missing.level, TrustLevel::Replayable);
+        assert!(missing
+            .failures
+            .iter()
+            .any(|failure| failure.code == "missing_source_assurance"));
+
+        let mut admitted = evidence();
+        let mut assurance = SourceAssurance::new(
+            "nagoya-2020",
+            DIGEST,
+            "Nagoya City",
+            crate::AuthorityClass::PrimaryOfficial,
+        );
+        assurance.published_at = Some("2021-11-30".into());
+        assurance.assessed_at = "2022-01-01T00:00:00Z".into();
+        assurance.observed_age_days = Some(32);
+        assurance.limitations = vec!["Reference-date population, not a live estimate.".into()];
+        admitted.sources[0].assurance_digest = Some(assurance.digest().unwrap());
+        admitted.sources[0].assurance = Some(assurance);
+        assert_eq!(policy.assess(&admitted).level, TrustLevel::Verified);
     }
 
     #[test]

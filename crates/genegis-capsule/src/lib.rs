@@ -7,7 +7,9 @@ use genegis_analysis::{
     canonical_nagoya_execution_digest, AnalysisResult, AskPipelineResult, ExecutionReceipt,
     NagoyaArtifactDigests, NagoyaExecutionOutput,
 };
-use genegis_contract::{TrustAssessment, TrustLevel, VerificationGraph, VerificationPolicy};
+use genegis_contract::{
+    SourceAssurance, TrustAssessment, TrustLevel, VerificationGraph, VerificationPolicy,
+};
 use genegis_core::{Command, CommandEnvelope};
 use genegis_workflow::GeoWorkflow;
 use serde::{Deserialize, Serialize};
@@ -34,6 +36,7 @@ const WORKFLOW_PATH: &str = "metadata/workflow.json";
 const RECEIPT_PATH: &str = "metadata/receipt.json";
 const POLICY_PATH: &str = "metadata/verification-policy.json";
 const GRAPH_PATH: &str = "metadata/verification-graph.json";
+const ASSURANCE_DIR: &str = "metadata/source-assurance";
 const HTML_PATH: &str = "artifacts/map.html";
 const PNG_PATH: &str = "artifacts/map.png";
 const TRUST_REPORT_PATH: &str = "reports/trust.html";
@@ -225,6 +228,17 @@ pub struct SourceReview {
     pub observed_checksum: Option<String>,
     /// Human-readable checksum admission state.
     pub checksum_status: String,
+    /// Digest binding the complete Source Assurance dossier.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance_digest: Option<String>,
+    /// Highest assurance level justified by the selected release policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assurance_level: Option<String>,
+    /// Source caveats and explicit non-claims shown without raw JSON.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub limitations: Vec<String>,
+    /// Number of open or acknowledged source disputes.
+    pub unresolved_disputes: usize,
 }
 
 /// One executable node in the reviewed Workflow Graph.
@@ -351,6 +365,7 @@ pub fn seal_nagoya_capsule(
         }
     }
     fs::create_dir_all(root.join("metadata")).map_err(|source| io_error(root, source))?;
+    fs::create_dir_all(root.join(ASSURANCE_DIR)).map_err(|source| io_error(root, source))?;
     fs::create_dir_all(root.join("artifacts")).map_err(|source| io_error(root, source))?;
     fs::create_dir_all(root.join("reports")).map_err(|source| io_error(root, source))?;
 
@@ -383,7 +398,7 @@ pub fn seal_nagoya_capsule(
         map_html_digest: digest(result.html.as_bytes()),
         map_png_digest: digest(&result.png),
     };
-    let subjects = vec![
+    let mut subjects = vec![
         json_subject(
             ANALYSIS_PATH,
             "analysis-result",
@@ -410,6 +425,17 @@ pub fn seal_nagoya_capsule(
             trust_report_html(trust, &identities).into_bytes(),
         ),
     ];
+    if let Some(evidence) = result.execution_receipt.trust_evidence.as_ref() {
+        for (index, source) in evidence.sources.iter().enumerate() {
+            if let Some(assurance) = source.assurance.as_ref() {
+                subjects.push(json_subject(
+                    &format!("{ASSURANCE_DIR}/{index:03}.json"),
+                    "source-assurance",
+                    assurance,
+                )?);
+            }
+        }
+    }
     let mut manifest_entries = Vec::with_capacity(subjects.len());
     for subject in subjects {
         write_file(&root.join(&subject.path), &subject.bytes)?;
@@ -517,6 +543,46 @@ pub fn verify_nagoya_capsule(
         .trust_evidence
         .as_ref()
         .ok_or_else(|| verify_error("receipt has no normalized trust evidence"))?;
+    let assurance_entries = manifest
+        .entries
+        .iter()
+        .filter(|entry| entry.role == "source-assurance")
+        .collect::<Vec<_>>();
+    let expected_assurance_count = trust_evidence
+        .sources
+        .iter()
+        .filter(|source| source.assurance.is_some())
+        .count();
+    if assurance_entries.len() != expected_assurance_count {
+        return Err(verify_error(
+            "source assurance subject count differs from trust evidence",
+        ));
+    }
+    let mut assurance_source_ids = BTreeSet::new();
+    for entry in assurance_entries {
+        let assurance: SourceAssurance = read_json(&root.join(&entry.path))?;
+        if !assurance_source_ids.insert(assurance.source_id.clone()) {
+            return Err(verify_error("duplicate source assurance identity"));
+        }
+        let source = trust_evidence
+            .sources
+            .iter()
+            .find(|source| source.source_id == assurance.source_id)
+            .ok_or_else(|| verify_error("source assurance has no matching trust evidence"))?;
+        if source.assurance.as_ref() != Some(&assurance) {
+            return Err(verify_error(
+                "source assurance subject differs from trust evidence",
+            ));
+        }
+        let assurance_digest = assurance.digest()?;
+        if source.assurance_digest.as_deref() != Some(assurance_digest.as_str())
+            || source.snapshot_digest.as_deref() != Some(assurance.snapshot_digest.as_str())
+        {
+            return Err(verify_error(
+                "source assurance digest or snapshot binding mismatch",
+            ));
+        }
+    }
     let trust = embedded_policy.assess(trust_evidence);
     if receipt.trust_assessment.as_ref() != Some(&trust)
         || receipt.verification_passed != (trust.level >= TrustLevel::Verified)
@@ -853,17 +919,49 @@ pub fn review_capsule_with_diff(
             .source_snapshots
             .iter()
             .enumerate()
-            .map(|(index, source)| SourceReview {
-                source_id: source
+            .map(|(index, source)| {
+                let source_id = source
                     .dataset_id
                     .clone()
-                    .unwrap_or_else(|| format!("source-{index}")),
-                uri: source.uri.clone(),
-                version: source.source_version.as_ref().map(ToString::to_string),
-                license: source.license.clone(),
-                expected_checksum: source.expected_checksum.clone(),
-                observed_checksum: source.observed_checksum.clone(),
-                checksum_status: source.checksum_status.to_string(),
+                    .unwrap_or_else(|| format!("source-{index}"));
+                let source_evidence = evidence.and_then(|evidence| {
+                    evidence
+                        .sources
+                        .iter()
+                        .find(|candidate| candidate.source_id == source_id)
+                });
+                let assurance = source_evidence.and_then(|evidence| evidence.assurance.as_ref());
+                let assurance_level = policy.source_assurance.as_ref().and_then(|policy| {
+                    assurance.map(|assurance| {
+                        format!("{:?}", policy.assess(assurance).level).to_ascii_lowercase()
+                    })
+                });
+                SourceReview {
+                    source_id,
+                    uri: source.uri.clone(),
+                    version: source.source_version.as_ref().map(ToString::to_string),
+                    license: source.license.clone(),
+                    expected_checksum: source.expected_checksum.clone(),
+                    observed_checksum: source.observed_checksum.clone(),
+                    checksum_status: source.checksum_status.to_string(),
+                    assurance_digest: source_evidence
+                        .and_then(|evidence| evidence.assurance_digest.clone()),
+                    assurance_level,
+                    limitations: assurance
+                        .map(|assurance| assurance.limitations.clone())
+                        .unwrap_or_default(),
+                    unresolved_disputes: assurance
+                        .map(|assurance| {
+                            assurance
+                                .disputes
+                                .iter()
+                                .filter(|dispute| {
+                                    dispute.status != genegis_contract::DisputeStatus::Resolved
+                                })
+                                .count()
+                        })
+                        .unwrap_or(0),
+                }
             })
             .collect(),
         workflow_nodes: workflow
@@ -1259,6 +1357,7 @@ fn category_for(role: &str, path: &str) -> SemanticCategory {
     match role {
         "verification-policy" => SemanticCategory::Policy,
         "verification-graph" => SemanticCategory::Verification,
+        "source-assurance" => SemanticCategory::Source,
         "map-artifact" => SemanticCategory::Artifact,
         "trust-report" => SemanticCategory::Verification,
         "command" | "workflow" if path.contains("contract") => SemanticCategory::Contract,
@@ -1310,7 +1409,10 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let root = temporary.path().join("capsule");
         let manifest = seal_nagoya_capsule(&result, &root).expect("seal capsule");
-        assert_eq!(manifest.entries.len(), 9);
+        assert_eq!(manifest.entries.len(), 10);
+        assert!(manifest.entries.iter().any(|entry| {
+            entry.role == "source-assurance" && entry.path == "metadata/source-assurance/000.json"
+        }));
         let round_tripped: AnalysisResult = read_json(&root.join(ANALYSIS_PATH)).unwrap();
         let original = result.analysis.as_ref().expect("typed analysis");
         assert_eq!(
@@ -1330,7 +1432,7 @@ mod tests {
             verified.result_digest,
             result.execution_receipt.result_digest
         );
-        assert_eq!(verified.verified_entries, 9);
+        assert_eq!(verified.verified_entries, 10);
     }
 
     #[test]
@@ -1352,6 +1454,16 @@ mod tests {
         .expect("tamper report");
         refresh_manifest_entry(&report_root, TRUST_REPORT_PATH);
         assert!(verify_nagoya_capsule(&report_root, None).is_err());
+
+        let assurance_root = temporary.path().join("assurance");
+        seal_nagoya_capsule(&result, &assurance_root).expect("seal assurance case");
+        mutate_json_subject(
+            &assurance_root,
+            "metadata/source-assurance/000.json",
+            "/limitations/0",
+            serde_json::json!("mutated limitation"),
+        );
+        assert!(verify_nagoya_capsule(&assurance_root, None).is_err());
 
         let manifest_root = temporary.path().join("manifest");
         seal_nagoya_capsule(&result, &manifest_root).expect("seal manifest case");
@@ -1464,8 +1576,14 @@ mod tests {
         let review = review_capsule(&root, None).expect("review model");
         assert_eq!(review.claims.len(), 5);
         assert_eq!(review.contracts.len(), 3);
-        assert_eq!(review.artifacts.len(), 9);
+        assert_eq!(review.artifacts.len(), 10);
         assert!(!review.sources.is_empty());
+        assert_eq!(
+            review.sources[0].assurance_level.as_deref(),
+            Some("corroborated")
+        );
+        assert!(review.sources[0].assurance_digest.is_some());
+        assert!(review.sources[0].limitations.len() >= 3);
         assert!(review.workflow_nodes.len() >= 10);
         assert_eq!(
             review.identities.result_digest,
@@ -1643,6 +1761,18 @@ mod tests {
                 RECEIPT_PATH,
                 "/trust_evidence/sources/0/checksum_status",
                 serde_json::json!("mismatch"),
+            ),
+            (
+                "source-assurance-digest",
+                RECEIPT_PATH,
+                "/trust_evidence/sources/0/assurance_digest",
+                serde_json::json!(digest(b"other assurance")),
+            ),
+            (
+                "source-assurance-snapshot",
+                RECEIPT_PATH,
+                "/trust_evidence/sources/0/snapshot_digest",
+                serde_json::json!(digest(b"other source snapshot")),
             ),
             (
                 "check-outcome",

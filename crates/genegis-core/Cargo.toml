@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 genegis-crs = { path = "../genegis-crs" }
 genegis-workflow = { path = "../genegis-workflow" }
+genegis-style = { path = "../genegis-style" }
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

@@ -99,24 +99,28 @@ impl CollabSession {
     ) -> Result<(), CollabError> {
         let mut document = self.document()?;
         let workflow = workflow_id.unwrap_or("unknown");
-        document.project.workspace_mut().provenance.record_agent_run(
-            run_id,
-            workflow,
-            "agent",
-            if verification_passed {
-                "agent_run_verified"
-            } else if plan_only {
-                "agent_plan_pending"
-            } else {
-                "agent_run_failed"
-            },
-            serde_json::json!({
-                "prompt": prompt,
-                "planner_mode": planner_mode,
-                "verify_attempts": verify_attempts,
-                "plan_only": plan_only,
-            }),
-        );
+        document
+            .project
+            .workspace_mut()
+            .provenance
+            .record_agent_run(
+                run_id,
+                workflow,
+                "agent",
+                if verification_passed {
+                    "agent_run_verified"
+                } else if plan_only {
+                    "agent_plan_pending"
+                } else {
+                    "agent_run_failed"
+                },
+                serde_json::json!({
+                    "prompt": prompt,
+                    "planner_mode": planner_mode,
+                    "verify_attempts": verify_attempts,
+                    "plan_only": plan_only,
+                }),
+            );
         self.crdt.apply_document(&document)?;
         Ok(())
     }
@@ -206,7 +210,9 @@ impl CollabSession {
     }
 
     pub fn provenance_json(&self) -> Result<serde_json::Value, CollabError> {
-        Ok(serde_json::json!(self.document()?.project.workspace().provenance.entries))
+        Ok(serde_json::json!(
+            self.document()?.project.workspace().provenance.entries
+        ))
     }
 }
 

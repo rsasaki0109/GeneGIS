@@ -1,12 +1,13 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use arrow_array::{Array, BinaryArray, RecordBatch};
 use arrow_schema::DataType;
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use genegis_geometry::BoundingBox;
 use geo_traits::to_geo::ToGeoGeometry;
 use geoparquet::metadata::GeoParquetMetadata;
@@ -38,6 +39,8 @@ pub struct GeoParquetReadReport {
     pub read_mode: String,
     pub content_length: u64,
     pub row_group_count: usize,
+    /// Sum of Parquet row-group uncompressed byte sizes from file metadata.
+    pub logical_dataset_bytes: u64,
     pub selected_row_groups: Vec<usize>,
     pub schema_fields: Vec<String>,
     pub range_requests: usize,
@@ -123,6 +126,7 @@ pub fn read_geoparquet_uri_with_options_and_policy(
         read_mode: "http_range".into(),
         content_length,
         row_group_count: decoded.row_group_count,
+        logical_dataset_bytes: decoded.logical_dataset_bytes,
         selected_row_groups,
         schema_fields: decoded.schema_fields,
         range_requests: stats.requests.load(Ordering::SeqCst),
@@ -140,6 +144,7 @@ pub fn read_geoparquet_bytes(bytes: &[u8]) -> Result<VectorDataset, VectorError>
 struct DecodedGeoParquet {
     dataset: VectorDataset,
     row_group_count: usize,
+    logical_dataset_bytes: u64,
     schema_fields: Vec<String>,
 }
 
@@ -151,6 +156,12 @@ fn read_geoparquet_chunk_reader<R: ChunkReader + 'static>(
     let builder = ParquetRecordBatchReaderBuilder::try_new(reader)
         .map_err(|err| VectorError::GeoParquet(err.to_string()))?;
     let row_group_count = builder.metadata().num_row_groups();
+    let logical_dataset_bytes = builder
+        .metadata()
+        .row_groups()
+        .iter()
+        .map(|row_group| row_group.total_byte_size().max(0) as u64)
+        .sum();
     let schema_fields = builder
         .schema()
         .fields()
@@ -233,6 +244,7 @@ fn read_geoparquet_chunk_reader<R: ChunkReader + 'static>(
             bbox,
         },
         row_group_count,
+        logical_dataset_bytes,
         schema_fields,
     })
 }
@@ -248,6 +260,7 @@ struct HttpRangeChunkReader {
     uri: Arc<str>,
     content_length: u64,
     stats: Arc<HttpRangeStats>,
+    cache: Arc<Mutex<BTreeMap<u64, Bytes>>>,
     policy: genegis_storage::RemoteAccessPolicy,
 }
 
@@ -259,6 +272,7 @@ impl HttpRangeChunkReader {
             uri: Arc::from(uri),
             content_length,
             stats: Arc::new(HttpRangeStats::default()),
+            cache: Arc::new(Mutex::new(BTreeMap::new())),
             policy,
         })
     }
@@ -276,21 +290,51 @@ impl HttpRangeChunkReader {
                 self.content_length
             )));
         }
-        let range = genegis_storage::ByteRange::new(start, end)
-            .map_err(|error| ParquetError::General(error.to_string()))?;
-        let bytes = genegis_storage::read_asset_range_with_policy(&self.uri, &range, &self.policy)
-            .map_err(|error| ParquetError::General(error.to_string()))?;
-        if bytes.len() != length {
-            return Err(ParquetError::General(format!(
-                "HTTP range length mismatch: requested {length}, received {}",
-                bytes.len()
-            )));
+        const BLOCK_BYTES: u64 = 64 * 1024;
+        let first_block = start / BLOCK_BYTES * BLOCK_BYTES;
+        let mut block_start = first_block;
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| ParquetError::General("HTTP range cache lock poisoned".into()))?;
+        while block_start <= end {
+            if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(block_start) {
+                let block_end = block_start
+                    .saturating_add(BLOCK_BYTES - 1)
+                    .min(self.content_length - 1);
+                let range = genegis_storage::ByteRange::new(block_start, block_end)
+                    .map_err(|error| ParquetError::General(error.to_string()))?;
+                let bytes =
+                    genegis_storage::read_asset_range_with_policy(&self.uri, &range, &self.policy)
+                        .map_err(|error| ParquetError::General(error.to_string()))?;
+                if bytes.len() as u64 != range.len() {
+                    return Err(ParquetError::General(format!(
+                        "HTTP block length mismatch: requested {}, received {}",
+                        range.len(),
+                        bytes.len()
+                    )));
+                }
+                self.stats.requests.fetch_add(1, Ordering::SeqCst);
+                self.stats
+                    .bytes
+                    .fetch_add(bytes.len() as u64, Ordering::SeqCst);
+                entry.insert(Bytes::from(bytes));
+            }
+            block_start = block_start.saturating_add(BLOCK_BYTES);
         }
-        self.stats.requests.fetch_add(1, Ordering::SeqCst);
-        self.stats
-            .bytes
-            .fetch_add(bytes.len() as u64, Ordering::SeqCst);
-        Ok(Bytes::from(bytes))
+        let mut output = BytesMut::with_capacity(length);
+        let mut position = start;
+        while position <= end {
+            let block_start = position / BLOCK_BYTES * BLOCK_BYTES;
+            let block = cache
+                .get(&block_start)
+                .ok_or_else(|| ParquetError::General("HTTP range cache block missing".into()))?;
+            let within = (position - block_start) as usize;
+            let take = ((end - position + 1) as usize).min(block.len() - within);
+            output.extend_from_slice(&block[within..within + take]);
+            position += take as u64;
+        }
+        Ok(output.freeze())
     }
 }
 
@@ -359,6 +403,7 @@ fn remote_dataset_name(uri: &str) -> String {
         .to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn parse_batch(
     batch: &RecordBatch,
     geometry_column: &str,
@@ -666,14 +711,11 @@ mod tests {
         assert_eq!(dataset.feature_count(), 16);
         assert!(dataset.crs.starts_with("EPSG:"));
         assert!(dataset.bbox.max.x > dataset.bbox.min.x);
-        assert_eq!(
-            dataset.features[0]
-                .properties
-                .get("ward_name")
-                .and_then(|v| v.as_str())
-                .is_some(),
-            true
-        );
+        assert!(dataset.features[0]
+            .properties
+            .get("ward_name")
+            .and_then(|v| v.as_str())
+            .is_some());
     }
 
     #[test]

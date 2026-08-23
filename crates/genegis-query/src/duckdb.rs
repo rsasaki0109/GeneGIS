@@ -4,8 +4,7 @@ use crate::error::QueryError;
 
 /// Cross-check density values using DuckDB SQL (MVP verification path).
 pub fn verify_nagoya_densities(rows: &[(String, u64, f64, f64)]) -> Result<bool, QueryError> {
-    let conn = Connection::open_in_memory()
-        .map_err(|e| QueryError::DuckDb(e.to_string()))?;
+    let conn = Connection::open_in_memory().map_err(|e| QueryError::DuckDb(e.to_string()))?;
 
     conn.execute_batch(
         "CREATE TABLE wards (

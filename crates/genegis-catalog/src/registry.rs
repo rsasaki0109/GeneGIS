@@ -52,10 +52,12 @@ impl EndpointRegistry {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let json = std::fs::read_to_string(path)
-            .map_err(|error| CatalogError::InvalidRegistry(format!("read {}: {error}", path.display())))?;
-        let registry: Self = serde_json::from_str(&json)
-            .map_err(|error| CatalogError::InvalidRegistry(format!("parse {}: {error}", path.display())))?;
+        let json = std::fs::read_to_string(path).map_err(|error| {
+            CatalogError::InvalidRegistry(format!("read {}: {error}", path.display()))
+        })?;
+        let registry: Self = serde_json::from_str(&json).map_err(|error| {
+            CatalogError::InvalidRegistry(format!("parse {}: {error}", path.display()))
+        })?;
         if registry.schema_version != 1 {
             return Err(CatalogError::InvalidRegistry(format!(
                 "unsupported schema version {}",
@@ -74,8 +76,9 @@ impl EndpointRegistry {
         }
         let json = serde_json::to_string_pretty(self)
             .map_err(|error| CatalogError::InvalidRegistry(format!("serialize: {error}")))?;
-        std::fs::write(path, json)
-            .map_err(|error| CatalogError::InvalidRegistry(format!("write {}: {error}", path.display())))
+        std::fs::write(path, json).map_err(|error| {
+            CatalogError::InvalidRegistry(format!("write {}: {error}", path.display()))
+        })
     }
 
     /// Apply a catalog mutation only when represented by both a Command and GeoWorkflow.
@@ -94,9 +97,13 @@ impl EndpointRegistry {
                 auth_header,
             } => {
                 validate_endpoint_id(endpoint_id)?;
-                let authentication =
-                    authentication_from_fields(auth_kind, auth_env.as_deref(), auth_header.as_deref())?;
-                self.endpoints.retain(|endpoint| endpoint.id != *endpoint_id);
+                let authentication = authentication_from_fields(
+                    auth_kind,
+                    auth_env.as_deref(),
+                    auth_header.as_deref(),
+                )?;
+                self.endpoints
+                    .retain(|endpoint| endpoint.id != *endpoint_id);
                 self.endpoints.push(
                     StacEndpoint::new(endpoint_id, url)
                         .with_authentication(authentication)
@@ -118,7 +125,8 @@ impl EndpointRegistry {
             }
             Command::RemoveStacEndpoint { endpoint_id } => {
                 let before = self.endpoints.len();
-                self.endpoints.retain(|endpoint| endpoint.id != *endpoint_id);
+                self.endpoints
+                    .retain(|endpoint| endpoint.id != *endpoint_id);
                 if self.endpoints.len() == before {
                     return Err(CatalogError::NotFound(endpoint_id.clone()));
                 }
@@ -247,10 +255,7 @@ fn authentication_from_fields(
     }
 }
 
-fn required_auth_field<'a>(
-    value: Option<&'a str>,
-    label: &str,
-) -> Result<&'a str, CatalogError> {
+fn required_auth_field<'a>(value: Option<&'a str>, label: &str) -> Result<&'a str, CatalogError> {
     value
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| CatalogError::InvalidRegistry(format!("{label} is required")))
@@ -258,7 +263,7 @@ fn required_auth_field<'a>(
 
 #[cfg(test)]
 mod tests {
-    use genegis_core::{CommandOrigin, CommandEnvelope};
+    use genegis_core::{CommandEnvelope, CommandOrigin};
     use genegis_workflow::stac_endpoint_registry_template;
 
     use super::*;
@@ -289,7 +294,10 @@ mod tests {
         assert_eq!(restored.command_history.len(), 1);
         assert_eq!(restored.workflows.len(), 1);
         assert_eq!(restored.provenance.entries.len(), 1);
-        assert_eq!(restored.get("local").expect("endpoint").title, "Local fixture");
+        assert_eq!(
+            restored.get("local").expect("endpoint").title,
+            "Local fixture"
+        );
 
         std::fs::remove_file(path).expect("cleanup");
     }

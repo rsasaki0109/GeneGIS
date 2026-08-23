@@ -9,7 +9,7 @@ use crate::backend::{PlannerBackend, PlannerConfig};
 use crate::error::AiError;
 use crate::intent::ParsedIntent;
 use crate::llm::{merge_llm_intent, plan_with_llm};
-use crate::resolver::{bind_catalog_dataset, ResolvedWorkflow, WorkflowId, resolve_workflow};
+use crate::resolver::{bind_catalog_dataset, resolve_workflow, ResolvedWorkflow, WorkflowId};
 use crate::tool_call::{llm_tool_calls, rule_based_tool_calls, PlannerToolCall};
 
 /// Default path for a human-gated pending agent plan JSON.
@@ -46,8 +46,8 @@ impl PlanResult {
     }
 
     pub fn load_from_path(path: impl AsRef<std::path::Path>) -> Result<Self, AiError> {
-        let json = std::fs::read_to_string(path.as_ref())
-            .map_err(|err| AiError::Json(err.to_string()))?;
+        let json =
+            std::fs::read_to_string(path.as_ref()).map_err(|err| AiError::Json(err.to_string()))?;
         serde_json::from_str(&json).map_err(|err| AiError::Json(err.to_string()))
     }
 }
@@ -116,7 +116,8 @@ mod tests {
     use super::*;
 
     use genegis_catalog::{
-        EXTERNAL_STAC_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+        EXTERNAL_STAC_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID,
+        REMOTE_COG_DEMO_ID,
     };
 
     #[test]
@@ -169,17 +170,18 @@ mod tests {
     #[test]
     fn plans_nagoya_geoparquet_density() {
         let plan = plan_from_prompt("名古屋 GeoParquet 人口密度を表示").expect("plan");
-        assert_eq!(plan.resolved.workflow_id, WorkflowId::NagoyaGeoparquetDensity);
+        assert_eq!(
+            plan.resolved.workflow_id,
+            WorkflowId::NagoyaGeoparquetDensity
+        );
         assert_eq!(plan.resolved.dataset_id, NAGOYA_WARDS_GEOPARQUET_ID);
         assert_eq!(plan.workflow.steps.len(), 8);
     }
 
     #[test]
     fn plans_external_stac_demo() {
-        let plan = plan_from_prompt(
-            "外部STAC examples/stac/sample-collection.json を fetch",
-        )
-        .expect("plan");
+        let plan = plan_from_prompt("外部STAC examples/stac/sample-collection.json を fetch")
+            .expect("plan");
         assert_eq!(plan.resolved.workflow_id, WorkflowId::ExternalStacDemo);
         assert_eq!(plan.resolved.dataset_id, EXTERNAL_STAC_DEMO_ID);
         assert_eq!(plan.tool_calls.len(), 5);

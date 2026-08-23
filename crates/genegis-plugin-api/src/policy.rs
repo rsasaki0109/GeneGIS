@@ -62,9 +62,7 @@ impl CapabilityPolicy {
         capability: PluginCapability,
     ) -> Result<(), PluginApiError> {
         if !manifest.has_capability(capability) {
-            return Err(PluginApiError::CapabilityNotGranted(
-                capability.to_string(),
-            ));
+            return Err(PluginApiError::CapabilityNotGranted(capability.to_string()));
         }
         if !self.allows(capability) {
             return Err(PluginApiError::CapabilityDenied(capability.to_string()));

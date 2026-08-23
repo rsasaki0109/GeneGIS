@@ -1,6 +1,7 @@
-//! GeneGIS tile — Phase 0 skeleton crate.
+//! PMTiles v3 range-selection engine.
 
 #![deny(missing_docs)]
 
-/// Placeholder version marker for Phase 0 scaffolding.
-pub const PHASE: &str = "0-foundation";
+mod pmtiles;
+
+pub use pmtiles::{read_pmtiles_tile, PmTilesError, PmTilesHeader, PmTilesTileRead};

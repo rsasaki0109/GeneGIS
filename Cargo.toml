@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/genegis-core",
     "crates/genegis-contract",
+    "crates/genegis-adapter",
     "crates/genegis-capsule",
     "crates/genegis-geometry",
     "crates/genegis-crs",

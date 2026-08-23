@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use genegis_crs::{CoordinateUnit, Crs, SourceSnapshot};
+use genegis_style::EvidenceMapStyle;
 use genegis_workflow::GeoWorkflow;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -9,7 +10,10 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::{Layer, LayerId, Project};
+use crate::{
+    EditableGeometryKind, EditableLayer, FeatureEdit, FeatureSchema, Layer, LayerId,
+    MutationWorkflowBinding, Project,
+};
 
 /// Who initiated a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,6 +281,26 @@ pub enum Command {
         center: [f64; 2],
         zoom: f64,
     },
+    /// Attach an empty, revisioned feature store to an existing vector layer.
+    InitializeEditableLayer {
+        layer_id: Uuid,
+        crs: Crs,
+        geometry_kind: EditableGeometryKind,
+        schema: FeatureSchema,
+        workflow: MutationWorkflowBinding,
+    },
+    /// Apply one typed vector edit with optimistic concurrency.
+    EditFeatures {
+        layer_id: Uuid,
+        expected_layer_revision: u64,
+        edit: FeatureEdit,
+        workflow: MutationWorkflowBinding,
+    },
+    /// Install or replace an evidence-carrying style for one layer.
+    SetEvidenceMapStyle {
+        style: EvidenceMapStyle,
+        workflow: MutationWorkflowBinding,
+    },
     RunWorkflow {
         workflow_id: Uuid,
     },
@@ -374,6 +398,15 @@ pub enum CommandError {
     /// The envelope digest differs from the registered graph.
     #[error("workflow digest mismatch: expected {expected}, registered {actual}")]
     WorkflowDigestMismatch { expected: String, actual: String },
+    /// A mutation did not bind to the matching reviewed workflow node.
+    #[error("mutation workflow binding failed: {reason}")]
+    MutationWorkflowBinding { reason: String },
+    /// A vector edit failed validation without changing project state.
+    #[error("feature edit rejected: {reason}")]
+    FeatureEditRejected { reason: String },
+    /// A map style failed validation without changing project state.
+    #[error("map style rejected: {reason}")]
+    MapStyleRejected { reason: String },
     /// A workflow source contract was not represented by the command snapshot.
     #[error("missing input snapshot for workflow contract {input}")]
     MissingInputSnapshot { input: String },
@@ -449,7 +482,7 @@ impl CommandLog {
 /// The history cursor is only an index into the event stream. Actual state is
 /// changed through snapshots captured around each successful command, and a
 /// persisted log can reconstruct those snapshots from the initial Project.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CommandBus {
     history: Vec<CommandEnvelope>,
     cursor: usize,
@@ -461,23 +494,6 @@ pub struct CommandBus {
     workflows: BTreeMap<Uuid, GeoWorkflow>,
     workflow_executions: BTreeMap<Uuid, WorkflowExecutionRecord>,
     expected_replay_digest: Option<String>,
-}
-
-impl Default for CommandBus {
-    fn default() -> Self {
-        Self {
-            history: Vec::new(),
-            cursor: 0,
-            before_states: Vec::new(),
-            after_states: Vec::new(),
-            initial_state: None,
-            current_state: None,
-            audit_log: Vec::new(),
-            workflows: BTreeMap::new(),
-            workflow_executions: BTreeMap::new(),
-            expected_replay_digest: None,
-        }
-    }
 }
 
 struct RecordedWorkflowExecutor<'a> {
@@ -602,6 +618,8 @@ impl CommandBus {
             }
             _ => {}
         }
+
+        self.validate_mutation_workflow(&envelope)?;
 
         // Validate a RunWorkflow before cloning or mutating project state. The
         // registered graph and its digest are the fail-closed authorization
@@ -1058,6 +1076,60 @@ impl CommandBus {
         Ok(Some(actual))
     }
 
+    fn validate_mutation_workflow(&self, envelope: &CommandEnvelope) -> Result<(), CommandError> {
+        let (binding, expected_operation) = match &envelope.command {
+            Command::InitializeEditableLayer { workflow, .. } => {
+                (workflow, "InitializeEditableLayer")
+            }
+            Command::EditFeatures { edit, workflow, .. } => (workflow, edit.workflow_operation()),
+            Command::SetEvidenceMapStyle { workflow, .. } => (workflow, "SetEvidenceMapStyle"),
+            _ => return Ok(()),
+        };
+        let workflow = self.workflows.get(&binding.workflow_id).ok_or_else(|| {
+            CommandError::MutationWorkflowBinding {
+                reason: format!("workflow {} is not registered", binding.workflow_id),
+            }
+        })?;
+        workflow
+            .validate()
+            .map_err(|error| CommandError::MutationWorkflowBinding {
+                reason: error.to_string(),
+            })?;
+        let actual =
+            workflow
+                .stable_digest()
+                .map_err(|error| CommandError::MutationWorkflowBinding {
+                    reason: error.to_string(),
+                })?;
+        let expected = envelope.workflow_digest.as_ref().ok_or_else(|| {
+            CommandError::MutationWorkflowBinding {
+                reason: "command envelope has no workflow digest".into(),
+            }
+        })?;
+        if expected.as_str() != actual {
+            return Err(CommandError::WorkflowDigestMismatch {
+                expected: expected.to_string(),
+                actual,
+            });
+        }
+        let node = workflow
+            .steps
+            .iter()
+            .find(|step| step.node_id().as_str() == binding.node_id)
+            .ok_or_else(|| CommandError::MutationWorkflowBinding {
+                reason: format!("node {} does not exist", binding.node_id),
+            })?;
+        if node.operation != expected_operation {
+            return Err(CommandError::MutationWorkflowBinding {
+                reason: format!(
+                    "node {} operation is {:?}, expected {:?}",
+                    binding.node_id, node.operation, expected_operation
+                ),
+            });
+        }
+        Ok(())
+    }
+
     fn apply_project_mutation(
         &self,
         project: &mut Project,
@@ -1161,6 +1233,132 @@ impl CommandBus {
                     "set_view_camera",
                     view_id.to_string(),
                     serde_json::json!({ "center": center, "zoom": zoom }),
+                );
+            }
+            Command::InitializeEditableLayer {
+                layer_id,
+                crs,
+                geometry_kind,
+                schema,
+                workflow,
+            } => {
+                let workspace = project.workspace_mut();
+                let layer = workspace
+                    .layers
+                    .iter()
+                    .find(|layer| layer.id.0 == *layer_id)
+                    .ok_or_else(|| CommandError::TargetNotFound {
+                        target: format!("layer {layer_id}"),
+                    })?;
+                if layer.kind != crate::LayerKind::Vector {
+                    return Err(CommandError::FeatureEditRejected {
+                        reason: "only vector layers can become editable".into(),
+                    });
+                }
+                if workspace
+                    .editable_layers
+                    .iter()
+                    .any(|editable| editable.layer_id == *layer_id)
+                {
+                    return Err(CommandError::FeatureEditRejected {
+                        reason: "editable layer already initialized".into(),
+                    });
+                }
+                let editable =
+                    EditableLayer::new(*layer_id, crs.clone(), *geometry_kind, schema.clone())
+                        .map_err(|error| CommandError::FeatureEditRejected {
+                            reason: error.to_string(),
+                        })?;
+                let coordinate_unit = editable.coordinate_unit;
+                workspace.editable_layers.push(editable);
+                workspace.updated_at = envelope.timestamp;
+                record_command_provenance(
+                    project,
+                    envelope,
+                    "initialize_editable_layer",
+                    layer_id.to_string(),
+                    serde_json::json!({
+                        "crs": crs,
+                        "coordinate_unit": coordinate_unit,
+                        "geometry_kind": geometry_kind,
+                        "schema": schema,
+                        "workflow_id": workflow.workflow_id,
+                        "workflow_node": workflow.node_id,
+                        "workflow_digest": envelope.workflow_digest,
+                    }),
+                );
+            }
+            Command::EditFeatures {
+                layer_id,
+                expected_layer_revision,
+                edit,
+                workflow,
+            } => {
+                let receipt = project
+                    .workspace_mut()
+                    .editable_layers
+                    .iter_mut()
+                    .find(|editable| editable.layer_id == *layer_id)
+                    .ok_or_else(|| CommandError::TargetNotFound {
+                        target: format!("editable layer {layer_id}"),
+                    })?
+                    .apply(*expected_layer_revision, edit.clone())
+                    .map_err(|error| CommandError::FeatureEditRejected {
+                        reason: error.to_string(),
+                    })?;
+                project.workspace_mut().updated_at = envelope.timestamp;
+                record_command_provenance(
+                    project,
+                    envelope,
+                    edit.workflow_operation(),
+                    layer_id.to_string(),
+                    serde_json::json!({
+                        "receipt": receipt,
+                        "crs": project.workspace().editable_layers.iter().find(|editable| editable.layer_id == *layer_id).map(|editable| &editable.crs),
+                        "coordinate_unit": project.workspace().editable_layers.iter().find(|editable| editable.layer_id == *layer_id).map(|editable| editable.coordinate_unit),
+                        "workflow_id": workflow.workflow_id,
+                        "workflow_node": workflow.node_id,
+                        "workflow_digest": envelope.workflow_digest,
+                    }),
+                );
+            }
+            Command::SetEvidenceMapStyle { style, workflow } => {
+                style
+                    .validate()
+                    .map_err(|error| CommandError::MapStyleRejected {
+                        reason: error.to_string(),
+                    })?;
+                let workspace = project.workspace_mut();
+                let layer = workspace
+                    .layers
+                    .iter_mut()
+                    .find(|layer| layer.id.0 == style.layer_id)
+                    .ok_or_else(|| CommandError::TargetNotFound {
+                        target: format!("layer {}", style.layer_id),
+                    })?;
+                layer.style_id = Some(style.id);
+                if let Some(existing) = workspace
+                    .map_styles
+                    .iter_mut()
+                    .find(|candidate| candidate.id == style.id)
+                {
+                    *existing = style.clone();
+                } else {
+                    workspace.map_styles.push(style.clone());
+                    workspace.map_styles.sort_by_key(|candidate| candidate.id);
+                }
+                workspace.updated_at = envelope.timestamp;
+                record_command_provenance(
+                    project,
+                    envelope,
+                    "set_evidence_map_style",
+                    style.layer_id.to_string(),
+                    serde_json::json!({
+                        "style": style,
+                        "workflow_id": workflow.workflow_id,
+                        "workflow_node": workflow.node_id,
+                        "workflow_digest": envelope.workflow_digest,
+                    }),
                 );
             }
             Command::RunWorkflow { workflow_id } => {
@@ -1307,6 +1505,11 @@ fn record_command_provenance(
 ) {
     let workflow_id = match envelope.command {
         Command::RunWorkflow { workflow_id } => Some(workflow_id.to_string()),
+        Command::InitializeEditableLayer { ref workflow, .. }
+        | Command::EditFeatures { ref workflow, .. }
+        | Command::SetEvidenceMapStyle { ref workflow, .. } => {
+            Some(workflow.workflow_id.to_string())
+        }
         _ => None,
     };
     project
@@ -1336,7 +1539,7 @@ fn canonical_json(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Object(map) => {
             let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(key, _)| *key);
             let mut output = String::from("{");
             for (index, (key, value)) in entries.into_iter().enumerate() {
                 if index > 0 {

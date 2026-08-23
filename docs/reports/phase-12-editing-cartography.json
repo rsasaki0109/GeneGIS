@@ -1,0 +1,84 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "runner": "cargo test -p genegis-core --test edit_acceptance -- --nocapture",
+  "status": "pass",
+  "architecture": {
+    "mutation_boundary": "CommandEnvelope",
+    "authorization_boundary": "registered GeoWorkflow stable digest + exact stable node operation",
+    "concurrency": "layer and feature optimistic revisions",
+    "history": "snapshot-backed undo/redo + tamper-evident persisted replay",
+    "provenance": "command identity, actor, workflow ID/node/digest, CRS, unit, revisions, changed feature IDs"
+  },
+  "supported_feature_operations": [
+    "create",
+    "update",
+    "delete",
+    "split_with_1ppm_area_conservation",
+    "multipart_merge_without_implicit_dissolve",
+    "ring_close_and_consecutive_vertex_repair"
+  ],
+  "validation": [
+    "closed attribute schema",
+    "primary key type and null policy",
+    "geometry family",
+    "finite coordinates and CRS coordinate domain",
+    "closed nonzero polygon rings",
+    "layer revision",
+    "feature revision",
+    "split and merge area conservation",
+    "workflow digest, node identity, and operation"
+  ],
+  "cartography": {
+    "classification": ["equal_interval", "quantile", "manual"],
+    "implemented_artifact": "deterministic SVG",
+    "legend": "fixed title, unit, position, labels, and fills",
+    "labels": "field, family, exact font digest, size, color",
+    "artifact_evidence": [
+      "source identity",
+      "source digest",
+      "license",
+      "CRS",
+      "coordinate unit",
+      "value unit",
+      "style digest",
+      "font digest",
+      "renderer identity",
+      "provenance digest"
+    ]
+  },
+  "hundred_command_replay": {
+    "creates": 50,
+    "updates": 25,
+    "style_mutations": 25,
+    "project_digest": "sha256:274635877c928ca9ec971aa0d7880982e81f7a917a136599894c978ba14019b4",
+    "workflow_digests": [
+      "sha256:7437856e12cd76c577ddce9133dddf850358ef222410fc30bbeaa691f546f02c",
+      "sha256:89ad058000e88248baba51ddc0eae65ee113335a5feee74c870830f51d7ddd37",
+      "sha256:6acadd9e664f18e8a2b2f1f7a5292c13e8d38b672383a712f123fa384810d848"
+    ],
+    "svg_artifact_digest": "sha256:c34621bd6802a07b5103a1c4708f22c82a45ebbeeffe2105cd185eef6a52099b",
+    "svg_metadata_digest": "sha256:cf7415a2924f0edf9398ae4f29f33bb7ba2786046a931a258ba65bd197bbad08",
+    "persisted_replay_project_digest_match": true,
+    "persisted_replay_svg_digest_match": true
+  },
+  "negative_suite": {
+    "cases": 30,
+    "caught": 30,
+    "false_accepts": 0,
+    "categories": {
+      "geometry_and_topology": 10,
+      "stale_revision": 5,
+      "schema_and_null": 5,
+      "workflow_binding_and_digest": 5,
+      "classification_legend_font": 5
+    },
+    "failed_command_state_mutations": 0,
+    "failed_command_history_mutations": 0
+  },
+  "limitations": [
+    "Merge preserves polygon members as a MultiPolygon; topological dissolve is deliberately not implied.",
+    "The initial deterministic artifact lane is SVG; print-PDF and evidence-bound PNG remain outside this gate.",
+    "This is an operational editing slice, not feature parity with QGIS desktop."
+  ]
+}

@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{DataSource, Layer, LayerId, View, ViewId};
+use crate::{DataSource, EditableLayer, Layer, LayerId, View, ViewId};
+use genegis_style::EvidenceMapStyle;
 
 /// Top-level workspace: projects, data connections, cache, history.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,6 +14,12 @@ pub struct Workspace {
     pub updated_at: DateTime<Utc>,
     pub sources: Vec<DataSource>,
     pub layers: Vec<Layer>,
+    /// Revisioned feature stores; mutations are accepted only by Command + Workflow Graph.
+    #[serde(default)]
+    pub editable_layers: Vec<EditableLayer>,
+    /// Evidence-carrying map styles; mutations are accepted only by Command + Workflow Graph.
+    #[serde(default)]
+    pub map_styles: Vec<EvidenceMapStyle>,
     pub views: Vec<View>,
     pub active_view: Option<ViewId>,
     #[serde(default)]
@@ -29,6 +36,8 @@ impl Workspace {
             updated_at: now,
             sources: Vec::new(),
             layers: Vec::new(),
+            editable_layers: Vec::new(),
+            map_styles: Vec::new(),
             views: Vec::new(),
             active_view: None,
             provenance: crate::ProvenanceStore::default(),

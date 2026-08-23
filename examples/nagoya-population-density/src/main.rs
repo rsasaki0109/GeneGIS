@@ -31,16 +31,16 @@ fn main() {
     std::fs::write(&out, export_html_map(&result, "名古屋市 人口密度")).expect("write html");
 
     let png_out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("output/nagoya-density.png");
-    std::fs::write(&png_out, export_png_map(&result, "名古屋市 人口密度").expect("write png"))
-        .expect("write png file");
+    std::fs::write(
+        &png_out,
+        export_png_map(&result, "名古屋市 人口密度").expect("write png"),
+    )
+    .expect("write png file");
 
     println!("GeneGIS MVP demo complete");
     println!("  wards: {}", result.features.len());
     println!("  verification: all checks passed");
     println!("  html: {}", out.display());
     println!("  png: {}", png_out.display());
-    println!(
-        "  workflow steps: {}",
-        result.workflow.steps.len()
-    );
+    println!("  workflow steps: {}", result.workflow.steps.len());
 }
