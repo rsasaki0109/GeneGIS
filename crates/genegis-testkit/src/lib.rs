@@ -14,8 +14,8 @@ mod review_tasks;
 mod trust_ux;
 
 pub use cloud_io::{
-    run_cloud_io_benchmark, run_full_cloud_io_benchmark, CloudFormatBenchmark,
-    CloudIoBenchmarkReport,
+    run_cloud_io_benchmark, run_cloud_selected_view_benchmark, run_full_cloud_io_benchmark,
+    CloudFormatBenchmark, CloudIoBenchmarkReport, CloudSelectedViewBenchmark,
 };
 pub use equivalence::{run_cross_engine_equivalence, EquivalenceCase, EquivalenceReport};
 pub use error::TestkitError;

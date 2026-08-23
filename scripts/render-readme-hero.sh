@@ -16,6 +16,25 @@ mkdir -p "$ASSETS"
 echo "Generating Nagoya density map PNG…"
 cargo run -q -p genegis-cli -- ask "名古屋市の人口密度を表示" --png -o "$ASSETS/nagoya-density.png" --no-html >/dev/null
 
+SELECTED_VIEW_REPORT="$ROOT/docs/reports/readme-cloud-selected-view.json"
+echo "Measuring parallel cloud selected view…"
+cargo run -q -p genegis-testkit --example cloud_selected_view -- "$SELECTED_VIEW_REPORT"
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to bind measured cloud metrics into the README GIF" >&2
+  exit 1
+fi
+CLOUD_METRICS_QUERY="$(jq -r '
+  "requests=\(.total_range_requests)" +
+  "&transfer_bytes=\(.total_transferred_bytes)" +
+  "&object_bytes=\(.total_object_bytes)" +
+  "&gpu_upload_bytes=\(.gpu.upload_bytes)" +
+  "&first_frame_ns=\(.end_to_end_first_frame_ns)" +
+  "&fps=\(.gpu.steady_state_fps | floor)" +
+  "&copc_nodes=\(.receipts[] | select(.format == "copc") | .decoded_items)" +
+  "&backend=\(.gpu.backend)" +
+  "&fallback=\(.whole_object_fallback)"
+' "$SELECTED_VIEW_REPORT")"
+
 capture() {
   local html="$1"
   local png="$2"
@@ -53,8 +72,12 @@ if command -v ffmpeg >/dev/null 2>&1; then
   echo "Building feature showcase GIFs…"
   features=(cloud adapters trust collab)
   for feature in "${features[@]}"; do
+    feature_query=""
+    if [[ "$feature" == "cloud" ]]; then
+      feature_query="&$CLOUD_METRICS_QUERY"
+    fi
     for step in 1 2 3 4; do
-      capture "$ASSETS/feature-showcase.html?feature=$feature&step=$step" "$FRAME_DIR/$feature-$step.png" 800 450
+      capture "$ASSETS/feature-showcase.html?feature=$feature&step=$step$feature_query" "$FRAME_DIR/$feature-$step.png" 800 450
     done
     ffmpeg -y -loglevel error \
       -loop 1 -t 1.4 -i "$FRAME_DIR/$feature-1.png" \

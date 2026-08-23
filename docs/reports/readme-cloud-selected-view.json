@@ -1,0 +1,189 @@
+{
+  "schema_version": "0.1.0",
+  "operation_id": "readme.multi-format-selected-view",
+  "execution_mode": "parallel_range_selection_then_verified_gpu_frame",
+  "receipts": [
+    {
+      "schema_version": "0.1.0",
+      "format": "cog",
+      "object_digest": "sha256:6e1273ee6af9502baf22986cc2f53b21d51155a3c0b71dd02405c84cdc5e56fd",
+      "object_bytes": 2097152,
+      "logical_dataset_bytes": 8388608,
+      "selection": {
+        "kind": "cog_window",
+        "level": 0,
+        "row_offset": 0,
+        "column_offset": 0,
+        "rows": 8,
+        "columns": 8
+      },
+      "requests": [
+        {
+          "start": 0,
+          "end": 262143,
+          "response_bytes": 262144,
+          "http_status": 206
+        }
+      ],
+      "transferred_bytes": 262144,
+      "maximum_response_bytes": 262144,
+      "whole_object_fallback": false,
+      "decoded_items": 64,
+      "elapsed_ns": 17808160,
+      "peak_rss_bytes": 70053888
+    },
+    {
+      "schema_version": "0.1.0",
+      "format": "geo_parquet",
+      "object_digest": "sha256:fad913939176d19fa25894711c0f9a847e6b90ffe5919ef883a337c8e818bc47",
+      "object_bytes": 4496865,
+      "logical_dataset_bytes": 17987460,
+      "selection": {
+        "kind": "geo_parquet_row_groups",
+        "row_groups": [
+          0
+        ],
+        "bbox": null
+      },
+      "requests": [
+        {
+          "start": 4456448,
+          "end": 4496864,
+          "response_bytes": 40417,
+          "http_status": 206
+        },
+        {
+          "start": 0,
+          "end": 65535,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 65536,
+          "end": 131071,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 131072,
+          "end": 196607,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 196608,
+          "end": 262143,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 262144,
+          "end": 327679,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 327680,
+          "end": 393215,
+          "response_bytes": 65536,
+          "http_status": 206
+        }
+      ],
+      "transferred_bytes": 433633,
+      "maximum_response_bytes": 65536,
+      "whole_object_fallback": false,
+      "decoded_items": 16,
+      "elapsed_ns": 17808160,
+      "peak_rss_bytes": 70172672
+    },
+    {
+      "schema_version": "0.1.0",
+      "format": "copc",
+      "object_digest": "sha256:4c9db9faf43d09078bdac39fbad19ce7fe9db81ac666eda21edfe450846d754d",
+      "object_bytes": 16777216,
+      "logical_dataset_bytes": 67108864,
+      "selection": {
+        "kind": "copc_hierarchy_nodes",
+        "node_keys": [
+          "root-metadata-hierarchy"
+        ]
+      },
+      "requests": [
+        {
+          "start": 0,
+          "end": 65535,
+          "response_bytes": 65536,
+          "http_status": 206
+        },
+        {
+          "start": 2704713,
+          "end": 2705192,
+          "response_bytes": 480,
+          "http_status": 206
+        }
+      ],
+      "transferred_bytes": 66016,
+      "maximum_response_bytes": 65536,
+      "whole_object_fallback": false,
+      "decoded_items": 15,
+      "elapsed_ns": 17808160,
+      "peak_rss_bytes": 70455296
+    },
+    {
+      "schema_version": "0.1.0",
+      "format": "pm_tiles",
+      "object_digest": "sha256:4db1c98cde4878e40ea4f3365c6b73d9eaf98bff2da90d6853b1cbc05a080665",
+      "object_bytes": 1048576,
+      "logical_dataset_bytes": 4194304,
+      "selection": {
+        "kind": "pm_tiles_tile",
+        "z": 0,
+        "x": 0,
+        "y": 0
+      },
+      "requests": [
+        {
+          "start": 0,
+          "end": 126,
+          "response_bytes": 127,
+          "http_status": 206
+        },
+        {
+          "start": 127,
+          "end": 131,
+          "response_bytes": 5,
+          "http_status": 206
+        },
+        {
+          "start": 134,
+          "end": 138,
+          "response_bytes": 5,
+          "http_status": 206
+        }
+      ],
+      "transferred_bytes": 137,
+      "maximum_response_bytes": 127,
+      "whole_object_fallback": false,
+      "decoded_items": 1,
+      "elapsed_ns": 17808160,
+      "peak_rss_bytes": 70455296
+    }
+  ],
+  "selection_wall_ns": 17808160,
+  "total_object_bytes": 24419809,
+  "total_transferred_bytes": 761930,
+  "total_range_requests": 13,
+  "aggregate_transfer_ratio": 0.031201308740784993,
+  "whole_object_fallback": false,
+  "gpu": {
+    "adapter": "Intel(R) Iris(R) Xe Graphics (TGL GT2)",
+    "backend": "vulkan",
+    "upload_bytes": 627264,
+    "upload_ns": 14463240,
+    "first_frame_ns": 86070357,
+    "steady_state_fps": 680.0531964812416
+  },
+  "end_to_end_first_frame_ns": 103878517,
+  "failed_gates": 0,
+  "status": "pass"
+}

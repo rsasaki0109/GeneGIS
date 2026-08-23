@@ -7,8 +7,8 @@
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/feature-cloud.gif" alt="GPU fusion of COG terrain, COPC point clouds, and PMTiles context using range-aware cloud reads" width="100%" /><br />
-      <sub><strong>GPU spatial fusion</strong><br />COG terrain · COPC point clouds · PMTiles context · range I/O</sub>
+      <img src="docs/assets/feature-cloud.gif" alt="Measured parallel range selection across GeoParquet, COG, COPC, and PMTiles followed by a real wgpu frame" width="100%" /><br />
+      <sub><strong>Measured multi-format selected view</strong><br />GeoParquet · COG · COPC · PMTiles · real wgpu evidence</sub>
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/feature-adapters.gif" alt="Cross-engine spatial verification using typed PostGIS, GRASS, and QGIS Processing adapters" width="100%" /><br />
@@ -26,6 +26,13 @@
     </td>
   </tr>
 </table>
+
+The cloud-view numbers are injected from the reproducible
+[`readme-cloud-selected-view.json`](docs/reports/readme-cloud-selected-view.json)
+artifact: four production readers run parallel HTTP Range selections, reject
+whole-object fallback, and hand off to a measured headless wgpu frame. Metrics
+are scoped to the recorded adapter and run—not presented as universal hardware
+claims—and regenerate with `scripts/render-readme-hero.sh`.
 
 ### End-to-end verified workflow
 

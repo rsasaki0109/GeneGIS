@@ -66,6 +66,121 @@ pub struct CloudIoBenchmarkReport {
     pub failed_gates: usize,
 }
 
+/// Evidence for one parallel multi-format selection followed by a real GPU frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CloudSelectedViewBenchmark {
+    /// Report schema version.
+    pub schema_version: String,
+    /// Stable operation identity used by README and CI evidence consumers.
+    pub operation_id: String,
+    /// Exact execution model; selection is parallel and rendering starts after all inputs finish.
+    pub execution_mode: String,
+    /// One receipt for each selected cloud-native format.
+    pub receipts: Vec<IoReceipt>,
+    /// Wall time for all parallel selections.
+    pub selection_wall_ns: u64,
+    /// Sum of encoded object sizes presented to the selectors.
+    pub total_object_bytes: u64,
+    /// Sum of actual HTTP 206 response bytes.
+    pub total_transferred_bytes: u64,
+    /// Total observed byte-range requests.
+    pub total_range_requests: usize,
+    /// Aggregate selected transfer divided by aggregate encoded object size.
+    pub aggregate_transfer_ratio: f64,
+    /// True if any selector attempted a whole-object response.
+    pub whole_object_fallback: bool,
+    /// Real headless wgpu evidence for the verified selected view.
+    pub gpu: GpuFrameMetrics,
+    /// Selection wall time plus the measured first GPU frame.
+    pub end_to_end_first_frame_ns: u64,
+    /// Number of failed I/O or GPU acceptance gates.
+    pub failed_gates: usize,
+    /// `pass` only when every fail-closed gate succeeds.
+    pub status: String,
+}
+
+impl CloudSelectedViewBenchmark {
+    /// Recompute aggregate claims and fail closed on missing formats, drift, or invalid receipts.
+    pub fn validate(&self) -> Vec<String> {
+        let mut failures = Vec::new();
+        let formats = self
+            .receipts
+            .iter()
+            .map(|receipt| receipt.format)
+            .collect::<Vec<_>>();
+        if formats
+            != vec![
+                CloudFormat::Cog,
+                CloudFormat::GeoParquet,
+                CloudFormat::Copc,
+                CloudFormat::PmTiles,
+            ]
+        {
+            failures.push("required format receipt set or order drifted".into());
+        }
+        let object_bytes = self
+            .receipts
+            .iter()
+            .map(|receipt| receipt.object_bytes)
+            .sum::<u64>();
+        let transferred_bytes = self
+            .receipts
+            .iter()
+            .map(|receipt| receipt.transferred_bytes)
+            .sum::<u64>();
+        let requests = self
+            .receipts
+            .iter()
+            .map(|receipt| receipt.requests.len())
+            .sum::<usize>();
+        let fallback = self
+            .receipts
+            .iter()
+            .any(|receipt| receipt.whole_object_fallback);
+        if self.total_object_bytes != object_bytes
+            || self.total_transferred_bytes != transferred_bytes
+            || self.total_range_requests != requests
+            || self.whole_object_fallback != fallback
+        {
+            failures.push("selected-view aggregate does not match format receipts".into());
+        }
+        let ratio = transferred_bytes as f64 / object_bytes.max(1) as f64;
+        if !self.aggregate_transfer_ratio.is_finite()
+            || (self.aggregate_transfer_ratio - ratio).abs() > f64::EPSILON
+        {
+            failures.push("aggregate transfer ratio drifted".into());
+        }
+        let receipt_failures = self
+            .receipts
+            .iter()
+            .map(|receipt| receipt.validate(&IoBudget::ci(false)).len())
+            .sum::<usize>();
+        let gpu_failed = self.gpu.first_frame_ns > 2_000_000_000
+            || !self.gpu.steady_state_fps.is_finite()
+            || self.gpu.steady_state_fps <= 0.0;
+        let expected_failed_gates = receipt_failures + usize::from(gpu_failed);
+        if self.failed_gates != expected_failed_gates
+            || self.status
+                != if expected_failed_gates == 0 {
+                    "pass"
+                } else {
+                    "fail"
+                }
+        {
+            failures.push("status does not match recomputed acceptance gates".into());
+        }
+        if self.end_to_end_first_frame_ns
+            != self
+                .selection_wall_ns
+                .saturating_add(self.gpu.first_frame_ns)
+        {
+            failures.push("end-to-end first-frame timing drifted".into());
+        }
+        failures
+    }
+}
+
 /// Run deterministic COG, GeoParquet, COPC, PMTiles range selection and headless wgpu frames.
 pub fn run_cloud_io_benchmark() -> Result<CloudIoBenchmarkReport, String> {
     let cog = padded_fixture(
@@ -156,6 +271,155 @@ pub fn run_cloud_io_benchmark() -> Result<CloudIoBenchmarkReport, String> {
         gpu,
         hardware_gpu,
         failed_gates,
+    })
+}
+
+/// Select COG, GeoParquet, COPC, and PMTiles concurrently, then render a real GPU frame.
+///
+/// The deterministic fixtures exercise the production readers through HTTP byte ranges.
+/// The GPU frame uses the verified Nagoya map rather than claiming that unrelated fixture
+/// coordinate systems are spatially co-registered.
+pub fn run_cloud_selected_view_benchmark() -> Result<CloudSelectedViewBenchmark, String> {
+    let cog = RangeFixture::spawn(padded_fixture(
+        include_bytes!("../../genegis-raster/fixtures/smoke-demo.tif"),
+        2 * 1024 * 1024,
+    ));
+    let geoparquet = RangeFixture::spawn(large_geoparquet_fixture()?);
+    let copc = RangeFixture::spawn(padded_fixture(
+        include_bytes!("../../genegis-pointcloud/testdata/lone-star.copc.laz"),
+        16 * 1024 * 1024,
+    ));
+    let pmtiles = RangeFixture::spawn(pmtiles_fixture(1024 * 1024));
+    let fixtures = [&cog, &geoparquet, &copc, &pmtiles];
+    let request_starts = fixtures
+        .iter()
+        .map(|fixture| fixture.snapshot_len())
+        .collect::<Vec<_>>();
+    let fallback_starts = fixtures
+        .iter()
+        .map(|fixture| fixture.full_gets.load(Ordering::SeqCst))
+        .collect::<Vec<_>>();
+
+    let selection_started = Instant::now();
+    let selections = thread::scope(|scope| -> Result<Vec<(u64, IoSelection)>, String> {
+        let cog_task = scope.spawn(|| {
+            let pixels =
+                read_cog_window_uri(&cog.url, 0, 0, 8, 8).map_err(|error| error.to_string())?;
+            Ok::<_, String>((
+                pixels.len() as u64,
+                IoSelection::CogWindow {
+                    level: 0,
+                    row_offset: 0,
+                    column_offset: 0,
+                    rows: 8,
+                    columns: 8,
+                },
+            ))
+        });
+        let geoparquet_task = scope.spawn(|| {
+            let report = read_geoparquet_uri_with_options(
+                &geoparquet.url,
+                GeoParquetReadOptions {
+                    row_groups: Some(vec![0]),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+            Ok::<_, String>((
+                report.dataset.feature_count() as u64,
+                IoSelection::GeoParquetRowGroups {
+                    row_groups: vec![0],
+                    bbox: None,
+                },
+            ))
+        });
+        let copc_task = scope.spawn(|| {
+            let info = read_copc_uri(&copc.url).map_err(|error| error.to_string())?;
+            Ok::<_, String>((
+                info.hierarchy_entries as u64,
+                IoSelection::CopcHierarchyNodes {
+                    node_keys: vec!["root-metadata-hierarchy".into()],
+                },
+            ))
+        });
+        let pmtiles_task = scope.spawn(|| {
+            read_pmtiles_tile(&pmtiles.url, 0, 0, 0).map_err(|error| error.to_string())?;
+            Ok::<_, String>((1, IoSelection::PmTilesTile { z: 0, x: 0, y: 0 }))
+        });
+        [cog_task, geoparquet_task, copc_task, pmtiles_task]
+            .into_iter()
+            .map(|task| {
+                task.join()
+                    .map_err(|_| "cloud selected-view worker panicked".to_string())?
+            })
+            .collect()
+    })?;
+    let selection_wall_ns = nanos(selection_started.elapsed());
+    let formats = [
+        CloudFormat::Cog,
+        CloudFormat::GeoParquet,
+        CloudFormat::Copc,
+        CloudFormat::PmTiles,
+    ];
+    let mut receipts = Vec::with_capacity(formats.len());
+    for (index, format) in formats.into_iter().enumerate() {
+        let fixture = fixtures[index];
+        receipts.push(IoReceipt::new(
+            format,
+            format!("sha256:{:x}", Sha256::digest(&*fixture.body)),
+            fixture.body.len() as u64,
+            (fixture.body.len() as u64).saturating_mul(4),
+            selections[index].1.clone(),
+            fixture.requests_since(request_starts[index]),
+            fixture.full_gets.load(Ordering::SeqCst) > fallback_starts[index],
+            selections[index].0,
+            selection_wall_ns,
+            peak_rss_bytes(),
+            None,
+        ));
+    }
+
+    let map = genegis_analysis::nagoya_choropleth_map().map_err(|error| error.to_string())?;
+    let measured = benchmark_headless_gpu(&map, 1280, 720, 30)?;
+    let gpu = GpuFrameMetrics {
+        adapter: measured.adapter,
+        backend: measured.backend,
+        upload_bytes: measured.upload_bytes,
+        upload_ns: measured.upload_ns,
+        first_frame_ns: measured.first_frame_ns,
+        steady_state_fps: measured.steady_state_fps,
+    };
+    let total_object_bytes = receipts.iter().map(|receipt| receipt.object_bytes).sum();
+    let total_transferred_bytes = receipts
+        .iter()
+        .map(|receipt| receipt.transferred_bytes)
+        .sum();
+    let total_range_requests = receipts.iter().map(|receipt| receipt.requests.len()).sum();
+    let whole_object_fallback = receipts.iter().any(|receipt| receipt.whole_object_fallback);
+    let mut failed_gates = receipts
+        .iter()
+        .map(|receipt| receipt.validate(&IoBudget::ci(false)).len())
+        .sum::<usize>();
+    if gpu.first_frame_ns > 2_000_000_000
+        || !gpu.steady_state_fps.is_finite()
+        || gpu.steady_state_fps <= 0.0
+    {
+        failed_gates += 1;
+    }
+    Ok(CloudSelectedViewBenchmark {
+        schema_version: "0.1.0".into(),
+        operation_id: "readme.multi-format-selected-view".into(),
+        execution_mode: "parallel_range_selection_then_verified_gpu_frame".into(),
+        receipts,
+        selection_wall_ns,
+        total_object_bytes,
+        total_transferred_bytes,
+        total_range_requests,
+        aggregate_transfer_ratio: total_transferred_bytes as f64 / total_object_bytes.max(1) as f64,
+        whole_object_fallback,
+        gpu: gpu.clone(),
+        end_to_end_first_frame_ns: selection_wall_ns.saturating_add(gpu.first_frame_ns),
+        failed_gates,
+        status: if failed_gates == 0 { "pass" } else { "fail" }.into(),
     })
 }
 
@@ -909,6 +1173,30 @@ mod tests {
         assert!(!report.gpu.adapter.is_empty());
         assert!(report.gpu.first_frame_ns <= 2_000_000_000);
         println!("{}", serde_json::to_string(&report).unwrap());
+    }
+
+    #[test]
+    fn selected_view_runs_parallel_ranges_before_a_real_gpu_frame() {
+        let report = run_cloud_selected_view_benchmark().expect("selected view benchmark");
+        assert_eq!(report.receipts.len(), 4);
+        assert_eq!(report.status, "pass", "{report:#?}");
+        assert_eq!(report.failed_gates, 0, "{report:#?}");
+        assert!(report.total_range_requests >= 4);
+        assert!(report.total_transferred_bytes < report.total_object_bytes);
+        assert!(!report.whole_object_fallback);
+        assert!(report.gpu.upload_bytes > 0);
+        assert!(report.end_to_end_first_frame_ns >= report.gpu.first_frame_ns);
+        assert!(report.validate().is_empty());
+    }
+
+    #[test]
+    fn selected_view_rejects_tampered_aggregate_and_status() {
+        let mut report = run_cloud_selected_view_benchmark().expect("selected view benchmark");
+        report.total_transferred_bytes += 1;
+        report.status = "fail".into();
+        let failures = report.validate();
+        assert!(failures.iter().any(|failure| failure.contains("aggregate")));
+        assert!(failures.iter().any(|failure| failure.contains("status")));
     }
 
     #[test]

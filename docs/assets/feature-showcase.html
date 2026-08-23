@@ -99,7 +99,7 @@
 
       <main class="feature f-cloud">
         <section class="panel geo-scene">
-          <div class="panel-head">GPU spatial fusion canvas <span>3.8M FEATURES · 60 FPS TARGET</span></div>
+          <div class="panel-head">Multi-format selected-view canvas <span id="fallback-status">MEASURED RANGE I/O · 0 FALLBACK</span></div>
           <svg class="fusion-map" viewBox="0 0 540 330" preserveAspectRatio="none">
             <defs><linearGradient id="terrain" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#173d4d"/><stop offset=".5" stop-color="#215f69"/><stop offset="1" stop-color="#12313e"/></linearGradient><linearGradient id="heat" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#264d9a"/><stop offset=".52" stop-color="#46b3bd"/><stop offset="1" stop-color="#f0cf71"/></linearGradient></defs>
             <g opacity=".24" stroke="#4b8295" stroke-width=".7"><path d="M0 64L270 0 540 61M0 128L270 63 540 125M0 192L270 127 540 189M0 256L270 191 540 253"/><path d="M68 0L0 44M136 0L0 88M204 0L0 132M272 0L0 176M340 0L0 220M408 0L0 264M476 0L0 308M540 13L37 330M540 57L105 330M540 101L173 330M540 145L241 330M540 189L309 330M540 233L377 330M540 277L445 330"/></g>
@@ -109,9 +109,9 @@
             <g class="stage-4" fill="none" stroke="#f7d779" stroke-width="2"><path d="M30 252Q137 223 209 177T490 116"/><path d="M89 90Q185 132 267 133T506 224"/><path d="M160 279Q249 226 340 227T470 276"/></g>
             <g class="stage-4" fill="#f7d779"><circle cx="209" cy="177" r="4"/><circle cx="267" cy="133" r="4"/><circle cx="340" cy="227" r="4"/></g>
           </svg>
-          <div class="layer-tag tag-cog stage-2">COG · elevation window</div><div class="layer-tag tag-copc stage-3">COPC · hierarchy LOD 7</div><div class="layer-tag tag-pm stage-4">PMTiles · vector context</div><div class="layer-tag tag-gpu stage-4">Vulkan GPU · 5.6 ms</div><div class="scan stage-2"></div>
+          <div class="layer-tag tag-cog stage-2">COG · 8×8 pixel window</div><div id="copc-tag" class="layer-tag tag-copc stage-3">COPC · measured hierarchy</div><div class="layer-tag tag-pm stage-4">PMTiles · z/x/y exact tile</div><div id="gpu-tag" class="layer-tag tag-gpu stage-4">Measured GPU frame</div><div class="scan stage-2"></div>
         </section>
-        <aside class="panel"><div class="panel-head">Live execution <span>RANGE I/O</span></div><div class="pad"><div class="telemetry"><div><span>GPU DRAW</span><b>3.8M</b></div><div><span>TRANSFER</span><b>18%</b></div><div><span>LOD NODES</span><b>246</b></div><div><span>FRAME</span><b>5.6 ms</b></div></div><div class="list"><div class="row done"><i class="ico">⌕</i><div><b>STAC bind</b><small>15 assets scored</small></div></div><div class="row stage-2"><i class="ico">▦</i><div><b>COG window</b><small>overview 4 · 6 ranges</small></div></div><div class="row stage-3"><i class="ico">⁙</i><div><b>COPC stream</b><small>hierarchy-pruned</small></div></div><div class="row stage-4"><i class="ico">✓</i><div><b>Composite + receipt</b><small>bytes · LOD · fallback</small></div></div></div></div></aside>
+        <aside class="panel"><div class="panel-head">Live evidence <span>REAL WGPU</span></div><div class="pad"><div class="telemetry"><div><span>RANGE REQUESTS</span><b id="range-requests">—</b></div><div><span>TRANSFER</span><b id="transfer-bytes">—</b></div><div><span>GPU UPLOAD</span><b id="gpu-upload">—</b></div><div><span>E2E FIRST FRAME</span><b id="first-frame">—</b></div></div><div class="list"><div class="row done"><i class="ico">▱</i><div><b>GeoParquet vector</b><small>row group 0 · 16 features</small></div></div><div class="row stage-2"><i class="ico">▦</i><div><b>COG window</b><small>production raster reader</small></div></div><div class="row stage-3"><i class="ico">⁙</i><div><b>COPC hierarchy</b><small>range-pruned metadata</small></div></div><div class="row stage-4"><i class="ico">✓</i><div><b>PMTiles + GPU receipt</b><small>exact tile · verified frame</small></div></div></div></div></aside>
       </main>
 
       <main class="feature f-adapters">
@@ -139,7 +139,7 @@
       const feature = params.get("feature") || "cloud";
       const step = Math.max(1, Math.min(4, Number(params.get("step")) || 1));
       const copy = {
-        cloud:["Fuse massive spatial data on the GPU","STAC → COG terrain + COPC point cloud + PMTiles context → one receipt"],
+        cloud:["Build a verified multi-format cloud view","Parallel Range I/O → four production readers → measured wgpu frame"],
         adapters:["Prove the same spatial result across engines","PostGIS + GRASS + QGIS Processing → independent numerical oracle"],
         trust:["Debug trust directly on the map","Source claim → CRS contract → workflow node → releasable artifact"],
         collab:["Review semantic map changes together","Live cursors → anchored evidence → branch diff → CRDT merge"]
@@ -165,6 +165,25 @@
           dot.setAttribute("fill", elevation > 44 ? "#f4d36f" : elevation > 25 ? "#72e2c3" : "#58b9e9");
           dot.setAttribute("opacity", ".82"); points.appendChild(dot);
         }
+      }
+      if (feature === "cloud") {
+        const number = name => Number(params.get(name) || 0);
+        const bytes = value => value >= 1048576 ? `${(value / 1048576).toFixed(1)} MiB` : `${Math.round(value / 1024)} KiB`;
+        const requests = number("requests");
+        const transfer = number("transfer_bytes");
+        const objectBytes = number("object_bytes");
+        const upload = number("gpu_upload_bytes");
+        const firstFrame = number("first_frame_ns");
+        const fps = number("fps");
+        const nodes = number("copc_nodes");
+        const backend = params.get("backend") || "wgpu";
+        document.getElementById("range-requests").textContent = requests ? String(requests) : "—";
+        document.getElementById("transfer-bytes").textContent = transfer ? bytes(transfer) : "—";
+        document.getElementById("gpu-upload").textContent = upload ? bytes(upload) : "—";
+        document.getElementById("first-frame").textContent = firstFrame ? `${(firstFrame / 1e6).toFixed(1)} ms` : "—";
+        document.getElementById("copc-tag").textContent = nodes ? `COPC · ${nodes} hierarchy nodes` : "COPC · measured hierarchy";
+        document.getElementById("gpu-tag").textContent = fps ? `${backend} · ${fps} FPS measured` : "Measured GPU frame";
+        document.getElementById("fallback-status").textContent = `${objectBytes ? bytes(objectBytes) : "4 formats"} presented · ${params.get("fallback") === "true" ? "FALLBACK" : "0 FALLBACK"}`;
       }
       if (feature === "trust" && step === 4) {
         const contract = document.getElementById("crs-contract");
