@@ -4,9 +4,9 @@
   "status": "in_progress",
   "measured_at": "2026-08-23",
   "source_revision": {
-    "git_head": "5e211ff6391676c339570f41c1bc9b066be5ad99",
-    "worktree": "modified",
-    "note": "Evidence includes uncommitted Phase 12 implementation and must be refreshed before release."
+    "implementation_commit": "54df4a0",
+    "worktree_at_integration": "clean",
+    "note": "The report itself is finalized in the immediately following documentation commit to avoid a self-referential commit hash."
   },
   "requirements_source": "/home/sasaki/workspace/GeneGIS/docs/rfcs/0004-operational-verification-workbench.md",
   "environment": {
