@@ -1,0 +1,224 @@
+{
+  "report_schema_version": "0.2.0",
+  "phase": 11,
+  "status": "complete_human_review_explicitly_skipped",
+  "measured_at": "2026-08-23",
+  "source_revision": {
+    "git_head": "a8d1f679ed094ee177eefbbf4ffa4890b110b019",
+    "worktree": "modified",
+    "binary": "genegis 0.1.0",
+    "note": "Measurements include the uncommitted Phase-11 working tree."
+  },
+  "versions": {
+    "geo_contract": "0.1.0",
+    "verification_policy": "0.1.0",
+    "verification_graph": "0.1.0",
+    "capsule": "0.1.0",
+    "standard_export_adapter": "0.1.0",
+    "cross_engine_corpus": "0.1.0",
+    "external_benchmark_adapter": "0.1.0",
+    "review_task_corpus": "phase-11-seeded-failures-v1",
+    "nagoya_fixture": "nagoya-2020-census-final-n03-v2",
+    "gdal_ogr": "3.8.4",
+    "duckdb": "bundled 1.10503.1"
+  },
+  "gate_a": {
+    "status": "pass",
+    "false_verified_or_attested": 0,
+    "mutation_cases": 29,
+    "mutations_caught": 29,
+    "mutation_score": 1.0,
+    "minimum_score": 0.95,
+    "offline_capsule_verification": "pass",
+    "external_service_calls_required": 0,
+    "llm_calls_required": 0,
+    "verified_capsule_entries": 9,
+    "trust_report_manifest_resync_tamper": "rejected"
+  },
+  "gate_b": {
+    "status": "not_evaluated_user_skipped",
+    "semantic_diff_unclassified_changes": 0,
+    "approval_digest_invalidation": "pass",
+    "trust_debugger_tty_render": "pass",
+    "trust_debugger_panes": [
+      "claims",
+      "contracts",
+      "sources",
+      "workflow",
+      "artifacts",
+      "failures",
+      "diff"
+    ],
+    "source_preview": "pass_local_bounded_remote_not_fetched",
+    "failure_to_node_focus": "pass",
+    "actionable_failure_fields": [
+      "gate",
+      "code",
+      "subject",
+      "detail",
+      "affected_nodes",
+      "remediation"
+    ],
+    "shared_digest_identities": [
+      "result",
+      "workflow",
+      "policy",
+      "verification_graph",
+      "map_html",
+      "map_png"
+    ],
+    "human_review_target_seconds": 120,
+    "human_review_median_seconds": "not_measured",
+    "human_review_decision": "skipped_by_user_on_2026-08-23",
+    "human_review_attempt": "aborted_before_any_answer_no_report_written",
+    "timer_readiness_gate": "pass_timer_starts_only_after_reviewer_reveals_each_task",
+    "human_review_protocol": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-11-review-protocol.md",
+    "timing_command": "target/debug/genegis bench review --reviewer REVIEWER_ID --output /home/sasaki/workspace/GeneGIS/docs/reports/phase-11-review-timing.json",
+    "disposition": "Gate B is not passed and no timing claim is made. The user explicitly removed human work from Phase-11 completion scope; rerun the documented protocol before enabling the reviewer-speed or publication claim."
+  },
+  "gate_c": {
+    "status": "technical_pass",
+    "standard_exports": {
+      "built_in_validations": {
+        "prov_json": "pass",
+        "workflow_run_ro_crate": "pass",
+        "openlineage": "pass",
+        "in_toto_statement_v1": "pass",
+        "ogc_api_processes_1_0": "pass"
+      },
+      "external_validations": {
+        "workflow_run_ro_crate": {
+          "validator": "rocrate-validator 0.11.3_a8d1f67+4-dirty",
+          "profile": "workflow-run-crate-0.5",
+          "severity": "required",
+          "checks_passed": 55,
+          "checks_failed": 0,
+          "status": "pass"
+        },
+        "openlineage": {
+          "schema": "https://openlineage.io/spec/1-0-0/OpenLineage.json",
+          "schema_sha256": "b3f4965f2feed1c4021bb4848bebae4b94d1d414e27ff9df8361c707aaab2ae7",
+          "validator": "python-jsonschema 4.10.3",
+          "status": "pass"
+        },
+        "prov_json": {
+          "validator": "prov 3.1.0",
+          "parsed_records": 25,
+          "status": "pass"
+        }
+      },
+      "files": 6,
+      "payload_subjects_copied": 9
+    },
+    "dsse_in_toto": {
+      "algorithm": "Ed25519",
+      "payload_type": "application/vnd.in-toto+json",
+      "subjects": 3,
+      "offline_signature_and_subject_verification": "pass",
+      "wrong_key_and_payload_tamper": "rejected",
+      "scope_note": "Signature proves statement/subject integrity and signer possession, not spatial truth."
+    },
+    "ogc_api_processes": {
+      "mode": "sync",
+      "process": "genegis-capsule-verify",
+      "local_execution": "pass",
+      "result_trust": "verified",
+      "verified_entries": 9
+    },
+    "cross_engine": {
+      "cases": 33,
+      "passed": 33,
+      "failed": 0,
+      "false_accepts": 0,
+      "maximum_delta_ppm": 0,
+      "engines": [
+        "genegis-native/0.1.0",
+        "DuckDB SQL/bundled",
+        "GDAL/OGR 3.8.4"
+      ],
+      "categories": [
+        "crs_units_axis",
+        "density",
+        "joins",
+        "nulls",
+        "ordering",
+        "topology",
+        "units"
+      ],
+      "multipart_valid_and_dropped_shell_invalid": "pass"
+    },
+    "external_agent_benchmark": {
+      "benchmark": "GeoBenchX-derived Nagoya adapter slice",
+      "source_url": "https://github.com/solirinai/geobenchx",
+      "source_revision": "bb3cd88f6834dee8004a2add6f9f0c150053788d",
+      "source_task_id": "TASK_250309_135125_908870",
+      "license": "MIT; Copyright (c) 2025 Varvara Krechetova",
+      "runner": "genegis-analysis/0.1.0 rule-planner",
+      "scorer": "genegis-testkit/0.1.0 strict-artifact-v1",
+      "tolerance_ppm": 5000,
+      "cases": 7,
+      "passed": 7,
+      "false_accepts": 0,
+      "elapsed_ms": 1773,
+      "scope_note": "Geographically recast adapter/scorer conformance slice; not an official or comparable GeoBenchX leaderboard score."
+    }
+  },
+  "performance": {
+    "pipeline": {
+      "warmup": 3,
+      "iterations": 10,
+      "median_ns": 1373969006,
+      "mean_ns": 1338102480,
+      "min_ns": 1230790386,
+      "max_ns": 1395999419
+    },
+    "render_mesh": {
+      "warmup": 3,
+      "iterations": 10,
+      "median_ns": 26468259,
+      "mean_ns": 26570241,
+      "min_ns": 26098327,
+      "max_ns": 27607854
+    },
+    "capsule_seal": {
+      "wall_seconds": 1.39,
+      "peak_rss_kib": 107348
+    },
+    "offline_verify": {
+      "wall_seconds": 0.15,
+      "peak_rss_kib": 64232
+    }
+  },
+  "test_evidence": [
+    {
+      "command": "cargo test --workspace --exclude genegis-desktop --no-fail-fast",
+      "passed": 199,
+      "failed": 0,
+      "ignored": 1,
+      "note": "Completed before the final review-corpus unit test was added; that test passed separately."
+    },
+    {
+      "command": "cargo test -p genegis-testkit review_corpus_has_resolvable_distinct_failures",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "command": "cargo test -p genegis-capsule",
+      "passed": 8,
+      "failed": 0
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    }
+  ],
+  "environment_limitations": [
+    {
+      "component": "genegis-desktop",
+      "status": "not_built",
+      "reason": "Host lacks the glib-2.0 >= 2.70 pkg-config development package required by the existing Tauri/GTK dependency chain.",
+      "phase_11_impact": "none_on_cli_capsule_testkit_or_standard_exports"
+    }
+  ],
+  "publication_decision": "technical_claims_go_human_review_speed_claim_not_evaluated"
+}

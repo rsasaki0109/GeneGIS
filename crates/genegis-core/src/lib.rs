@@ -10,7 +10,11 @@ pub mod source;
 pub mod view;
 pub mod workspace;
 
-pub use command::{Command, CommandBus, CommandEnvelope, CommandOrigin};
+pub use command::{
+    Command, CommandBus, CommandEnvelope, CommandError, CommandExecution, CommandLog,
+    CommandOrigin, InputSnapshot, WorkflowDigest, WorkflowExecution, WorkflowExecutionContext,
+    WorkflowExecutionError, WorkflowExecutionEvent, WorkflowExecutionRecord, WorkflowExecutor,
+};
 pub use layer::{Layer, LayerId, LayerKind, LayerStatistics};
 pub use project::{Project, ProjectManifest};
 pub use provenance::{ProvenanceEntry, ProvenanceStore};
@@ -28,11 +32,9 @@ mod tests {
         let source = DataSource::new("wards", SourceKind::File, "file:///data/wards.geojson");
         let source_id = source.id;
         project.workspace_mut().add_source(source);
-        project.workspace_mut().add_layer(Layer::new(
-            "Wards",
-            LayerKind::Vector,
-            source_id,
-        ));
+        project
+            .workspace_mut()
+            .add_layer(Layer::new("Wards", LayerKind::Vector, source_id));
 
         let json = serde_json::to_string(&project).expect("serialize");
         let restored: Project = serde_json::from_str(&json).expect("deserialize");

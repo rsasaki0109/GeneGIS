@@ -10,19 +10,28 @@ pub mod result;
 pub use error::AnalysisError;
 pub use export::{export_html_map, export_map_svg, export_png_map, ExportError};
 pub use nagoya::{
-    default_nagoya_data_path, default_nagoya_dataset_id, run_nagoya_population_density,
+    canonical_nagoya_execution_digest, default_nagoya_data_path, default_nagoya_dataset_id,
+    nagoya_population_density_workflow_for_dataset, run_nagoya_population_density,
     run_nagoya_population_density_for_dataset, run_nagoya_population_density_from_catalog,
-    run_nagoya_population_density_geoparquet,
+    run_nagoya_population_density_geoparquet, verify_nagoya_analysis, NagoyaArtifactDigests,
+    NagoyaExecutionOutput, NagoyaWorkflowExecutor,
 };
 pub use pipeline::{
-    build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result,
-    build_stac_collection_ask_result, execute_from_plan, execute_workflow_for_plan,
+    build_ask_result, build_ask_result_from_dispatch, build_geoparquet_ask_result,
+    build_remote_cog_ask_result, build_stac_collection_ask_result, execute_from_plan,
+    execute_from_plan_with_origin, execute_workflow_for_plan,
+    execute_workflow_for_plan_with_origin, execution_receipt_for_workflow,
+    execution_receipt_for_workflow_with_checks, execution_receipt_for_workflow_with_executor,
     run_analysis_for_plan, run_ask_pipeline, run_ask_pipeline_with_config,
-    verify_analysis_densities, verify_executed_workflow, verify_geoparquet_features,
-    verify_remote_cog_metadata, verify_stac_collection, AskPipelineResult, ExecutedWorkflow,
+    run_ask_pipeline_with_config_and_origin, verify_analysis_densities, verify_executed_workflow,
+    verify_geoparquet_features, verify_remote_cog_metadata, verify_stac_collection,
+    AskPipelineResult, ExecutedWorkflow, ExecutedWorkflowOutput, NagoyaDispatch,
 };
 pub use preview::{
-    cog_raster_preview_map, nagoya_choropleth_map, spawn_cog_gpu_preview, spawn_gpu_preview_for_workflow,
-    spawn_nagoya_gpu_preview,
+    cog_raster_preview_map, nagoya_choropleth_map, spawn_cog_gpu_preview,
+    spawn_gpu_preview_for_workflow, spawn_nagoya_gpu_preview,
 };
-pub use result::{AnalysisResult, DensityFeature, VerificationCheck, VerificationReport};
+pub use result::{
+    canonical_analysis_result_digest, AnalysisResult, DensityFeature, EngineIdentity,
+    ExecutionReceipt, VerificationCheck, VerificationReport,
+};

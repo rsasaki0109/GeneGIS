@@ -1,5 +1,5 @@
-use thiserror::Error;
 use genegis_vector::VectorError;
+use thiserror::Error;
 
 use crate::export::ExportError;
 

@@ -1,6 +1,8 @@
-use genegis_catalog::{alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID};
+use genegis_catalog::{
+    alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+};
 use genegis_geometry::PolygonRing;
-use genegis_render::{ChoroplethMap, run_choropleth_window};
+use genegis_render::{run_choropleth_window, ChoroplethMap};
 use genegis_style::ColorRgba;
 
 use crate::error::AnalysisError;

@@ -9,6 +9,10 @@ rust-version.workspace = true
 
 [dependencies]
 genegis-analysis = { path = "../genegis-analysis" }
+genegis-crs = { path = "../genegis-crs" }
+genegis-geometry = { path = "../genegis-geometry" }
+duckdb.workspace = true
+gdal = "0.19"
 genegis-render = { path = "../genegis-render" }
 serde.workspace = true
 serde_json.workspace = true

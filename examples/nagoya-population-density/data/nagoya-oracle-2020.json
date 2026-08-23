@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "immutable": true,
+  "dataset_id": "nagoya-wards-density",
+  "census_year": 2020,
+  "area_unit": "km²",
+  "density_unit": "persons/km²",
+  "area_method": "ellipsoidal_wgs84",
+  "source_basis": "名古屋市資料/GSI面積調（2020年、区別面積）を独立oracleとして固定",
+  "population_total": 2332176,
+  "area_total_km2": 326.50,
+  "wards": [
+    { "ward_code": "23101", "ward_name": "千種区", "population": 165245, "area_km2": 18.18 },
+    { "ward_code": "23102", "ward_name": "東区", "population": 84392, "area_km2": 7.71 },
+    { "ward_code": "23103", "ward_name": "北区", "population": 162956, "area_km2": 17.53 },
+    { "ward_code": "23104", "ward_name": "西区", "population": 151082, "area_km2": 17.93 },
+    { "ward_code": "23105", "ward_name": "中村区", "population": 138599, "area_km2": 16.30 },
+    { "ward_code": "23106", "ward_name": "中区", "population": 93100, "area_km2": 9.38 },
+    { "ward_code": "23107", "ward_name": "昭和区", "population": 107599, "area_km2": 10.94 },
+    { "ward_code": "23108", "ward_name": "瑞穂区", "population": 108332, "area_km2": 11.22 },
+    { "ward_code": "23109", "ward_name": "熱田区", "population": 66957, "area_km2": 8.20 },
+    { "ward_code": "23110", "ward_name": "中川区", "population": 220728, "area_km2": 32.02 },
+    { "ward_code": "23111", "ward_name": "港区", "population": 143715, "area_km2": 45.69 },
+    { "ward_code": "23112", "ward_name": "南区", "population": 134510, "area_km2": 18.46 },
+    { "ward_code": "23113", "ward_name": "守山区", "population": 176587, "area_km2": 34.01 },
+    { "ward_code": "23114", "ward_name": "緑区", "population": 248802, "area_km2": 37.91 },
+    { "ward_code": "23115", "ward_name": "名東区", "population": 164755, "area_km2": 19.45 },
+    { "ward_code": "23116", "ward_name": "天白区", "population": 164817, "area_km2": 21.58 }
+  ]
+}

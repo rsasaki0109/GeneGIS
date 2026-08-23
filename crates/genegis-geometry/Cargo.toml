@@ -8,4 +8,6 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+genegis-crs = { path = "../genegis-crs" }
 serde.workspace = true
+thiserror.workspace = true

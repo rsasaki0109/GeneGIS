@@ -35,6 +35,31 @@ Example north-star prompt:
 
 GeneGIS resolves the place, discovers datasets, normalizes CRS, computes density, renders a choropleth, and shows sources + workflow graph + verification — not just a chat reply.
 
+The Nagoya fixture uses the [Nagoya City 2020 census final-value page](https://www.city.nagoya.jp/shisei/toukei/1003703/1003773/1003809/1034253/1003818.html)
+and its [official census table Excel](https://www.city.nagoya.jp/_res/projects/default_project/_page_/001/003/818/toukeihyo.xlsx)
+for population, with MLIT N03 boundaries and an immutable source manifest/oracle
+under `/home/sasaki/workspace/GeneGIS/examples/nagoya-population-density/data/`.
+
+### The differentiation: proof-carrying spatial analysis
+
+GeneGIS does not compete by reproducing a desktop layer editor or by claiming
+that a prompt, DAG, or provenance log proves correctness. Every releasable
+analysis carries machine-checkable meaning and evidence:
+
+- versioned GeoContracts for CRS, units, measure, time, coverage, source, and quality;
+- policy-derived trust that fails closed instead of accepting model confidence;
+- an independent Verification Graph with verifier identity and tolerance;
+- a nine-subject open capsule that verifies offline without a server or LLM;
+- semantic diff and digest-bound approval;
+- a Trust Debugger linking failures to sources, contracts, Workflow nodes, checks, and artifacts;
+- PROV-JSON, Workflow Run RO-Crate, OpenLineage, DSSE/in-toto, and OGC API - Processes projections;
+- measured Native/DuckDB/GDAL and licensed external-benchmark artifact scoring.
+
+This makes the product a review and verification workbench around open GIS
+engines, rather than another toolbox UI. See
+[`RFC 0003`](docs/rfcs/0003-proof-carrying-spatial-analysis.md) and the
+measured [`Phase-11 report`](docs/reports/phase-11-acceptance.json).
+
 ## Five differentiators
 
 | Pillar | What it means |
@@ -56,6 +81,12 @@ cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示"
 
 # Inspect the workflow without executing it
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --plan-only
+
+# Seal, inspect, and verify a portable proof-carrying result
+cargo run -p genegis-cli -- capsule seal /tmp/nagoya-capsule
+cargo run -p genegis-cli -- capsule review /tmp/nagoya-capsule --tui
+cargo run -p genegis-cli -- capsule verify /tmp/nagoya-capsule \
+  --policy /tmp/nagoya-capsule/metadata/verification-policy.json
 ```
 
 ### Develop the public Playground
@@ -124,6 +155,7 @@ examples/   Reproducible demos (Nagoya density, COG, COPC, …)
 | 7 | [Audit trail & release workbench — run history + provenance UI](docs/roadmap/phase-7-release.md) |
 | 8 | [Intent expansion — multi-workflow agent verify beyond Nagoya](docs/roadmap/phase-8-intent-expansion.md) |
 | 10 | [Federated catalog search and cloud execution](docs/roadmap/phase-10-federated-catalog.md) |
+| 11 | [Proof-carrying spatial analysis](docs/roadmap/phase-11-proof-carrying-analysis.md) |
 
 ## Tech stack (decisions)
 

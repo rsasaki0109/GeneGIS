@@ -1,0 +1,40 @@
+{
+  "manifest_schema_version": 1,
+  "immutable": true,
+  "dataset_id": "nagoya-wards-density",
+  "snapshot_version": "nagoya-2020-census-final-n03-v2",
+  "census_year": 2020,
+  "population": {
+    "asset": "nagoya-population-2020.json",
+    "sha256": "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c",
+    "official_page_url": "https://www.city.nagoya.jp/shisei/toukei/1003703/1003773/1003809/1034253/1003818.html",
+    "official_data_url": "https://www.city.nagoya.jp/_res/projects/default_project/_page_/001/003/818/toukeihyo.xlsx",
+    "license": "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠）",
+    "retrieval_basis": "名古屋市統計課掲載の令和2年国勢調査確定値 Excel の区別人口表を転記。速報・推計値は使用しない。",
+    "population_total": 2332176
+  },
+  "boundary": {
+    "asset": "nagoya-wards.geojson",
+    "sha256": "sha256:d0f8958813fe28e9428169ca7c638a0ea3b3ed7ae526750156d3f94e1308d30e",
+    "source": "国土数値情報 N03 行政区域（JapanCityGeoJson processed snapshot）",
+    "source_base_url": "https://raw.githubusercontent.com/niiyz/JapanCityGeoJson/master/geojson/23",
+    "official_source_url": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03.html",
+    "license": "国土交通省 国土数値情報（政府標準利用規約）",
+    "crs": "EPSG:4326",
+    "normalization": "全source featuresと全polygon partsを保持。外側ring外に位置する不正なhole配列（23111）は独立polygon partsへ分解し、座標を失わない。"
+  },
+  "oracle": {
+    "asset": "nagoya-oracle-2020.json",
+    "sha256": "sha256:39a69575b8cdccc37438a52eb2ad55724f7d0e54965468c5e2532bc8d38049c0",
+    "source_basis": "名古屋市資料/GSI面積調（2020年、区別面積）",
+    "area_unit": "km²",
+    "area_total_km2": 326.50,
+    "relative_error_threshold": 0.005
+  },
+  "integrity": {
+    "required_ward_count": 16,
+    "population_total_delta": 0,
+    "geometry_join": "ward_code and ward_name must match source properties",
+    "verification": "all wards area relative error <= 0.5%; density = population / measured area"
+  }
+}

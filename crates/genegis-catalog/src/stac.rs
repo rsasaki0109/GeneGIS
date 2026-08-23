@@ -101,12 +101,20 @@ fn bbox_polygon_geometry(bbox: [f64; 4]) -> Value {
 }
 
 fn stac_properties(record: &DatasetRecord) -> Value {
+    let source = record.source_metadata();
     json!({
         "title": record.title,
         "description": record.description,
         "genegis:format": record.format.kind,
         "genegis:crs": record.crs,
+        "genegis:coordinate_unit": record.coordinate_unit().as_str(),
         "genegis:license": record.license,
+        "genegis:source_uri": source.uri,
+        "genegis:source_version": source.source_version,
+        "genegis:checksum": source.checksum,
+        "genegis:expected_checksum": source.expected_checksum,
+        "genegis:observed_checksum": source.observed_checksum,
+        "genegis:checksum_status": source.checksum_status,
         "genegis:tags": record.tags,
     })
 }
@@ -189,18 +197,29 @@ pub fn bind_stac_item(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::catalog::{alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID};
+    use crate::catalog::{
+        alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID, REMOTE_COG_DEMO_ID,
+    };
 
     #[test]
     fn nagoya_exports_stac_item() {
         let catalog = alpha_catalog();
-        let record = catalog
-            .require(NAGOYA_WARDS_DENSITY_ID)
-            .expect("record");
+        let record = catalog.require(NAGOYA_WARDS_DENSITY_ID).expect("record");
         let item = record.to_stac_item();
         assert_eq!(item.stac_version, "1.0.0");
         assert_eq!(item.id, NAGOYA_WARDS_DENSITY_ID);
         assert!(item.assets.contains_key("geojson"));
+        assert_eq!(item.properties["genegis:crs"], "EPSG:4326");
+        assert_eq!(item.properties["genegis:coordinate_unit"], "degrees");
+        assert_eq!(item.properties["genegis:checksum_status"], "verified");
+        assert_eq!(
+            item.properties["genegis:expected_checksum"],
+            item.properties["genegis:observed_checksum"]
+        );
+        assert_eq!(
+            item.properties["genegis:source_version"],
+            "nagoya-2020-census-final-n03-v2"
+        );
         assert_eq!(item.bbox[0] < item.bbox[2], true);
     }
 
@@ -210,7 +229,10 @@ mod tests {
         let collection = browse_alpha_stac_collection(&catalog);
         assert_eq!(collection.id, ALPHA_STAC_COLLECTION_ID);
         assert_eq!(
-            collection.summaries.get("item_count").and_then(Value::as_u64),
+            collection
+                .summaries
+                .get("item_count")
+                .and_then(Value::as_u64),
             Some(5)
         );
         let ids = collection
@@ -218,11 +240,17 @@ mod tests {
             .get("item_ids")
             .and_then(Value::as_array)
             .expect("item_ids");
-        assert!(ids.iter().any(|id| id.as_str() == Some(NAGOYA_WARDS_DENSITY_ID)));
+        assert!(ids
+            .iter()
+            .any(|id| id.as_str() == Some(NAGOYA_WARDS_DENSITY_ID)));
         assert!(ids.iter().any(|id| id.as_str() == Some(REMOTE_COG_DEMO_ID)));
         assert!(ids.iter().any(|id| id.as_str() == Some(LOCAL_COG_DEMO_ID)));
-        assert!(ids.iter().any(|id| id.as_str() == Some(crate::catalog::NAGOYA_WARDS_GEOPARQUET_ID)));
-        assert!(ids.iter().any(|id| id.as_str() == Some(crate::catalog::EXTERNAL_STAC_DEMO_ID)));
+        assert!(ids
+            .iter()
+            .any(|id| id.as_str() == Some(crate::catalog::NAGOYA_WARDS_GEOPARQUET_ID)));
+        assert!(ids
+            .iter()
+            .any(|id| id.as_str() == Some(crate::catalog::EXTERNAL_STAC_DEMO_ID)));
     }
 
     #[test]

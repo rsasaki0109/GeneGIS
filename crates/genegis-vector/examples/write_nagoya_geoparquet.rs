@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
-use genegis_vector::geojson::read_geojson_path;
 use genegis_catalog::nagoya_wards_geojson_path;
+use genegis_vector::geojson::read_geojson_path;
 
 use arrow_array::{Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
@@ -95,8 +95,7 @@ fn write_nagoya_geoparquet_bytes() -> Vec<u8> {
         ArrowWriter::try_new(&mut buffer, encoder.target_schema(), None).expect("writer");
     let encoded = encoder.encode_record_batch(&batch).expect("encode");
     writer.write(&encoded).expect("write");
-    writer
-        .append_key_value_metadata(encoder.into_keyvalue().expect("metadata"));
+    writer.append_key_value_metadata(encoder.into_keyvalue().expect("metadata"));
     writer.close().expect("close");
     buffer
 }
@@ -110,7 +109,18 @@ fn rings_to_geometry(rings: &[genegis_geometry::PolygonRing]) -> Geometry {
                 .iter()
                 .map(|(x, y)| Coord { x: *x, y: *y })
                 .collect();
-            Polygon::new(LineString::from(coords), vec![])
+            let holes = ring
+                .holes()
+                .iter()
+                .map(|hole| {
+                    LineString::from(
+                        hole.iter()
+                            .map(|(x, y)| Coord { x: *x, y: *y })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect();
+            Polygon::new(LineString::from(coords), holes)
         })
         .collect();
     if polygons.len() == 1 {

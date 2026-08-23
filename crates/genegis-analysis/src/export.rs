@@ -154,7 +154,7 @@ fn build_map_paths(result: &AnalysisResult, width: f64, height: f64, pad: f64) -
     let mut paths = String::new();
     for feature in &result.features {
         for ring in &feature.rings {
-            let d = ring_to_svg_path(
+            let mut d = ring_to_svg_path(
                 ring.exterior(),
                 min_x,
                 min_y,
@@ -164,8 +164,14 @@ fn build_map_paths(result: &AnalysisResult, width: f64, height: f64, pad: f64) -
                 height,
                 pad,
             );
+            for hole in ring.holes() {
+                d.push(' ');
+                d.push_str(&ring_to_svg_path(
+                    hole, min_x, min_y, max_x, max_y, width, height, pad,
+                ));
+            }
             paths.push_str(&format!(
-                r##"<path d="{d}" fill="{fill}" stroke="#1a1a1a" stroke-width="0.5" data-ward="{ward}" data-density="{density:.1}"><title>{ward}: {density:.0} persons/km²</title></path>"##,
+                r##"<path d="{d}" fill="{fill}" fill-rule="evenodd" stroke="#1a1a1a" stroke-width="0.5" data-ward="{ward}" data-density="{density:.1}"><title>{ward}: {density:.0} persons/km²</title></path>"##,
                 fill = feature.color.to_hex(),
                 ward = escape_xml(&feature.ward_name),
                 density = feature.density_per_km2,

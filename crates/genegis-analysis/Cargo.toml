@@ -8,7 +8,9 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+genegis-contract = { path = "../genegis-contract" }
 genegis-core = { path = "../genegis-core" }
+genegis-crs = { path = "../genegis-crs" }
 genegis-geometry = { path = "../genegis-geometry" }
 genegis-ai = { path = "../genegis-ai" }
 genegis-catalog = { path = "../genegis-catalog" }
@@ -24,5 +26,7 @@ thiserror.workspace = true
 resvg = "0.47"
 base64 = "0.22"
 chrono.workspace = true
+uuid.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]

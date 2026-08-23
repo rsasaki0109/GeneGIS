@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 genegis-core = { path = "../genegis-core" }
+genegis-crs = { path = "../genegis-crs" }
 genegis-geometry = { path = "../genegis-geometry" }
 genegis-raster = { path = "../genegis-raster" }
 genegis-storage = { path = "../genegis-storage" }

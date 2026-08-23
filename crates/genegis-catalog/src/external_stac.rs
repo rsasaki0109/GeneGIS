@@ -56,8 +56,7 @@ pub fn parse_stac_collection(bytes: &[u8]) -> Result<StacCollection, CatalogErro
 }
 
 pub fn parse_stac_item(bytes: &[u8]) -> Result<StacItem, CatalogError> {
-    serde_json::from_slice(bytes)
-        .map_err(|err| CatalogError::InvalidStac(format!("item: {err}")))
+    serde_json::from_slice(bytes).map_err(|err| CatalogError::InvalidStac(format!("item: {err}")))
 }
 
 /// Convert a STAC Item into a catalog record using the primary data asset.
@@ -91,6 +90,19 @@ pub fn stac_item_to_dataset_record(item: &StacItem) -> Result<DatasetRecord, Cat
             .and_then(Value::as_str)
             .unwrap_or("unknown")
             .into(),
+        checksum: item
+            .properties
+            .get("checksum")
+            .or_else(|| item.properties.get("genegis:expected_checksum"))
+            .or_else(|| item.properties.get("genegis:checksum"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        source_version: item
+            .properties
+            .get("version")
+            .or_else(|| item.properties.get("genegis:source_version"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
         tags: vec![
             "stac".into(),
             "imported".into(),
@@ -220,10 +232,8 @@ mod tests {
 
     #[test]
     fn imports_sample_stac_item_to_overlay() {
-        let overlay_path = std::env::temp_dir().join(format!(
-            "genegis-overlay-test-{}.json",
-            std::process::id()
-        ));
+        let overlay_path =
+            std::env::temp_dir().join(format!("genegis-overlay-test-{}.json", std::process::id()));
         std::env::set_var(CATALOG_OVERLAY_ENV, &overlay_path);
         let _guard = RestoreOverlayEnv;
 

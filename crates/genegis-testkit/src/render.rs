@@ -26,7 +26,9 @@ pub fn benchmark_render_mesh(
 fn load_nagoya_map() -> Result<ChoroplethMap, TestkitError> {
     let map = nagoya_choropleth_map().map_err(|err| TestkitError::Render(err.to_string()))?;
     if map.features.is_empty() {
-        return Err(TestkitError::Render("choropleth map has no features".into()));
+        return Err(TestkitError::Render(
+            "choropleth map has no features".into(),
+        ));
     }
     Ok(map)
 }

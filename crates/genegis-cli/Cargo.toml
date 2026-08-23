@@ -18,6 +18,8 @@ genegis-catalog = { path = "../genegis-catalog" }
 genegis-query = { path = "../genegis-query" }
 genegis-agent = { path = "../genegis-agent" }
 genegis-collab = { path = "../genegis-collab" }
+genegis-capsule = { path = "../genegis-capsule" }
+genegis-contract = { path = "../genegis-contract" }
 genegis-core = { path = "../genegis-core" }
 genegis-plugin-host = { path = "../genegis-plugin-host" }
 genegis-pointcloud = { path = "../genegis-pointcloud" }
@@ -27,4 +29,6 @@ genegis-vector = { path = "../genegis-vector" }
 genegis-workflow = { path = "../genegis-workflow" }
 genegis-testkit = { path = "../genegis-testkit" }
 serde_json.workspace = true
+chrono.workspace = true
+crossterm = "0.28"
 uuid.workspace = true

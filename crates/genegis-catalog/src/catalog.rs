@@ -98,12 +98,16 @@ fn nagoya_wards_density_record() -> DatasetRecord {
     DatasetRecord {
         id: NAGOYA_WARDS_DENSITY_ID.into(),
         title: "Nagoya city wards — population density".into(),
-        description: "16 Nagoya wards with 2020 census population and N03-derived boundaries.".into(),
+        description: "16 Nagoya wards with the 2020 Nagoya City census final population, N03-derived boundaries, and an immutable source/oracle manifest.".into(),
         format: DatasetFormat::geojson(),
         crs: "EPSG:4326".into(),
         bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
         uri: nagoya_wards_geojson_path().into(),
-        license: "Government open data (Japan) + MLIT N03".into(),
+        license: "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠） + MLIT N03 政府標準利用規約".into(),
+        checksum: Some(
+            "sha256:d0f8958813fe28e9428169ca7c638a0ea3b3ed7ae526750156d3f94e1308d30e".into(),
+        ),
+        source_version: Some("nagoya-2020-census-final-n03-v2".into()),
         tags: vec![
             "nagoya".into(),
             "population".into(),
@@ -117,13 +121,16 @@ fn remote_cog_demo_record() -> DatasetRecord {
     DatasetRecord {
         id: REMOTE_COG_DEMO_ID.into(),
         title: "Remote GeoTIFF / COG metadata demo".into(),
-        description: "Public OSGeo GeoTIFF sample for HTTP range-read and raster metadata smoke tests."
-            .into(),
+        description:
+            "Public OSGeo GeoTIFF sample for HTTP range-read and raster metadata smoke tests."
+                .into(),
         format: DatasetFormat::cog(),
         crs: "EPSG:32617".into(),
         bbox: BoundingBox::new(-78.638, 40.983, -78.487, 41.129),
         uri: "http://download.osgeo.org/geotiff/samples/usgs/o41078a5.tif".into(),
         license: "Public domain (OSGeo sample data)".into(),
+        checksum: None,
+        source_version: Some("osgeo-usgs-sample-v1".into()),
         tags: vec![
             "cog".into(),
             "remote".into(),
@@ -137,12 +144,17 @@ fn nagoya_geoparquet_record() -> DatasetRecord {
     DatasetRecord {
         id: NAGOYA_WARDS_GEOPARQUET_ID.into(),
         title: "Nagoya city wards — GeoParquet fixture".into(),
-        description: "16 Nagoya wards exported to GeoParquet for offline vector verification.".into(),
+        description: "16 Nagoya wards exported to GeoParquet for offline vector verification."
+            .into(),
         format: DatasetFormat::geoparquet(),
         crs: "EPSG:4326".into(),
         bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
         uri: nagoya_wards_geoparquet_path().into(),
-        license: "Government open data (Japan) + MLIT N03".into(),
+        license:
+            "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠） + MLIT N03 政府標準利用規約"
+                .into(),
+        checksum: None,
+        source_version: Some("nagoya-2020-census-final-n03-geoparquet-v2".into()),
         tags: vec![
             "nagoya".into(),
             "geoparquet".into(),
@@ -157,7 +169,8 @@ fn external_stac_demo_record() -> DatasetRecord {
     DatasetRecord {
         id: EXTERNAL_STAC_DEMO_ID.into(),
         title: "External STAC collection demo".into(),
-        description: "Bundled sample STAC Collection JSON for offline fetch/import smoke tests.".into(),
+        description: "Bundled sample STAC Collection JSON for offline fetch/import smoke tests."
+            .into(),
         format: DatasetFormat::geojson(),
         crs: "EPSG:4326".into(),
         bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
@@ -167,11 +180,11 @@ fn external_stac_demo_record() -> DatasetRecord {
         )
         .into(),
         license: "CC-BY-4.0".into(),
-        tags: vec![
-            "stac".into(),
-            "external".into(),
-            "demo".into(),
-        ],
+        checksum: Some(
+            "sha256:396e617f60ed11a041281ce55bd257aedf22ae1d1e269f9035468b61116fb994".into(),
+        ),
+        source_version: Some("sample-stac-collection-v1".into()),
+        tags: vec!["stac".into(), "external".into(), "demo".into()],
     }
 }
 
@@ -179,18 +192,16 @@ fn local_cog_demo_record() -> DatasetRecord {
     DatasetRecord {
         id: LOCAL_COG_DEMO_ID.into(),
         title: "Local bundled COG metadata demo".into(),
-        description: "Offline smoke GeoTIFF generated at build time for local COG workflows.".into(),
+        description: "Offline smoke GeoTIFF generated at build time for local COG workflows."
+            .into(),
         format: DatasetFormat::cog(),
         crs: "EPSG:4326".into(),
         bbox: BoundingBox::new(-180.0, 89.52, -179.36, 90.0),
         uri: genegis_raster::smoke_demo_cog_path().into(),
         license: "GeneGIS smoke fixture".into(),
-        tags: vec![
-            "cog".into(),
-            "local".into(),
-            "demo".into(),
-            "raster".into(),
-        ],
+        checksum: None,
+        source_version: Some("gene-gis-smoke-cog-v1".into()),
+        tags: vec!["cog".into(), "local".into(), "demo".into(), "raster".into()],
     }
 }
 
@@ -203,6 +214,19 @@ mod tests {
         let catalog = alpha_catalog();
         let record = catalog.require(NAGOYA_WARDS_DENSITY_ID).expect("record");
         assert_eq!(record.format.kind, "geojson");
+        assert_eq!(record.coordinate_unit().as_str(), "degrees");
+        assert_eq!(record.parsed_crs().expect("crs").identifier(), "EPSG:4326");
+        let source = record.source_metadata();
+        assert_eq!(source.checksum_status.as_str(), "verified");
+        assert_eq!(
+            source.source_version.as_ref().map(|v| v.as_str()),
+            Some("nagoya-2020-census-final-n03-v2")
+        );
+        assert_eq!(record.summary_json()["checksum_status"], "verified");
+        assert_eq!(
+            record.summary_json()["expected_checksum"],
+            record.summary_json()["observed_checksum"]
+        );
         assert!(std::path::Path::new(&record.uri).exists());
     }
 
@@ -212,6 +236,7 @@ mod tests {
         let record = catalog.require(REMOTE_COG_DEMO_ID).expect("record");
         assert_eq!(record.format.kind, "cog");
         assert!(genegis_storage::is_remote_uri(&record.uri));
+        assert_eq!(record.source_metadata().checksum_status.as_str(), "unknown");
         assert_eq!(catalog.list().len(), 5);
     }
 
@@ -226,9 +251,7 @@ mod tests {
     #[test]
     fn alpha_catalog_lists_geoparquet_demo() {
         let catalog = alpha_catalog();
-        let record = catalog
-            .require(NAGOYA_WARDS_GEOPARQUET_ID)
-            .expect("record");
+        let record = catalog.require(NAGOYA_WARDS_GEOPARQUET_ID).expect("record");
         assert_eq!(record.format.kind, "geoparquet");
         assert!(std::path::Path::new(&record.uri).exists());
     }

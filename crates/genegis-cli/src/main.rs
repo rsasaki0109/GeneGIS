@@ -1,36 +1,39 @@
 //! GeneGIS CLI — Phase 1: ask, workflow run, execute, export.
 
-use genegis_ai::{PlannerBackend, PlannerConfig, plan_with_config};
-use genegis_analysis::{
-    default_nagoya_data_path, export_html_map, export_png_map, run_ask_pipeline_with_config,
-    run_nagoya_population_density,
+use genegis_agent::{
+    build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
+    AgentOrchestrator, AgentRole, AgentRun, AgentRunConfig, AuditCollabSnapshot,
+    DEFAULT_AGENT_RUNS_DIR, DEFAULT_AGENT_RUN_PATH, DEFAULT_SERVER_URL,
+};
+use genegis_ai::{plan_with_config, PlannerBackend, PlannerConfig};
+use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
+use genegis_analysis::run_ask_pipeline_with_config_and_origin;
+use genegis_capsule::{
+    create_approval, create_dsse_attestation, diff_capsules, ed25519_public_key,
+    execute_ogc_verify_request, export_standard_bundle, review_capsule_with_diff,
+    seal_nagoya_capsule, verify_approval, verify_dsse_attestation, verify_nagoya_capsule,
+    AnalysisApproval, DsseEnvelope, SourceReview, TrustReview,
 };
 use genegis_catalog::{
     alpha_catalog, bind_stac_item, browse_alpha_stac_collection, endpoint_registry_path,
     fetch_stac_collection, import_stac_item_url, EndpointRegistry, FederatedCatalog, StacEndpoint,
-    StacSearchRequest, LOCAL_COG_DEMO_ID,
-    NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+    StacSearchRequest, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
-use genegis_core::{Command, CommandEnvelope, CommandOrigin};
-use genegis_agent::{
-    build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
-    AgentOrchestrator, AgentRun, AgentRunConfig, AgentRole, AuditCollabSnapshot,
-    DEFAULT_AGENT_RUN_PATH, DEFAULT_AGENT_RUNS_DIR, DEFAULT_SERVER_URL,
-};
-use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment};
-use genegis_query::verify_nagoya_densities;
+use genegis_contract::VerificationPolicy;
+use genegis_core::{Command, CommandEnvelope, CommandOrigin};
+use genegis_vector::{
+    geoparquet_summary, read_geoparquet_uri, read_geoparquet_uri_with_options,
+    GeoParquetReadOptions,
+};
 use genegis_workflow::{
     external_stac_fetch_template, federated_stac_search_template, local_cog_metadata_template,
     nagoya_geoparquet_density_template, nagoya_geoparquet_template,
     nagoya_population_density_template, remote_cog_metadata_template,
     remote_geoparquet_range_template, stac_endpoint_registry_template,
 };
-use genegis_vector::{
-    geoparquet_summary, read_geoparquet_uri, read_geoparquet_uri_with_options,
-    GeoParquetReadOptions,
-};
 use std::env;
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -51,6 +54,7 @@ fn main() {
         Some("vector") => handle_vector(&args[2..]),
         Some("collab") => handle_collab(&args[2..]),
         Some("agent") => handle_agent(&args[2..]),
+        Some("capsule") => handle_capsule(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
@@ -58,6 +62,635 @@ fn main() {
             process::exit(1);
         }
     }
+}
+
+fn handle_capsule(args: &[String]) {
+    let Some(action) = args.first().map(String::as_str) else {
+        eprintln!(
+            "Usage: genegis capsule seal PATH | verify PATH [--policy POLICY.json] | diff OLD NEW"
+        );
+        process::exit(1);
+    };
+    let Some(root) = args.get(1).map(PathBuf::from) else {
+        eprintln!("capsule {action} requires a capsule directory path");
+        process::exit(1);
+    };
+    match action {
+        "seal" => {
+            let result = run_ask_pipeline_with_config_and_origin(
+                "名古屋市の人口密度を表示",
+                &PlannerConfig::default(),
+                CommandOrigin::Cli,
+            )
+            .unwrap_or_else(|error| {
+                eprintln!("Capsule analysis failed: {error}");
+                process::exit(1);
+            });
+            let manifest = seal_nagoya_capsule(&result, &root).unwrap_or_else(|error| {
+                eprintln!("Capsule seal failed: {error}");
+                process::exit(1);
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&manifest).expect("capsule manifest JSON")
+            );
+        }
+        "verify" => {
+            let policy_path = args
+                .iter()
+                .position(|argument| argument == "--policy")
+                .and_then(|index| args.get(index + 1));
+            let policy = policy_path.map(|path| {
+                let bytes = std::fs::read(path).unwrap_or_else(|error| {
+                    eprintln!("Failed to read policy {path}: {error}");
+                    process::exit(1);
+                });
+                serde_json::from_slice::<VerificationPolicy>(&bytes).unwrap_or_else(|error| {
+                    eprintln!("Invalid verification policy {path}: {error}");
+                    process::exit(1);
+                })
+            });
+            let verification =
+                verify_nagoya_capsule(&root, policy.as_ref()).unwrap_or_else(|error| {
+                    eprintln!("Capsule verify failed: {error}");
+                    process::exit(1);
+                });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&verification).expect("capsule verification JSON")
+            );
+        }
+        "diff" => {
+            let Some(new_root) = args.get(2).map(PathBuf::from) else {
+                eprintln!("Usage: genegis capsule diff OLD NEW");
+                process::exit(1);
+            };
+            let report = diff_capsules(&root, &new_root).unwrap_or_else(|error| {
+                eprintln!("Capsule diff failed: {error}");
+                process::exit(1);
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("semantic diff JSON")
+            );
+        }
+        "approve" => {
+            let reviewer = args
+                .iter()
+                .position(|argument| argument == "--reviewer")
+                .and_then(|index| args.get(index + 1))
+                .cloned()
+                .unwrap_or_else(|| {
+                    eprintln!("capsule approve requires --reviewer ID");
+                    process::exit(1);
+                });
+            let output = args
+                .iter()
+                .position(|argument| argument == "--output" || argument == "-o")
+                .and_then(|index| args.get(index + 1))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("approval.json"));
+            let approval = create_approval(&root, reviewer, chrono::Utc::now().to_rfc3339(), None)
+                .unwrap_or_else(|error| {
+                    eprintln!("Approval failed: {error}");
+                    process::exit(1);
+                });
+            let bytes = serde_json::to_vec_pretty(&approval).expect("approval JSON");
+            write_bytes(&output, &bytes, "approval");
+        }
+        "check-approval" => {
+            let Some(approval_path) = args.get(2) else {
+                eprintln!("Usage: genegis capsule check-approval PATH APPROVAL.json");
+                process::exit(1);
+            };
+            let bytes = std::fs::read(approval_path).unwrap_or_else(|error| {
+                eprintln!("Failed to read approval {approval_path}: {error}");
+                process::exit(1);
+            });
+            let approval: AnalysisApproval =
+                serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                    eprintln!("Invalid approval {approval_path}: {error}");
+                    process::exit(1);
+                });
+            verify_approval(&root, &approval, None).unwrap_or_else(|error| {
+                eprintln!("Approval check failed: {error}");
+                process::exit(1);
+            });
+            println!("approval valid for {}", root.display());
+        }
+        "review" => {
+            let semantic_diff = option_value(args, "--diff").map(|other| {
+                diff_capsules(&root, &other).unwrap_or_else(|error| {
+                    eprintln!("Capsule diff failed: {error}");
+                    process::exit(1);
+                })
+            });
+            let review =
+                review_capsule_with_diff(&root, None, semantic_diff).unwrap_or_else(|error| {
+                    eprintln!("Capsule review failed: {error}");
+                    process::exit(1);
+                });
+            let force_tui = args.iter().any(|argument| argument == "--tui");
+            if !force_tui
+                && (args.iter().any(|argument| argument == "--json") || !io::stdout().is_terminal())
+            {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&review).expect("trust review JSON")
+                );
+            } else if let Err(error) = run_trust_debugger(&review) {
+                eprintln!("Trust Debugger failed: {error}");
+                process::exit(1);
+            }
+        }
+        "export-standards" => {
+            let Some(output) = args.get(2).map(PathBuf::from) else {
+                eprintln!("Usage: genegis capsule export-standards PATH OUTPUT_DIR");
+                process::exit(1);
+            };
+            let report = export_standard_bundle(&root, &output).unwrap_or_else(|error| {
+                eprintln!("Standards export failed: {error}");
+                process::exit(1);
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("standards export JSON")
+            );
+        }
+        "attest" => {
+            let key_path = required_option(args, "--key");
+            let keyid = option_value(args, "--key-id").unwrap_or_else(|| "ed25519-local".into());
+            let output = option_value(args, "--output")
+                .or_else(|| option_value(args, "-o"))
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("genegis-attestation.json"));
+            let secret = read_hex_key(Path::new(&key_path));
+            let envelope = create_dsse_attestation(&root, &secret, keyid).unwrap_or_else(|error| {
+                eprintln!("Attestation failed: {error}");
+                process::exit(1);
+            });
+            write_bytes(
+                &output,
+                &serde_json::to_vec_pretty(&envelope).expect("DSSE JSON"),
+                "DSSE attestation",
+            );
+            eprintln!(
+                "Ed25519 public key: {}",
+                encode_hex(&ed25519_public_key(&secret))
+            );
+        }
+        "verify-attestation" => {
+            let Some(envelope_path) = args.get(2) else {
+                eprintln!(
+                    "Usage: genegis capsule verify-attestation PATH ENVELOPE --public-key FILE"
+                );
+                process::exit(1);
+            };
+            let public_key = read_hex_key(Path::new(&required_option(args, "--public-key")));
+            let bytes = std::fs::read(envelope_path).unwrap_or_else(|error| {
+                eprintln!("Failed to read attestation {envelope_path}: {error}");
+                process::exit(1);
+            });
+            let envelope: DsseEnvelope = serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                eprintln!("Invalid DSSE envelope: {error}");
+                process::exit(1);
+            });
+            let statement =
+                verify_dsse_attestation(&root, &envelope, &public_key).unwrap_or_else(|error| {
+                    eprintln!("Attestation verification failed: {error}");
+                    process::exit(1);
+                });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&statement).expect("in-toto Statement JSON")
+            );
+        }
+        "execute-ogc" => {
+            let request: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(&root).unwrap_or_else(|error| {
+                    eprintln!(
+                        "Failed to read OGC execute request {}: {error}",
+                        root.display()
+                    );
+                    process::exit(1);
+                }))
+                .unwrap_or_else(|error| {
+                    eprintln!("Invalid OGC execute request: {error}");
+                    process::exit(1);
+                });
+            let result = execute_ogc_verify_request(&request).unwrap_or_else(|error| {
+                eprintln!("OGC process execution failed: {error}");
+                process::exit(1);
+            });
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&result).expect("OGC result JSON")
+            );
+        }
+        _ => {
+            eprintln!("Unknown capsule command: {action}");
+            process::exit(1);
+        }
+    }
+}
+
+fn option_value(args: &[String], name: &str) -> Option<String> {
+    args.iter()
+        .position(|argument| argument == name)
+        .and_then(|index| args.get(index + 1))
+        .cloned()
+}
+
+fn required_option(args: &[String], name: &str) -> String {
+    option_value(args, name).unwrap_or_else(|| {
+        eprintln!("{name} requires a value");
+        process::exit(1);
+    })
+}
+
+fn read_hex_key(path: &Path) -> [u8; 32] {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|error| {
+        eprintln!("Failed to read key {}: {error}", path.display());
+        process::exit(1);
+    });
+    let text = text.trim();
+    if text.len() != 64 {
+        eprintln!(
+            "Key {} must contain exactly 64 hexadecimal characters",
+            path.display()
+        );
+        process::exit(1);
+    }
+    let mut bytes = [0_u8; 32];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&text[index * 2..index * 2 + 2], 16).unwrap_or_else(|_| {
+            eprintln!("Key {} is not hexadecimal", path.display());
+            process::exit(1);
+        });
+    }
+    bytes
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn run_trust_debugger(review: &TrustReview) -> Result<(), String> {
+    use crossterm::cursor::{Hide, MoveTo, Show};
+    use crossterm::event::{self, Event, KeyCode};
+    use crossterm::execute;
+    use crossterm::terminal::{
+        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    };
+
+    let mut stdout = io::stdout();
+    enable_raw_mode().map_err(|error| error.to_string())?;
+    execute!(stdout, EnterAlternateScreen, Hide).map_err(|error| error.to_string())?;
+    let mut pane = 0usize;
+    let mut selected = 0usize;
+    let mut source_preview = None;
+    let interaction = (|| -> Result<(), String> {
+        loop {
+            execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                .map_err(|error| error.to_string())?;
+            let (width, height) = crossterm::terminal::size().map_err(|e| e.to_string())?;
+            for (row, line) in
+                trust_debugger_lines(review, pane, selected, source_preview.as_deref())
+                    .into_iter()
+                    .take(height as usize)
+                    .enumerate()
+            {
+                execute!(stdout, MoveTo(0, row as u16)).map_err(|e| e.to_string())?;
+                write!(stdout, "{}", truncate_line(&line, width as usize))
+                    .map_err(|e| e.to_string())?;
+            }
+            stdout.flush().map_err(|error| error.to_string())?;
+            let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
+                continue;
+            };
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                KeyCode::Tab | KeyCode::Right => {
+                    pane = (pane + 1) % 7;
+                    selected = 0;
+                    source_preview = None;
+                }
+                KeyCode::BackTab | KeyCode::Left => {
+                    pane = (pane + 6) % 7;
+                    selected = 0;
+                    source_preview = None;
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    selected = (selected + 1).min(review_pane_len(review, pane).saturating_sub(1));
+                }
+                KeyCode::Up | KeyCode::Char('k') => selected = selected.saturating_sub(1),
+                KeyCode::Char(number @ '1'..='7') => {
+                    pane = number.to_digit(10).expect("digit") as usize - 1;
+                    selected = 0;
+                    source_preview = None;
+                }
+                KeyCode::Char('o') if pane == 2 => {
+                    source_preview = review.sources.get(selected).map(preview_source);
+                }
+                KeyCode::Enter if pane == 5 => {
+                    if let Some(node) = failure_target_node(review, selected) {
+                        pane = 3;
+                        selected = review
+                            .workflow_nodes
+                            .iter()
+                            .position(|candidate| candidate.stable_id == node)
+                            .unwrap_or(0);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    })();
+    let _ = disable_raw_mode();
+    let _ = execute!(stdout, Show, LeaveAlternateScreen);
+    interaction
+}
+
+fn trust_debugger_lines(
+    review: &TrustReview,
+    pane: usize,
+    selected: usize,
+    source_preview: Option<&str>,
+) -> Vec<String> {
+    let trust = review
+        .verification
+        .as_ref()
+        .map(|value| format!("{:?}", value.trust.level).to_uppercase())
+        .unwrap_or_else(|| "INVALID".into());
+    let tabs = [
+        "Claims",
+        "Contracts",
+        "Sources",
+        "Workflow",
+        "Artifacts",
+        "Failures",
+        "Diff",
+    ];
+    let mut lines = vec![
+        format!("GeneGIS Trust Debugger  trust={trust}"),
+        tabs.iter()
+            .enumerate()
+            .map(|(index, label)| {
+                if index == pane {
+                    format!("[{label}]")
+                } else {
+                    format!(" {label} ")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("  "),
+        format!(
+            "result={}  workflow={}",
+            review.identities.result_digest, review.identities.workflow_digest
+        ),
+        format!(
+            "policy={}  verification={}",
+            review.identities.policy_digest, review.identities.verification_graph_digest
+        ),
+        String::new(),
+    ];
+    match pane {
+        0 => {
+            for (index, claim) in review.claims.iter().enumerate() {
+                lines.push(format!(
+                    "{} {} {}  independence={} error={:?}/{:?}ppm",
+                    marker(index, selected),
+                    if claim.passed { "PASS" } else { "FAIL" },
+                    claim.check_id,
+                    claim.independence,
+                    claim.observed_error_ppm,
+                    claim.maximum_error_ppm
+                ));
+            }
+            if let Some(claim) = review.claims.get(selected) {
+                lines.push(String::new());
+                lines.push(format!("Claim: {}", claim.claim));
+                lines.push(format!("Verifier: {}", claim.verifier));
+                lines.push(format!("Depends on: {}", claim.depends_on.join(", ")));
+                lines.push(format!(
+                    "Workflow nodes: {}",
+                    claim.workflow_nodes.join(", ")
+                ));
+            }
+        }
+        1 => {
+            for (index, contract) in review.contracts.iter().enumerate() {
+                lines.push(format!(
+                    "{} {} schema={} valid={} compatibility={:?}",
+                    marker(index, selected),
+                    contract.contract_id,
+                    contract.schema_version,
+                    contract.valid,
+                    contract.compatibility
+                ));
+            }
+        }
+        2 => {
+            for (index, source) in review.sources.iter().enumerate() {
+                lines.push(format!(
+                    "{} {}  checksum={}  version={}",
+                    marker(index, selected),
+                    source.source_id,
+                    source.checksum_status,
+                    source.version.as_deref().unwrap_or("unknown")
+                ));
+            }
+            if let Some(source) = review.sources.get(selected) {
+                lines.push(String::new());
+                lines.push(format!("URI: {}", source.uri));
+                lines.push(format!(
+                    "License: {}",
+                    source.license.as_deref().unwrap_or("unknown")
+                ));
+                lines.push(format!(
+                    "Expected: {}",
+                    source.expected_checksum.as_deref().unwrap_or("unknown")
+                ));
+                lines.push(format!(
+                    "Observed: {}",
+                    source.observed_checksum.as_deref().unwrap_or("unknown")
+                ));
+            }
+            if let Some(preview) = source_preview {
+                lines.push(String::new());
+                lines.push("Source preview:".into());
+                lines.extend(preview.lines().map(ToOwned::to_owned));
+            }
+        }
+        3 => {
+            for (index, node) in review.workflow_nodes.iter().enumerate() {
+                lines.push(format!(
+                    "{} {}  {}  ← {}",
+                    marker(index, selected),
+                    node.stable_id,
+                    node.operation,
+                    node.depends_on.join(", ")
+                ));
+            }
+            if let Some(node) = review.workflow_nodes.get(selected) {
+                lines.push(String::new());
+                lines.push(format!("Parameters: {}", node.parameters));
+                let checks = review
+                    .claims
+                    .iter()
+                    .filter(|claim| claim.workflow_nodes.contains(&node.stable_id))
+                    .map(|claim| claim.check_id.as_str())
+                    .collect::<Vec<_>>();
+                lines.push(format!("Verification claims: {}", checks.join(", ")));
+            }
+        }
+        4 => {
+            for (index, artifact) in review.artifacts.iter().enumerate() {
+                lines.push(format!(
+                    "{} {}  {}  {} bytes  {}",
+                    marker(index, selected),
+                    artifact.role,
+                    artifact.path,
+                    artifact.bytes,
+                    artifact.sha256
+                ));
+            }
+        }
+        5 => {
+            if let Some(error) = &review.integrity_error {
+                lines.push(format!("{} INTEGRITY {error}", marker(0, selected)));
+            }
+            let offset = usize::from(review.integrity_error.is_some());
+            for (index, failure) in review.failures.iter().enumerate() {
+                lines.push(format!(
+                    "{} {:?}/{} {}: {}",
+                    marker(index + offset, selected),
+                    failure.gate,
+                    failure.code,
+                    failure.subject,
+                    failure.detail
+                ));
+                if index + offset == selected {
+                    lines.push(format!("  Nodes: {}", failure.affected_nodes.join(", ")));
+                    lines.push(format!("  Remediation: {}", failure.remediation));
+                }
+            }
+            if review.integrity_error.is_none() && review.failures.is_empty() {
+                lines.push("No failures.".into());
+            }
+            lines.push(String::new());
+            lines.push("Enter jumps to the affected Workflow node.".into());
+        }
+        _ => {
+            if let Some(diff) = &review.semantic_diff {
+                lines.push(format!(
+                    "{} → {}",
+                    diff.old_result_digest, diff.new_result_digest
+                ));
+                for (index, change) in diff.changes.iter().enumerate() {
+                    lines.push(format!(
+                        "{} {:?}/{:?} {} {}",
+                        marker(index, selected),
+                        change.category,
+                        change.kind,
+                        change.subject_role,
+                        change.path
+                    ));
+                }
+                lines.push(format!(
+                    "Unclassified changes: {}",
+                    diff.unclassified_changes
+                ));
+            } else {
+                lines.push("No comparison loaded. Use --diff OTHER_CAPSULE.".into());
+            }
+        }
+    }
+    lines.push(String::new());
+    lines.push("←/→ or Tab pane  ↑/↓ or j/k select  1–7 jump  o preview source  Enter trace failure  q quit".into());
+    lines
+}
+
+fn review_pane_len(review: &TrustReview, pane: usize) -> usize {
+    match pane {
+        0 => review.claims.len(),
+        1 => review.contracts.len(),
+        2 => review.sources.len(),
+        3 => review.workflow_nodes.len(),
+        4 => review.artifacts.len(),
+        5 => review.failures.len() + usize::from(review.integrity_error.is_some()),
+        _ => review
+            .semantic_diff
+            .as_ref()
+            .map_or(0, |diff| diff.changes.len()),
+    }
+}
+
+fn failure_target_node(review: &TrustReview, selected: usize) -> Option<&str> {
+    let offset = usize::from(review.integrity_error.is_some());
+    let failure = selected
+        .checked_sub(offset)
+        .and_then(|index| review.failures.get(index))?;
+    failure
+        .affected_nodes
+        .first()
+        .map(String::as_str)
+        .or_else(|| {
+            review
+                .claims
+                .iter()
+                .find(|claim| claim.check_id == failure.subject)
+                .and_then(|claim| claim.workflow_nodes.first())
+                .map(String::as_str)
+        })
+}
+
+fn preview_source(source: &SourceReview) -> String {
+    if source.uri.starts_with("http://") || source.uri.starts_with("https://") {
+        return format!(
+            "Remote source (not fetched by the offline debugger): {}",
+            source.uri
+        );
+    }
+    let raw_path = source.uri.strip_prefix("file://").unwrap_or(&source.uri);
+    let path = Path::new(raw_path);
+    let Ok(metadata) = std::fs::symlink_metadata(path) else {
+        return format!(
+            "Local source is not available from this environment: {}",
+            path.display()
+        );
+    };
+    if !metadata.file_type().is_file() {
+        return format!("Source preview requires a regular file: {}", path.display());
+    }
+    let Ok(file) = std::fs::File::open(path) else {
+        return format!("Source cannot be opened: {}", path.display());
+    };
+    let mut bytes = Vec::new();
+    if file.take(16 * 1024).read_to_end(&mut bytes).is_err() {
+        return format!("Source cannot be read: {}", path.display());
+    }
+    String::from_utf8(bytes).unwrap_or_else(|_| {
+        format!(
+            "Binary source: {} bytes sampled from {}",
+            metadata.len().min(16 * 1024),
+            path.display()
+        )
+    })
+}
+
+fn marker(index: usize, selected: usize) -> &'static str {
+    if index == selected {
+        ">"
+    } else {
+        " "
+    }
+}
+
+fn truncate_line(line: &str, width: usize) -> String {
+    line.chars().take(width.saturating_sub(1)).collect()
 }
 
 fn handle_ask(args: &[String]) {
@@ -97,13 +730,15 @@ fn handle_ask(args: &[String]) {
         return;
     }
 
-    let result = match run_ask_pipeline_with_config(&prompt, &planner_config) {
-        Ok(r) => r,
-        Err(err) => {
-            eprintln!("Pipeline error: {err}");
-            process::exit(1);
-        }
-    };
+    let result =
+        match run_ask_pipeline_with_config_and_origin(&prompt, &planner_config, CommandOrigin::Cli)
+        {
+            Ok(r) => r,
+            Err(err) => {
+                eprintln!("Pipeline error: {err}");
+                process::exit(1);
+            }
+        };
 
     eprintln!(
         "Intent resolved: {} (confidence {:.0}%)",
@@ -213,11 +848,78 @@ fn planner_config_from_args(args: &[String]) -> PlannerConfig {
 
 fn handle_bench(args: &[String]) {
     use genegis_testkit::{
-        benchmark_pipeline, benchmark_render_mesh, run_all_benchmarks, BenchmarkReport,
-        DEFAULT_ITERATIONS, DEFAULT_WARMUP,
+        benchmark_pipeline, benchmark_render_mesh, run_all_benchmarks,
+        run_cross_engine_equivalence, run_external_benchmark, BenchmarkReport, DEFAULT_ITERATIONS,
+        DEFAULT_WARMUP,
     };
 
     let json_output = args.iter().any(|a| a == "--json");
+    if args.iter().any(|argument| argument == "review") {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            eprintln!("Reviewer timing requires an interactive terminal");
+            process::exit(1);
+        }
+        let reviewer = required_option(args, "--reviewer");
+        let output = option_value(args, "--output")
+            .or_else(|| option_value(args, "-o"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("phase-11-review-timing.json"));
+        let report = run_reviewer_timing_session(reviewer).unwrap_or_else(|error| {
+            eprintln!("Reviewer timing failed: {error}");
+            process::exit(1);
+        });
+        write_bytes(
+            &output,
+            &serde_json::to_vec_pretty(&report).expect("review timing JSON"),
+            "review timing report",
+        );
+        println!(
+            "Review timing: {}/{} correct, median {:.3}s, gate={}",
+            report.correct, report.total, report.median_seconds, report.passed
+        );
+        return;
+    }
+    if args.iter().any(|argument| argument == "external") {
+        let report = run_external_benchmark().unwrap_or_else(|error| {
+            eprintln!("External benchmark error: {error}");
+            process::exit(1);
+        });
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("external benchmark JSON")
+            );
+        } else {
+            println!(
+                "External strict-artifact adapter: {}/{} passed, false accepts={}",
+                report.passed,
+                report.cases.len(),
+                report.false_accepts
+            );
+        }
+        return;
+    }
+    if args.iter().any(|argument| argument == "equivalence") {
+        let report = run_cross_engine_equivalence().unwrap_or_else(|error| {
+            eprintln!("Equivalence error: {error}");
+            process::exit(1);
+        });
+        if json_output {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).expect("equivalence JSON")
+            );
+        } else {
+            println!(
+                "Cross-engine equivalence: {}/{} passed, false accepts={}, max delta={} ppm",
+                report.passed,
+                report.cases.len(),
+                report.false_accepts,
+                report.maximum_delta_ppm
+            );
+        }
+        return;
+    }
     let mut warmup = DEFAULT_WARMUP;
     let mut iterations = DEFAULT_ITERATIONS;
     let mut target = "all";
@@ -283,6 +985,141 @@ fn handle_bench(args: &[String]) {
     for sample in &report.samples {
         print_benchmark_sample(sample);
     }
+}
+
+fn run_reviewer_timing_session(
+    reviewer: String,
+) -> Result<genegis_testkit::ReviewTimingReport, String> {
+    use crossterm::cursor::{Hide, MoveTo, Show};
+    use crossterm::event::{self, Event, KeyCode};
+    use crossterm::execute;
+    use crossterm::terminal::{
+        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    };
+    use genegis_testkit::{
+        review_median_seconds, review_task_corpus, ReviewTaskResult, ReviewTimingReport,
+    };
+
+    let tasks = review_task_corpus();
+    let mut results = Vec::new();
+    let mut stdout = io::stdout();
+    enable_raw_mode().map_err(|error| error.to_string())?;
+    execute!(stdout, EnterAlternateScreen, Hide).map_err(|error| error.to_string())?;
+    let interaction = (|| -> Result<(), String> {
+        for (task_index, task) in tasks.iter().enumerate() {
+            loop {
+                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                    .map_err(|error| error.to_string())?;
+                let (width, _) = crossterm::terminal::size().map_err(|e| e.to_string())?;
+                let lines = [
+                    format!(
+                        "GeneGIS reviewer timing  task {}/{}  reviewer={reviewer}",
+                        task_index + 1,
+                        tasks.len()
+                    ),
+                    String::new(),
+                    "The failure remains hidden and the timer has not started.".into(),
+                    "Press Space or Enter when ready. Press q to abort.".into(),
+                ];
+                for (row, line) in lines.into_iter().enumerate() {
+                    execute!(stdout, MoveTo(0, row as u16)).map_err(|e| e.to_string())?;
+                    write!(stdout, "{}", truncate_line(&line, width as usize))
+                        .map_err(|e| e.to_string())?;
+                }
+                stdout.flush().map_err(|error| error.to_string())?;
+                let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
+                    continue;
+                };
+                match key.code {
+                    KeyCode::Char(' ') | KeyCode::Enter => break,
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Err("session aborted; no timing report written".into());
+                    }
+                    _ => {}
+                }
+            }
+            let started = std::time::Instant::now();
+            let mut selected = 0usize;
+            loop {
+                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                    .map_err(|error| error.to_string())?;
+                let (width, height) = crossterm::terminal::size().map_err(|e| e.to_string())?;
+                let mut lines = vec![
+                    format!(
+                        "GeneGIS reviewer timing  task {}/{}  reviewer={reviewer}",
+                        task_index + 1,
+                        tasks.len()
+                    ),
+                    String::new(),
+                    format!("Failure: {}/{}", task.failure_code, task.subject),
+                    task.detail.clone(),
+                    String::new(),
+                    "Select the first Workflow node you would inspect:".into(),
+                ];
+                lines.extend(
+                    task.choices
+                        .iter()
+                        .enumerate()
+                        .map(|(index, choice)| format!("{} {}", marker(index, selected), choice)),
+                );
+                lines.push(String::new());
+                lines.push("↑/↓ or j/k select  Enter submit  q abort".into());
+                for (row, line) in lines.into_iter().take(height as usize).enumerate() {
+                    execute!(stdout, MoveTo(0, row as u16)).map_err(|e| e.to_string())?;
+                    write!(stdout, "{}", truncate_line(&line, width as usize))
+                        .map_err(|e| e.to_string())?;
+                }
+                stdout.flush().map_err(|error| error.to_string())?;
+                let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
+                    continue;
+                };
+                match key.code {
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        selected = (selected + 1).min(task.choices.len().saturating_sub(1));
+                    }
+                    KeyCode::Up | KeyCode::Char('k') => selected = selected.saturating_sub(1),
+                    KeyCode::Enter => {
+                        let selected_node = task.choices[selected].clone();
+                        results.push(ReviewTaskResult {
+                            task_id: task.task_id.clone(),
+                            correct: selected_node == task.expected_node,
+                            selected_node,
+                            expected_node: task.expected_node.clone(),
+                            elapsed_seconds: started.elapsed().as_secs_f64(),
+                        });
+                        break;
+                    }
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Err("session aborted; no timing report written".into());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    })();
+    let _ = disable_raw_mode();
+    let _ = execute!(stdout, Show, LeaveAlternateScreen);
+    interaction?;
+
+    let median_seconds = review_median_seconds(&results);
+    let correct = results.iter().filter(|result| result.correct).count();
+    let total = results.len();
+    Ok(ReviewTimingReport {
+        schema_version: "0.1.0".into(),
+        reviewer,
+        runner_identity: format!(
+            "genegis-cli/{} trust-debugger-v1",
+            env!("CARGO_PKG_VERSION")
+        ),
+        corpus_version: "phase-11-seeded-failures-v1".into(),
+        results,
+        median_seconds,
+        correct,
+        total,
+        passed: correct == total && median_seconds <= 120.0,
+    })
 }
 
 fn parse_u32_arg(args: &[String], index: usize, label: &str) -> u32 {
@@ -364,7 +1201,9 @@ fn handle_storage(args: &[String]) {
             }
 
             let Some(url) = url else {
-                eprintln!("Usage: genegis storage fetch URL [--range START-END] [--json] [-o FILE]");
+                eprintln!(
+                    "Usage: genegis storage fetch URL [--range START-END] [--json] [-o FILE]"
+                );
                 process::exit(1);
             };
 
@@ -456,7 +1295,10 @@ fn handle_raster(args: &[String]) {
             };
             match genegis_raster::read_cog_uri(path) {
                 Ok(info) => {
-                    println!("{}", serde_json::to_string_pretty(&info.summary_json()).expect("json"));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&info.summary_json()).expect("json")
+                    );
                 }
                 Err(err) => {
                     eprintln!("Raster error: {err}");
@@ -478,8 +1320,7 @@ fn default_plugin_root() -> PathBuf {
     }
 
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        let repo_plugins = Path::new(&manifest_dir)
-            .join("../../plugins");
+        let repo_plugins = Path::new(&manifest_dir).join("../../plugins");
         if repo_plugins.is_dir() {
             return repo_plugins;
         }
@@ -667,10 +1508,12 @@ fn handle_agent(args: &[String]) {
                 }
             };
 
-            if link_collab && !run.verification_passed && !run.plan_only {
-                if link_agent_failure_comment(&mut run) {
-                    eprintln!("Collab comment linked to agent run {}", run.id);
-                }
+            if link_collab
+                && !run.verification_passed
+                && !run.plan_only
+                && link_agent_failure_comment(&mut run)
+            {
+                eprintln!("Collab comment linked to agent run {}", run.id);
             }
 
             if let Err(err) = run.save_to_path(&output) {
@@ -789,8 +1632,7 @@ fn handle_agent(args: &[String]) {
             }
             eprintln!(
                 "Pending plan saved to {} · run {}",
-                DEFAULT_AGENT_PLAN_PATH,
-                run.id
+                DEFAULT_AGENT_PLAN_PATH, run.id
             );
             eprintln!("Approve with: genegis agent execute");
             println!(
@@ -812,10 +1654,7 @@ fn handle_agent(args: &[String]) {
             let plan = match PlanResult::load_from_path(DEFAULT_AGENT_PLAN_PATH) {
                 Ok(plan) => plan,
                 Err(err) => {
-                    eprintln!(
-                        "No pending plan at {}: {err}",
-                        DEFAULT_AGENT_PLAN_PATH
-                    );
+                    eprintln!("No pending plan at {}: {err}", DEFAULT_AGENT_PLAN_PATH);
                     eprintln!("Run: genegis agent plan \"名古屋市の人口密度を表示\"");
                     process::exit(1);
                 }
@@ -922,7 +1761,10 @@ fn handle_agent(args: &[String]) {
         Some("get") => {
             let server_url = collab_server_url(args);
             let runs_dir = agent_runs_dir_from_args(args);
-            let Some(id) = args.get(1).and_then(|value| uuid::Uuid::parse_str(value).ok()) else {
+            let Some(id) = args
+                .get(1)
+                .and_then(|value| uuid::Uuid::parse_str(value).ok())
+            else {
                 eprintln!("Usage: genegis agent get RUN_ID [--url URL]");
                 process::exit(1);
             };
@@ -1046,7 +1888,8 @@ fn handle_collab(args: &[String]) {
                 let session = load_collab_session();
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&session.branches().expect("branches")).expect("json")
+                    serde_json::to_string_pretty(&session.branches().expect("branches"))
+                        .expect("json")
                 );
             }
             Some("create") => {
@@ -1065,7 +1908,8 @@ fn handle_collab(args: &[String]) {
                         save_collab_session(&session);
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&session.branches().expect("branches")).expect("json")
+                            serde_json::to_string_pretty(&session.branches().expect("branches"))
+                                .expect("json")
                         );
                     }
                     Err(err) => {
@@ -1107,7 +1951,8 @@ fn handle_collab(args: &[String]) {
             let session = load_collab_session();
             println!(
                 "{}",
-                serde_json::to_string_pretty(&session.summary_json().expect("summary")).expect("json")
+                serde_json::to_string_pretty(&session.summary_json().expect("summary"))
+                    .expect("json")
             );
         }
         Some("provenance") => match args.get(1).map(String::as_str) {
@@ -1240,7 +2085,10 @@ fn handle_catalog(args: &[String]) {
                     eprintln!("STAC import error: {err}");
                     process::exit(1);
                 });
-                println!("{}", serde_json::to_string_pretty(&record.summary_json()).expect("json"));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&record.summary_json()).expect("json")
+                );
             }
             Some("search") => handle_federated_stac_search(&args[2..]),
             _ => {
@@ -1300,8 +2148,7 @@ fn handle_stac_endpoint_registry(args: &[String]) {
             let title = catalog_named_option(args, "--title")
                 .map(str::to_string)
                 .unwrap_or_else(|| id.clone());
-            let (auth_kind, auth_env, auth_header) =
-                parse_endpoint_authentication_options(args);
+            let (auth_kind, auth_env, auth_header) = parse_endpoint_authentication_options(args);
             let command = Command::RegisterStacEndpoint {
                 endpoint_id: id.clone(),
                 title,
@@ -1574,11 +2421,7 @@ fn handle_vector(args: &[String]) {
                     let all_row_groups = args.iter().any(|arg| arg == "--all-row-groups");
                     let selected = parse_row_group_options(&args[3..]);
                     let options = GeoParquetReadOptions {
-                        row_groups: if all_row_groups {
-                            None
-                        } else {
-                            Some(selected)
-                        },
+                        row_groups: if all_row_groups { None } else { Some(selected) },
                     };
                     let command_row_groups = options.row_groups.clone();
                     let report =
@@ -1593,10 +2436,8 @@ fn handle_vector(args: &[String]) {
                             row_groups: command_row_groups.clone(),
                         },
                     );
-                    let workflow = remote_geoparquet_range_template(
-                        path,
-                        command_row_groups.as_deref(),
-                    );
+                    let workflow =
+                        remote_geoparquet_range_template(path, command_row_groups.as_deref());
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&serde_json::json!({
@@ -1767,6 +2608,7 @@ Usage:
   genegis ask "..." -o out.png                     Custom PNG output path
   genegis bench [pipeline|render|all]              North-star performance benchmarks
   genegis bench pipeline --iterations 20 --json    JSON benchmark report
+  genegis bench equivalence --json                 Native/DuckDB/GDAL 20+ case corpus
   genegis storage fetch URL [--range START-END]    HTTP range-read smoke fetch
   genegis raster info PATH                         COG / GeoTIFF metadata JSON (local or URL)
   genegis pointcloud info PATH|URL                 COPC metadata JSON (local or HTTP range-read)
@@ -1801,6 +2643,19 @@ Usage:
   genegis agent export-audit [-o FILE]             Export collab provenance + agent run index
   genegis agent pull [--url URL] [-o FILE]         Pull latest run from GeneGIS Server
   genegis agent push [--url URL] [-i FILE]         Push run trace to GeneGIS Server
+  genegis capsule seal PATH                        Seal the north-star result into an open directory
+  genegis capsule verify PATH [--policy FILE]      Verify capsule digests and trust offline
+  genegis capsule diff OLD NEW                     Classify semantic capsule changes
+  genegis capsule approve PATH --reviewer ID       Bind reviewer approval to all semantic digests
+  genegis capsule check-approval PATH FILE         Reject stale approval objects
+  genegis capsule review PATH [--diff OTHER] [--tui|--json]  Trust Debugger or stable review JSON
+  genegis capsule export-standards PATH OUT        PROV, RO-Crate, OpenLineage, in-toto, OGC
+  genegis capsule attest PATH --key FILE           Create Ed25519 DSSE/in-toto attestation
+  genegis capsule verify-attestation PATH FILE --public-key FILE  Verify DSSE offline
+  genegis capsule execute-ogc REQUEST.json         Execute local OGC API Processes fixture
+  genegis bench equivalence [--json]               Native/DuckDB/GDAL conformance corpus
+  genegis bench external [--json]                  GeoBenchX-derived strict artifact adapter
+  genegis bench review --reviewer ID [-o FILE]     Interactive Gate-B diagnosis timing
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON
@@ -1843,7 +2698,10 @@ fn run_cog_execute(dataset_id: &str) {
 
     match genegis_raster::read_cog_uri(&uri) {
         Ok(info) => {
-            println!("{}", serde_json::to_string_pretty(&info.summary_json()).expect("json"));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&info.summary_json()).expect("json")
+            );
         }
         Err(err) => {
             eprintln!("Raster error: {err}");
@@ -1883,47 +2741,22 @@ fn run_geoparquet_execute(dataset_id: &str) {
 }
 
 fn run_geoparquet_density_execute() {
-    let path = genegis_catalog::nagoya_wards_geoparquet_path();
-    let result = match genegis_analysis::run_nagoya_population_density_geoparquet(path) {
+    let result = match run_ask_pipeline_with_config_and_origin(
+        "名古屋 GeoParquet 人口密度を表示",
+        &PlannerConfig::default(),
+        CommandOrigin::Cli,
+    ) {
         Ok(result) => result,
         Err(err) => {
             eprintln!("Analysis failed: {err}");
             process::exit(1);
         }
     };
-
-    let rows: Vec<(String, u64, f64, f64)> = result
-        .features
-        .iter()
-        .map(|f| {
-            (
-                f.ward_name.clone(),
-                f.population,
-                f.area_km2,
-                f.density_per_km2,
-            )
-        })
-        .collect();
-
-    match verify_nagoya_densities(&rows) {
-        Ok(true) => eprintln!("DuckDB verification: passed"),
-        Ok(false) => {
-            eprintln!("DuckDB verification: failed");
-            process::exit(1);
-        }
-        Err(err) => {
-            eprintln!("DuckDB verification error: {err}");
-            process::exit(1);
-        }
-    }
-
-    let summary = serde_json::json!({
-        "goal": result.workflow.goal,
-        "ward_count": result.features.len(),
-        "source": "geoparquet",
-        "density_unit": result.verification.density_unit,
-    });
-    println!("{}", serde_json::to_string_pretty(&summary).expect("json"));
+    eprintln!("DuckDB verification: passed");
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
 }
 
 fn run_external_stac_execute() {
@@ -1933,7 +2766,10 @@ fn run_external_stac_execute() {
         .into_owned();
     match fetch_stac_collection(&url) {
         Ok(collection) => {
-            println!("{}", serde_json::to_string_pretty(&collection.summary_json()).expect("json"));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&collection.summary_json()).expect("json")
+            );
         }
         Err(err) => {
             eprintln!("STAC fetch error: {err}");
@@ -1943,62 +2779,21 @@ fn run_external_stac_execute() {
 }
 
 fn run_nagoya_execute(export_html: bool, export_png: bool, output: Option<&Path>) {
-    let data_path = default_nagoya_data_path();
-    let result = match run_nagoya_population_density(data_path) {
+    let result = match run_ask_pipeline_with_config_and_origin(
+        "名古屋市の人口密度を表示",
+        &PlannerConfig::default(),
+        CommandOrigin::Cli,
+    ) {
         Ok(r) => r,
         Err(err) => {
             eprintln!("Analysis failed: {err}");
             process::exit(1);
         }
     };
-
-    let rows: Vec<(String, u64, f64, f64)> = result
-        .features
-        .iter()
-        .map(|f| {
-            (
-                f.ward_name.clone(),
-                f.population,
-                f.area_km2,
-                f.density_per_km2,
-            )
-        })
-        .collect();
-
-    match verify_nagoya_densities(&rows) {
-        Ok(true) => eprintln!("DuckDB verification: passed"),
-        Ok(false) => {
-            eprintln!("DuckDB verification: failed");
-            process::exit(1);
-        }
-        Err(err) => {
-            eprintln!("DuckDB verification error: {err}");
-            process::exit(1);
-        }
-    }
-
-    let summary = serde_json::json!({
-        "goal": result.workflow.goal,
-        "ward_count": result.features.len(),
-        "density_unit": result.verification.density_unit,
-        "crs": result.verification.crs,
-        "verification_passed": result.verification.checks.iter().all(|c| c.passed),
-        "top_density_ward": result.features.iter()
-            .max_by(|a, b| a.density_per_km2.partial_cmp(&b.density_per_km2).unwrap())
-            .map(|f| serde_json::json!({
-                "ward_name": f.ward_name,
-                "density_per_km2": f.density_per_km2,
-            })),
-    });
-    println!("{}", serde_json::to_string_pretty(&summary).expect("json"));
-
-    let html = export_html_map(&result, "名古屋市 人口密度");
-    let png = match export_png_map(&result, "名古屋市 人口密度") {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            eprintln!("PNG export failed: {err}");
-            process::exit(1);
-        }
-    };
-    write_exports(export_html, export_png, output, &html, &png);
+    eprintln!("DuckDB verification: passed");
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+    write_exports(export_html, export_png, output, &result.html, &result.png);
 }

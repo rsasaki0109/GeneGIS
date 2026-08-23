@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://genegis.org/schemas/geo-contract/0.1.0/schema.json",
+  "title": "GeneGIS GeoContract v0",
+  "description": "Semantic contract for one geospatial workflow input or output.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id"],
+  "properties": {
+    "schema_version": { "const": "0.1.0" },
+    "id": { "$ref": "#/$defs/nonEmptyString" },
+    "spatial": { "$ref": "#/$defs/spatial" },
+    "measure": { "$ref": "#/$defs/measure" },
+    "temporal": { "$ref": "#/$defs/temporal" },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "source": { "$ref": "#/$defs/source" },
+    "quality": { "$ref": "#/$defs/quality" }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "coordinateUnit": {
+      "enum": ["degrees", "metres", "unknown"]
+    },
+    "geometryKind": {
+      "enum": ["point", "line", "polygon", "raster", "point_cloud", "mixed", "unknown"]
+    },
+    "axisOrder": {
+      "enum": ["xy", "longitude_latitude", "latitude_longitude", "unknown"]
+    },
+    "extent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_x", "min_y", "max_x", "max_y"],
+      "properties": {
+        "min_x": { "type": "number" },
+        "min_y": { "type": "number" },
+        "max_x": { "type": "number" },
+        "max_y": { "type": "number" }
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number", "exclusiveMinimum": 0 },
+        "y": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "spatial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry_kind", "axis_order", "coordinate_unit"],
+      "properties": {
+        "geometry_kind": { "$ref": "#/$defs/geometryKind" },
+        "crs": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]*:[0-9]+$" },
+        "axis_order": { "$ref": "#/$defs/axisOrder" },
+        "coordinate_unit": { "$ref": "#/$defs/coordinateUnit" },
+        "extent": { "$ref": "#/$defs/extent" },
+        "resolution": { "$ref": "#/$defs/resolution" }
+      }
+    },
+    "measureKind": {
+      "enum": ["count", "area", "length", "density", "rate", "ratio", "category", "identifier", "geometry", "unknown"]
+    },
+    "aggregationBasis": {
+      "enum": ["sum", "mean", "count", "ratio_of_sums", "none", "unknown"]
+    },
+    "measureTerm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "unit"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/measureKind" },
+        "unit": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "unit", "aggregation"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/measureKind" },
+        "unit": { "$ref": "#/$defs/nonEmptyString" },
+        "numerator": { "$ref": "#/$defs/measureTerm" },
+        "denominator": { "$ref": "#/$defs/measureTerm" },
+        "aggregation": { "$ref": "#/$defs/aggregationBasis" },
+        "population_universe": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_period", "granularity"],
+      "properties": {
+        "reference_period": { "$ref": "#/$defs/nonEmptyString" },
+        "granularity": { "enum": ["year", "month", "day", "instant", "interval", "unknown"] },
+        "observed_at": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "key_uniqueness", "null_policy"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/nonEmptyString" },
+        "expected_feature_count": { "type": "integer", "minimum": 1 },
+        "join_keys": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "key_uniqueness": { "enum": ["unique", "non_unique", "unknown"] },
+        "null_policy": { "enum": ["reject", "preserve", "drop", "unknown"] }
+      }
+    },
+    "sourceVersion": { "$ref": "#/$defs/nonEmptyString" },
+    "checksumStatus": { "enum": ["verified", "declared", "unknown", "mismatch"] },
+    "sourceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "checksum_status"],
+      "properties": {
+        "dataset_id": { "$ref": "#/$defs/nonEmptyString" },
+        "uri": { "$ref": "#/$defs/nonEmptyString" },
+        "license": { "$ref": "#/$defs/nonEmptyString" },
+        "checksum": { "$ref": "#/$defs/nonEmptyString" },
+        "expected_checksum": { "$ref": "#/$defs/nonEmptyString" },
+        "observed_checksum": { "$ref": "#/$defs/nonEmptyString" },
+        "retrieved_at": { "$ref": "#/$defs/nonEmptyString" },
+        "source_version": { "$ref": "#/$defs/sourceVersion" },
+        "checksum_status": { "$ref": "#/$defs/checksumStatus" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot"],
+      "properties": {
+        "snapshot": { "$ref": "#/$defs/sourceSnapshot" },
+        "authority": { "$ref": "#/$defs/nonEmptyString" },
+        "max_age_days": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": { "$ref": "#/$defs/nonEmptyString" },
+        "absolute": { "type": "number", "minimum": 0 },
+        "relative_ppm": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "qualityTolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "max_error_ppm"],
+      "properties": {
+        "metric": { "$ref": "#/$defs/nonEmptyString" },
+        "max_error_ppm": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uncertainty": { "$ref": "#/$defs/uncertainty" },
+        "tolerances": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/qualityTolerance" }
+        }
+      }
+    }
+  }
+}

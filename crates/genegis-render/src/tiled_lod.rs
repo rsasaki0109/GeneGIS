@@ -105,12 +105,8 @@ impl ChoroplethTiledLodMap {
             for tx in 0..self.config.grid_x {
                 let idx = tile_index(tx, ty, self.config.grid_x);
                 let features = &tiles[idx as usize];
-                let mesh = build_mesh_from_features(
-                    features,
-                    self.map_bbox,
-                    viewport_w,
-                    viewport_h,
-                );
+                let mesh =
+                    build_mesh_from_features(features, self.map_bbox, viewport_w, viewport_h);
                 meshes.push(ChoroplethTileMesh { x: tx, y: ty, mesh });
             }
         }
@@ -119,12 +115,7 @@ impl ChoroplethTiledLodMap {
     }
 
     /// Merge all tile meshes at the selected LOD into one draw batch.
-    pub fn build_merged_mesh(
-        &self,
-        viewport_w: f32,
-        viewport_h: f32,
-        lod: u32,
-    ) -> ChoroplethMesh {
+    pub fn build_merged_mesh(&self, viewport_w: f32, viewport_h: f32, lod: u32) -> ChoroplethMesh {
         ChoroplethMesh::merge(
             self.build_tile_meshes(viewport_w, viewport_h, lod)
                 .iter()
@@ -215,7 +206,7 @@ fn simplify_ring(ring: &PolygonRing, lod: u32) -> PolygonRing {
     if simplified.len() < 4 {
         return ring.clone();
     }
-    PolygonRing::new(simplified)
+    PolygonRing::with_holes(simplified, ring.holes().to_vec())
 }
 
 fn ensure_closed(coords: &mut Vec<(f64, f64)>) {

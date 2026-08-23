@@ -8,9 +8,9 @@ use arrow_array::{Array, BinaryArray, RecordBatch};
 use arrow_schema::DataType;
 use bytes::Bytes;
 use genegis_geometry::BoundingBox;
+use geo_traits::to_geo::ToGeoGeometry;
 use geoparquet::metadata::GeoParquetMetadata;
 use geoparquet::reader::{GeoParquetReaderBuilder, GeoParquetRecordBatchReader};
-use geo_traits::to_geo::ToGeoGeometry;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::errors::ParquetError;
 use parquet::file::reader::{ChunkReader, Length};
@@ -113,8 +113,7 @@ pub fn read_geoparquet_uri_with_options_and_policy(
     let content_length = reader.len();
     let stats = Arc::clone(&reader.stats);
     let name = remote_dataset_name(uri);
-    let decoded =
-        read_geoparquet_chunk_reader(reader, Some(name), options.row_groups.as_deref())?;
+    let decoded = read_geoparquet_chunk_reader(reader, Some(name), options.row_groups.as_deref())?;
     let selected_row_groups = options
         .row_groups
         .unwrap_or_else(|| (0..decoded.row_group_count).collect());
@@ -253,10 +252,7 @@ struct HttpRangeChunkReader {
 }
 
 impl HttpRangeChunkReader {
-    fn open(
-        uri: &str,
-        policy: genegis_storage::RemoteAccessPolicy,
-    ) -> Result<Self, VectorError> {
+    fn open(uri: &str, policy: genegis_storage::RemoteAccessPolicy) -> Result<Self, VectorError> {
         let content_length = genegis_storage::probe_http_content_length_with_policy(uri, &policy)
             .map_err(|error| VectorError::GeoParquet(error.to_string()))?;
         Ok(Self {
@@ -282,8 +278,7 @@ impl HttpRangeChunkReader {
         }
         let range = genegis_storage::ByteRange::new(start, end)
             .map_err(|error| ParquetError::General(error.to_string()))?;
-        let bytes =
-            genegis_storage::read_asset_range_with_policy(&self.uri, &range, &self.policy)
+        let bytes = genegis_storage::read_asset_range_with_policy(&self.uri, &range, &self.policy)
             .map_err(|error| ParquetError::General(error.to_string()))?;
         if bytes.len() != length {
             return Err(ParquetError::General(format!(
@@ -619,20 +614,17 @@ mod tests {
 
         let mut buffer = Vec::new();
         let options = GeoParquetWriterOptions::default();
-        let mut encoder = GeoParquetRecordBatchEncoder::try_new(&schema, &options).expect("encoder");
+        let mut encoder =
+            GeoParquetRecordBatchEncoder::try_new(&schema, &options).expect("encoder");
         let properties = WriterProperties::builder()
             .set_max_row_group_row_count(Some(8))
             .build();
-        let mut writer = ArrowWriter::try_new(
-            &mut buffer,
-            encoder.target_schema(),
-            Some(properties),
-        )
-        .expect("writer");
+        let mut writer =
+            ArrowWriter::try_new(&mut buffer, encoder.target_schema(), Some(properties))
+                .expect("writer");
         let encoded = encoder.encode_record_batch(&batch).expect("encode");
         writer.write(&encoded).expect("write");
-        writer
-            .append_key_value_metadata(encoder.into_keyvalue().expect("metadata"));
+        writer.append_key_value_metadata(encoder.into_keyvalue().expect("metadata"));
         writer.close().expect("close");
         buffer
     }
@@ -646,7 +638,18 @@ mod tests {
                     .iter()
                     .map(|(x, y)| Coord { x: *x, y: *y })
                     .collect();
-                Polygon::new(LineString::from(coords), vec![])
+                let holes = ring
+                    .holes()
+                    .iter()
+                    .map(|hole| {
+                        LineString::from(
+                            hole.iter()
+                                .map(|(x, y)| Coord { x: *x, y: *y })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect();
+                Polygon::new(LineString::from(coords), holes)
             })
             .collect();
         if polygons.len() == 1 {
@@ -774,7 +777,9 @@ mod tests {
                         slice.len(),
                         body.len()
                     );
-                    stream.write_all(response.as_bytes()).expect("range headers");
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("range headers");
                     stream.write_all(slice).expect("range body");
                 } else {
                     let response = format!(

@@ -12,7 +12,9 @@ pub fn geo_geometry_to_rings(geometry: &Geometry) -> Result<Vec<PolygonRing>, Ve
                 rings.push(polygon_to_ring(polygon)?);
             }
             if rings.is_empty() {
-                return Err(VectorError::UnsupportedGeometry("empty multipolygon".into()));
+                return Err(VectorError::UnsupportedGeometry(
+                    "empty multipolygon".into(),
+                ));
             }
             Ok(rings)
         }
@@ -24,18 +26,21 @@ pub fn geo_geometry_to_rings(geometry: &Geometry) -> Result<Vec<PolygonRing>, Ve
 
 fn polygon_to_ring(polygon: &Polygon<f64>) -> Result<PolygonRing, VectorError> {
     let exterior = line_string_to_coords(polygon.exterior())?;
-    Ok(PolygonRing::new(exterior))
+    let holes = polygon
+        .interiors()
+        .iter()
+        .map(line_string_to_coords)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PolygonRing::with_holes(exterior, holes))
 }
 
-fn line_string_to_coords(line: &geo_types::LineString<f64>) -> Result<Vec<(f64, f64)>, VectorError> {
+fn line_string_to_coords(
+    line: &geo_types::LineString<f64>,
+) -> Result<Vec<(f64, f64)>, VectorError> {
     if line.0.len() < 4 {
         return Err(VectorError::UnsupportedGeometry(
             "polygon ring needs at least 4 positions".into(),
         ));
     }
-    Ok(line
-        .0
-        .iter()
-        .map(|Coord { x, y, .. }| (*x, *y))
-        .collect())
+    Ok(line.0.iter().map(|Coord { x, y, .. }| (*x, *y)).collect())
 }

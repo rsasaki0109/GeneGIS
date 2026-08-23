@@ -165,9 +165,15 @@
         "retrieved_at": null
       },
       {
-        "title": "政府統計の総合窓口 e-Stat — 2020年国勢調査 人口",
-        "url": "https://www.e-stat.go.jp/stat-search/files?page=1&toukei=00200521&tstat=000001136464",
-        "license": "Government open data (Japan)",
+        "title": "名古屋市 — 令和2年国勢調査 確定値（区別人口）",
+        "url": "https://www.city.nagoya.jp/shisei/toukei/1003703/1003773/1003809/1034253/1003818.html",
+        "license": "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠）",
+        "retrieved_at": null
+      },
+      {
+        "title": "名古屋市 — 令和2年国勢調査 統計表 Excel",
+        "url": "https://www.city.nagoya.jp/_res/projects/default_project/_page_/001/003/818/toukeihyo.xlsx",
+        "license": "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠）",
         "retrieved_at": null
       },
       {

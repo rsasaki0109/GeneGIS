@@ -127,16 +127,17 @@ pub(crate) fn build_mesh_from_features(
         ];
 
         for ring in &feature.rings {
-            let coords: Vec<f64> = ring
-                .exterior()
-                .iter()
-                .flat_map(|(x, y)| [*x, *y])
-                .collect();
+            let mut coords: Vec<f64> = ring.exterior().iter().flat_map(|(x, y)| [*x, *y]).collect();
+            let mut hole_indices = Vec::new();
+            for hole in ring.holes() {
+                hole_indices.push(coords.len() / 2);
+                coords.extend(hole.iter().flat_map(|(x, y)| [*x, *y]));
+            }
             if coords.len() < 6 {
                 continue;
             }
 
-            let tri_indices = match earcutr::earcut(&coords, &[], 2) {
+            let tri_indices = match earcutr::earcut(&coords, &hole_indices, 2) {
                 Ok(indices) => indices,
                 Err(_) => continue,
             };
@@ -147,14 +148,7 @@ pub(crate) fn build_mesh_from_features(
             let base = vertices.len() as u32;
             for chunk in coords.chunks(2) {
                 let ndc = lonlat_to_ndc(
-                    chunk[0],
-                    chunk[1],
-                    min_x,
-                    min_y,
-                    max_x,
-                    max_y,
-                    viewport_w,
-                    viewport_h,
+                    chunk[0], chunk[1], min_x, min_y, max_x, max_y, viewport_w, viewport_h,
                 );
                 vertices.push(Vertex {
                     position: ndc,
@@ -341,11 +335,10 @@ impl ChoroplethApp {
         };
         let (width, height) = canvas.size();
         let lod = lod_for_zoom(self.zoom, self.tiled.lod_levels());
-        let tile_meshes = self.tiled.build_tile_meshes(width as f32, height as f32, lod);
-        let mesh_refs: Vec<&ChoroplethMesh> = tile_meshes
-            .iter()
-            .map(|tile| &tile.mesh)
-            .collect();
+        let tile_meshes = self
+            .tiled
+            .build_tile_meshes(width as f32, height as f32, lod);
+        let mesh_refs: Vec<&ChoroplethMesh> = tile_meshes.iter().map(|tile| &tile.mesh).collect();
         self.gpu = Some(ChoroplethTiledGpu::new(
             canvas.device(),
             canvas.format(),

@@ -1,11 +1,12 @@
 use chrono::Utc;
 use genegis_ai::{plan_with_config, PlanResult, WorkflowId, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
-    build_ask_result, build_geoparquet_ask_result, build_remote_cog_ask_result,
-    build_stac_collection_ask_result, execute_workflow_for_plan, verify_executed_workflow,
-    ExecutedWorkflow,
+    build_ask_result_from_dispatch, build_geoparquet_ask_result, build_remote_cog_ask_result,
+    build_stac_collection_ask_result, execute_workflow_for_plan_with_origin,
+    verify_executed_workflow, ExecutedWorkflow, ExecutedWorkflowOutput, NagoyaDispatch,
 };
 use genegis_catalog::{alpha_catalog, DatasetRecord};
+use genegis_core::CommandOrigin;
 use uuid::Uuid;
 
 use crate::error::AgentError;
@@ -72,25 +73,33 @@ impl AgentOrchestrator {
         let mut verify_attempts = 0_u32;
         let mut verified = false;
         let mut executed: Option<ExecutedWorkflow> = None;
+        // Keep the complete one-shot CommandExecution for the north-star
+        // result builder. Reconstructing a Nagoya result from AnalysisResult
+        // would lose the render/evidence payload and dispatch a second time.
+        let mut nagoya_dispatch: Option<NagoyaDispatch> = None;
 
         for attempt in 1..=max_attempts {
             if attempt > 1 {
                 steps.push(record_retry_step(attempt)?);
             }
 
-            let (next_executed, next_dataset) = execute_workflow_for_plan(&plan)
-                .map_err(|err| AgentError::Message(err.to_string()))?;
+            let (next_output, next_dataset) =
+                execute_workflow_for_plan_with_origin(&plan, CommandOrigin::Ai)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
             if attempt == 1 {
                 debug_assert_eq!(next_dataset.id, dataset.id);
             }
-            steps.push(record_execute_step(
-                &plan,
-                &next_executed,
-                attempt,
-            )?);
+            let next_executed = legacy_workflow(&next_output);
+            steps.push(record_execute_step(&plan, &next_executed, attempt)?);
 
-            verified = verify_executed_workflow(&next_executed)
-                .map_err(|err| AgentError::Message(err.to_string()))?;
+            verified = match &next_output {
+                ExecutedWorkflowOutput::NagoyaDensity(dispatch) => {
+                    nagoya_dispatch = Some(dispatch.clone());
+                    dispatch.output.verification_passed
+                }
+                _ => verify_executed_workflow(&next_executed)
+                    .map_err(|err| AgentError::Message(err.to_string()))?,
+            };
             verify_attempts = attempt;
             steps.push(record_verify_step(&plan, verified, attempt)?);
 
@@ -124,8 +133,11 @@ impl AgentOrchestrator {
         }
 
         let summary = match executed {
-            ExecutedWorkflow::NagoyaDensity(analysis) => {
-                let ask = build_ask_result(prompt, &plan, analysis, dataset, verified)
+            ExecutedWorkflow::NagoyaDensity(_analysis) => {
+                let dispatch = nagoya_dispatch.ok_or_else(|| {
+                    AgentError::Message("Nagoya execution did not retain its dispatch".into())
+                })?;
+                let ask = build_ask_result_from_dispatch(prompt, &plan, dispatch, dataset)
                     .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
@@ -140,14 +152,9 @@ impl AgentOrchestrator {
                 ask.summary
             }
             ExecutedWorkflow::StacCollection(collection) => {
-                let ask = build_stac_collection_ask_result(
-                    prompt,
-                    &plan,
-                    collection,
-                    dataset,
-                    verified,
-                )
-                .map_err(|err| AgentError::Message(err.to_string()))?;
+                let ask =
+                    build_stac_collection_ask_result(prompt, &plan, collection, dataset, verified)
+                        .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
         };
@@ -167,6 +174,21 @@ impl AgentOrchestrator {
             steps,
             summary,
         })
+    }
+}
+
+fn legacy_workflow(executed: &ExecutedWorkflowOutput) -> ExecutedWorkflow {
+    match executed {
+        ExecutedWorkflowOutput::NagoyaDensity(dispatch) => {
+            ExecutedWorkflow::NagoyaDensity(dispatch.output.analysis.clone())
+        }
+        ExecutedWorkflowOutput::CogMetadata(info) => ExecutedWorkflow::CogMetadata(info.clone()),
+        ExecutedWorkflowOutput::Geoparquet(dataset) => {
+            ExecutedWorkflow::Geoparquet(dataset.clone())
+        }
+        ExecutedWorkflowOutput::StacCollection(collection) => {
+            ExecutedWorkflow::StacCollection(collection.clone())
+        }
     }
 }
 
@@ -233,48 +255,47 @@ fn record_plan_step(plan: &PlanResult) -> Result<AgentStep, AgentError> {
     Ok(step.finish())
 }
 
-fn record_catalog_step(plan: &PlanResult, dataset: &DatasetRecord) -> Result<AgentStep, AgentError> {
+fn record_catalog_step(
+    plan: &PlanResult,
+    dataset: &DatasetRecord,
+) -> Result<AgentStep, AgentError> {
     validate_executor_tool("catalog_resolve")?;
-    Ok(
-        AgentStep::new(
-            AgentRole::Executor,
-            "catalog_agent",
-            "Resolve dataset record from alpha catalog",
-        )
-        .with_tool_call(ToolCall {
-            tool: "catalog_resolve".into(),
-            input: serde_json::json!({
-                "workflow_id": plan.resolved.workflow_id.as_str(),
-                "dataset_id": plan.resolved.dataset_id,
-            }),
-            output: serde_json::json!({
-                "id": dataset.id,
-                "format": format!("{:?}", dataset.format),
-                "crs": dataset.crs,
-                "tags": dataset.tags,
-            }),
-            ok: true,
-        })
-        .finish(),
+    Ok(AgentStep::new(
+        AgentRole::Executor,
+        "catalog_agent",
+        "Resolve dataset record from alpha catalog",
     )
+    .with_tool_call(ToolCall {
+        tool: "catalog_resolve".into(),
+        input: serde_json::json!({
+            "workflow_id": plan.resolved.workflow_id.as_str(),
+            "dataset_id": plan.resolved.dataset_id,
+        }),
+        output: serde_json::json!({
+            "id": dataset.id,
+            "format": format!("{:?}", dataset.format),
+            "crs": dataset.crs,
+            "tags": dataset.tags,
+        }),
+        ok: true,
+    })
+    .finish())
 }
 
 fn record_retry_step(attempt: u32) -> Result<AgentStep, AgentError> {
     validate_executor_tool("verify_retry")?;
-    Ok(
-        AgentStep::new(
-            AgentRole::Executor,
-            "retry_coordinator",
-            format!("Retry execute→verify after DuckDB failure (attempt {attempt})"),
-        )
-        .with_tool_call(ToolCall {
-            tool: "verify_retry".into(),
-            input: serde_json::json!({ "attempt": attempt }),
-            output: serde_json::json!({ "scheduled": true }),
-            ok: true,
-        })
-        .finish(),
+    Ok(AgentStep::new(
+        AgentRole::Executor,
+        "retry_coordinator",
+        format!("Retry execute→verify after DuckDB failure (attempt {attempt})"),
     )
+    .with_tool_call(ToolCall {
+        tool: "verify_retry".into(),
+        input: serde_json::json!({ "attempt": attempt }),
+        output: serde_json::json!({ "scheduled": true }),
+        ok: true,
+    })
+    .finish())
 }
 
 fn record_execute_step(
@@ -328,20 +349,18 @@ fn record_execute_step(
     };
 
     validate_executor_tool(tool)?;
-    Ok(
-        AgentStep::new(AgentRole::Executor, agent, detail)
-            .with_tool_call(ToolCall {
-                tool: tool.into(),
-                input: serde_json::json!({
-                    "workflow_id": plan.resolved.workflow_id.as_str(),
-                    "dataset_id": plan.resolved.dataset_id,
-                    "attempt": attempt,
-                }),
-                output,
-                ok: true,
-            })
-            .finish(),
-    )
+    Ok(AgentStep::new(AgentRole::Executor, agent, detail)
+        .with_tool_call(ToolCall {
+            tool: tool.into(),
+            input: serde_json::json!({
+                "workflow_id": plan.resolved.workflow_id.as_str(),
+                "dataset_id": plan.resolved.dataset_id,
+                "attempt": attempt,
+            }),
+            output,
+            ok: true,
+        })
+        .finish())
 }
 
 fn record_verify_step(
@@ -373,19 +392,17 @@ fn record_verify_step(
     };
 
     validate_verifier_tool(tool)?;
-    Ok(
-        AgentStep::new(AgentRole::Verifier, agent, detail)
-            .with_tool_call(ToolCall {
-                tool: tool.into(),
-                input: serde_json::json!({
-                    "workflow": plan.resolved.workflow_id.as_str(),
-                    "attempt": attempt,
-                }),
-                output: serde_json::json!({ "passed": passed, "attempt": attempt }),
-                ok: passed,
-            })
-            .finish(),
-    )
+    Ok(AgentStep::new(AgentRole::Verifier, agent, detail)
+        .with_tool_call(ToolCall {
+            tool: tool.into(),
+            input: serde_json::json!({
+                "workflow": plan.resolved.workflow_id.as_str(),
+                "attempt": attempt,
+            }),
+            output: serde_json::json!({ "passed": passed, "attempt": attempt }),
+            ok: passed,
+        })
+        .finish())
 }
 
 fn plan_summary(plan: &PlanResult) -> serde_json::Value {
@@ -420,6 +437,7 @@ mod tests {
         assert_eq!(run.steps[0].tool_calls[0].tool, "parse_intent");
         assert_eq!(run.steps[1].agent, "catalog_agent");
         assert_eq!(run.steps[3].role, AgentRole::Verifier);
+        assert_eq!(run.summary["command"]["origin"], "ai");
     }
 
     #[test]
@@ -528,7 +546,10 @@ mod tests {
             .expect("run");
 
         assert!(run.verification_passed);
-        assert_eq!(run.workflow_id.as_deref(), Some("nagoya-geoparquet-density"));
+        assert_eq!(
+            run.workflow_id.as_deref(),
+            Some("nagoya-geoparquet-density")
+        );
         assert_eq!(run.steps[2].tool_calls[0].tool, "run_geoparquet_density");
         assert_eq!(run.steps[3].tool_calls[0].tool, "duckdb_verify");
     }

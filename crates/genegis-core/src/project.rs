@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::Workspace;
@@ -43,6 +44,76 @@ impl Project {
 
     pub fn workspace_mut(&mut self) -> &mut Workspace {
         &mut self.manifest.workspace
+    }
+
+    /// Return a canonical JSON representation of the semantic project state.
+    ///
+    /// Runtime timestamps and the optional in-memory project path are omitted
+    /// because they are execution details rather than project state. Object
+    /// keys are sorted recursively so the representation is stable across
+    /// serde implementations and persistence round-trips.
+    pub fn canonical_state_json(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(self).expect("Project is serializable");
+        strip_runtime_fields(&mut value);
+        value
+    }
+
+    /// Return the SHA-256 digest of the canonical semantic project state.
+    pub fn state_digest(&self) -> String {
+        let canonical = canonical_json(&self.canonical_state_json());
+        format!("sha256:{:x}", Sha256::digest(canonical.as_bytes()))
+    }
+}
+
+fn strip_runtime_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for field in [
+                "created_at",
+                "updated_at",
+                "timestamp",
+                "command_timestamp",
+                "observed_at",
+                "retrieved_at",
+                "path",
+            ] {
+                map.remove(field);
+            }
+            for value in map.values_mut() {
+                strip_runtime_fields(value);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                strip_runtime_fields(value);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn canonical_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            let mut output = String::from("{");
+            for (index, (key, value)) in entries.into_iter().enumerate() {
+                if index > 0 {
+                    output.push(',');
+                }
+                output.push_str(&serde_json::to_string(key).expect("JSON key serialization"));
+                output.push(':');
+                output.push_str(&canonical_json(value));
+            }
+            output.push('}');
+            output
+        }
+        serde_json::Value::Array(values) => {
+            let values = values.iter().map(canonical_json).collect::<Vec<_>>();
+            format!("[{}]", values.join(","))
+        }
+        _ => serde_json::to_string(value).expect("JSON scalar serialization"),
     }
 }
 
