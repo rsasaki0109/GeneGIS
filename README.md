@@ -1,10 +1,10 @@
 # GeneGIS
 
 <p align="center">
-  <img src="docs/assets/workbench-hero.gif" alt="GeneGIS workbench — natural language intent to verified Nagoya population density map" width="960" />
+  <img src="docs/assets/workbench-hero.gif" alt="GeneGIS workbench — intent, typed workflow, cloud execution, independent verification, and source assurance for a Nagoya population-density map" width="960" />
 </p>
 
-<p align="center"><sub>North-star prompt <code>名古屋市の人口密度を表示</code> · real pipeline output · DuckDB verified</sub></p>
+<p align="center"><sub>Intent → typed Workflow DAG → range-aware execution → independent checks → offline-verifiable Source Assurance</sub></p>
 
 **AI-native · Cloud-native · GPU-native open geospatial workbench**
 
@@ -49,7 +49,7 @@ analysis carries machine-checkable meaning and evidence:
 - versioned GeoContracts for CRS, units, measure, time, coverage, source, and quality;
 - policy-derived trust that fails closed instead of accepting model confidence;
 - an independent Verification Graph with verifier identity and tolerance;
-- a nine-subject open capsule that verifies offline without a server or LLM;
+- a ten-subject open capsule that verifies offline without a server or LLM;
 - semantic diff and digest-bound approval;
 - a Trust Debugger linking failures to sources, contracts, Workflow nodes, checks, and artifacts;
 - PROV-JSON, Workflow Run RO-Crate, OpenLineage, DSSE/in-toto, and OGC API - Processes projections;
