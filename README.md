@@ -13,22 +13,22 @@
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/feature-cloud.gif" alt="Federated STAC search and range-aware access to GeoParquet, COG, COPC, and PMTiles" width="100%" /><br />
-      <sub><strong>Cloud-native data</strong><br />Federated STAC · scored assets · bounded range reads · I/O receipts</sub>
+      <img src="docs/assets/feature-cloud.gif" alt="GPU fusion of COG terrain, COPC point clouds, and PMTiles context using range-aware cloud reads" width="100%" /><br />
+      <sub><strong>GPU spatial fusion</strong><br />COG terrain · COPC point clouds · PMTiles context · range I/O</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/feature-adapters.gif" alt="Typed and sandboxed PostGIS, GRASS, and QGIS Processing adapters" width="100%" /><br />
-      <sub><strong>Real OSS engine adapters</strong><br />PostGIS · GRASS · QGIS Processing · cross-engine verification</sub>
+      <img src="docs/assets/feature-adapters.gif" alt="Cross-engine spatial verification using typed PostGIS, GRASS, and QGIS Processing adapters" width="100%" /><br />
+      <sub><strong>Cross-engine spatial verification</strong><br />PostGIS · GRASS · QGIS Processing · independent numerical oracle</sub>
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="docs/assets/feature-trust.gif" alt="Trust Debugger tracing a failing CRS contract through a workflow to affected artifacts" width="100%" /><br />
-      <sub><strong>Trust Debugger</strong><br />Failure trace · blast radius · semantic diff · offline capsule</sub>
+      <img src="docs/assets/feature-trust.gif" alt="Trust Debugger tracing source, CRS, workflow, and artifact evidence directly over a real map" width="100%" /><br />
+      <sub><strong>Map-linked Trust Debugger</strong><br />Evidence graph · blast radius · semantic diff · offline capsule</sub>
     </td>
     <td width="50%" align="center">
-      <img src="docs/assets/feature-collab.gif" alt="Map-anchored comments, project branches, Automerge synchronization, and shared provenance" width="100%" /><br />
-      <sub><strong>Spatial collaboration</strong><br />Map comments · branches · Automerge CRDT · shared provenance</sub>
+      <img src="docs/assets/feature-collab.gif" alt="Live map review with cursors, anchored comments, semantic branch diff, and Automerge synchronization" width="100%" /><br />
+      <sub><strong>Live semantic map review</strong><br />Cursors · anchored evidence · branch diff · Automerge CRDT</sub>
     </td>
   </tr>
 </table>
