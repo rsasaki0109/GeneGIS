@@ -1,0 +1,62 @@
+{
+  "report_schema_version": "0.1.0",
+  "registered_at": "2026-08-23",
+  "status": "preregistered_not_measured",
+  "protocol": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-protocol.md",
+  "implementation": "/home/sasaki/workspace/GeneGIS/crates/genegis-testkit/src/trust_ux.rs",
+  "corpus_version": "phase-12-map-first-trust-v1",
+  "corpus_digest_including_hidden_oracles": "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca",
+  "task_count_per_reviewer": 12,
+  "categories": [
+    "source_drift",
+    "edit_conflict",
+    "crs_unit_error",
+    "adapter_denial",
+    "cloud_fallback",
+    "changed_result",
+    "uncertainty",
+    "open_dispute",
+    "topology_damage",
+    "schema_violation",
+    "coverage_gap",
+    "artifact_divergence"
+  ],
+  "interface": {
+    "initial_view": "text-rendered ward map with highlighted spatial subject",
+    "raw_json_visible": false,
+    "evidence_cards": ["source", "contract_workflow", "io_artifact"],
+    "card_opening_interactions": 1,
+    "answer_order": "deterministically rotated per task and covered by corpus digest",
+    "timer_start": "reviewer explicitly reveals each task",
+    "timer_stop": "answer submission or abort",
+    "default_session_kind": "automated",
+    "human_label_requirement": "explicit --human plus distinct facilitator pseudonym under the protocol"
+  },
+  "admission": {
+    "minimum_unique_human_reviewers": 3,
+    "anonymous_reviewer_code_required": true,
+    "distinct_facilitator_code_required": true,
+    "complete_fixed_corpus_required": true,
+    "decisive_evidence_must_be_opened": true,
+    "automated_sessions_excluded": true,
+    "duplicate_reviewer_sessions_rejected": true,
+    "mixed_or_changed_corpus_rejected": true,
+    "digest_or_oracle_mismatch_rejected": true,
+    "aborted_or_partial_sessions_rejected_from_metrics": true
+  },
+  "acceptance_thresholds": {
+    "minimum_aggregate_correctness": 0.9,
+    "maximum_median_diagnosis_seconds": 120,
+    "maximum_median_map_to_decisive_evidence_interactions": 2
+  },
+  "analysis": {
+    "unit": "all admitted answers pooled across admitted unique human reviewers",
+    "correctness": "correct admitted answers divided by all admitted answers",
+    "time": "median per-task elapsed_seconds over all admitted answers",
+    "interactions": "median first-opening ordinal of the preregistered decisive evidence card",
+    "missing_values": "not imputed; session rejected",
+    "automation": "reported separately and never admitted"
+  },
+  "human_results": null,
+  "gate_e_status": "not_measured"
+}

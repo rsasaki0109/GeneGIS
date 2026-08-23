@@ -11,6 +11,7 @@ mod pipeline;
 mod real_data;
 mod render;
 mod review_tasks;
+mod trust_ux;
 
 pub use cloud_io::{
     run_cloud_io_benchmark, run_full_cloud_io_benchmark, CloudFormatBenchmark,
@@ -30,6 +31,12 @@ pub use real_data::{run_real_data_corpus, DomainVerification, RealDataCorpusRepo
 pub use render::benchmark_render_mesh;
 pub use review_tasks::{
     review_median_seconds, review_task_corpus, ReviewTask, ReviewTaskResult, ReviewTimingReport,
+};
+pub use trust_ux::{
+    aggregate_trust_ux_sessions, seal_trust_ux_session, trust_ux_corpus_digest,
+    trust_ux_task_corpus, validate_trust_ux_session, TrustUxAggregateReport, TrustUxAnswerChoice,
+    TrustUxEvidenceCard, TrustUxSessionKind, TrustUxSessionReport, TrustUxTask, TrustUxTaskResult,
+    TRUST_UX_CORPUS_DIGEST, TRUST_UX_CORPUS_VERSION,
 };
 
 /// Run all north-star benchmarks and return a combined report.

@@ -1,0 +1,34 @@
+{
+  "schema_version": "0.1.0",
+  "session_kind": "automated",
+  "reviewer_id": "robot-02",
+  "facilitator_id": null,
+  "runner_identity": "genegis-cli/0.1.0 map-first-trust-ux-v1",
+  "corpus_version": "phase-12-map-first-trust-v1",
+  "corpus_digest": "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca",
+  "started_at": "2026-08-23T05:29:57.326096598+00:00",
+  "finished_at": "2026-08-23T05:30:23.520797490+00:00",
+  "results": [
+    {
+      "task_id": "source-drift",
+      "answer_id": "source_changed",
+      "correct": true,
+      "elapsed_seconds": 14.63577743,
+      "interaction_count": 1,
+      "opened_card_ids": ["source"],
+      "interactions_to_decisive_evidence": 1,
+      "aborted": false
+    },
+    {
+      "task_id": "edit-conflict",
+      "answer_id": null,
+      "correct": false,
+      "elapsed_seconds": 0.0,
+      "interaction_count": 0,
+      "opened_card_ids": [],
+      "interactions_to_decisive_evidence": null,
+      "aborted": true
+    }
+  ],
+  "report_digest": "sha256:97005f442eb3b9f2fffb40a5b3b15959cc0be61bd139b17ba2655665637d4899"
+}

@@ -854,6 +854,93 @@ fn handle_bench(args: &[String]) {
     };
 
     let json_output = args.iter().any(|a| a == "--json");
+    if args.iter().any(|argument| argument == "trust-ux-aggregate") {
+        let inputs = args
+            .windows(2)
+            .filter(|pair| pair[0] == "--input")
+            .map(|pair| PathBuf::from(&pair[1]))
+            .collect::<Vec<_>>();
+        if inputs.is_empty() {
+            eprintln!("trust-ux-aggregate requires at least one --input SESSION.json");
+            process::exit(1);
+        }
+        let sessions = inputs
+            .iter()
+            .map(|path| {
+                let bytes = std::fs::read(path).unwrap_or_else(|error| {
+                    eprintln!("Failed to read {}: {error}", path.display());
+                    process::exit(1);
+                });
+                serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                    eprintln!("Invalid Trust UX session {}: {error}", path.display());
+                    process::exit(1);
+                })
+            })
+            .collect::<Vec<genegis_testkit::TrustUxSessionReport>>();
+        let report = genegis_testkit::aggregate_trust_ux_sessions(&sessions);
+        if let Some(output) = option_value(args, "--output").or_else(|| option_value(args, "-o")) {
+            write_bytes(
+                Path::new(&output),
+                &serde_json::to_vec_pretty(&report).expect("Trust UX aggregate JSON"),
+                "Trust UX aggregate report",
+            );
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).expect("Trust UX aggregate JSON")
+        );
+        return;
+    }
+    if args.iter().any(|argument| argument == "trust-ux") {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            eprintln!("Trust UX study requires an interactive terminal");
+            process::exit(1);
+        }
+        let reviewer = required_option(args, "--reviewer-code");
+        let session_kind = if args.iter().any(|argument| argument == "--human") {
+            genegis_testkit::TrustUxSessionKind::Human
+        } else {
+            genegis_testkit::TrustUxSessionKind::Automated
+        };
+        let facilitator = match session_kind {
+            genegis_testkit::TrustUxSessionKind::Human => {
+                Some(required_option(args, "--facilitator-code"))
+            }
+            genegis_testkit::TrustUxSessionKind::Automated => {
+                option_value(args, "--facilitator-code")
+            }
+        };
+        let output = option_value(args, "--output")
+            .or_else(|| option_value(args, "-o"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(format!("phase-12-trust-ux-{reviewer}.json")));
+        let report =
+            run_trust_ux_session(reviewer, facilitator, session_kind).unwrap_or_else(|error| {
+                eprintln!("Trust UX session failed: {error}");
+                process::exit(1);
+            });
+        write_bytes(
+            &output,
+            &serde_json::to_vec_pretty(&report).expect("Trust UX session JSON"),
+            "Trust UX session report",
+        );
+        println!(
+            "Trust UX session: {}/{} answered, aborts={}, output={}",
+            report
+                .results
+                .iter()
+                .filter(|result| !result.aborted)
+                .count(),
+            genegis_testkit::trust_ux_task_corpus().len(),
+            report
+                .results
+                .iter()
+                .filter(|result| result.aborted)
+                .count(),
+            output.display()
+        );
+        return;
+    }
     if args.iter().any(|argument| argument == "review") {
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
             eprintln!("Reviewer timing requires an interactive terminal");
@@ -984,6 +1071,218 @@ fn handle_bench(args: &[String]) {
 
     for sample in &report.samples {
         print_benchmark_sample(sample);
+    }
+}
+
+fn run_trust_ux_session(
+    reviewer_id: String,
+    facilitator_id: Option<String>,
+    session_kind: genegis_testkit::TrustUxSessionKind,
+) -> Result<genegis_testkit::TrustUxSessionReport, String> {
+    use crossterm::cursor::{Hide, MoveTo, Show};
+    use crossterm::event::{self, Event, KeyCode};
+    use crossterm::execute;
+    use crossterm::terminal::{
+        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    };
+    use genegis_testkit::{
+        seal_trust_ux_session, trust_ux_corpus_digest, trust_ux_task_corpus,
+        validate_trust_ux_session, TrustUxSessionReport, TrustUxTaskResult,
+        TRUST_UX_CORPUS_VERSION,
+    };
+
+    let tasks = trust_ux_task_corpus();
+    let started_at = chrono::Utc::now().to_rfc3339();
+    let mut results = Vec::new();
+    let mut stdout = io::stdout();
+    enable_raw_mode().map_err(|error| error.to_string())?;
+    execute!(stdout, EnterAlternateScreen, Hide).map_err(|error| error.to_string())?;
+    let interaction = (|| -> Result<(), String> {
+        for (task_index, task) in tasks.iter().enumerate() {
+            loop {
+                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                    .map_err(|error| error.to_string())?;
+                let (width, _) = crossterm::terminal::size().map_err(|error| error.to_string())?;
+                let lines = [
+                    format!(
+                        "GeneGIS Map-first Trust UX  task {}/{}  reviewer={reviewer_id}",
+                        task_index + 1,
+                        tasks.len()
+                    ),
+                    String::new(),
+                    "The task is hidden and the timer is stopped.".into(),
+                    "Start from the map; open evidence with 1/2/3, then press a to answer.".into(),
+                    "Press Space or Enter when ready. Press q to record an abort.".into(),
+                ];
+                for (row, line) in lines.into_iter().enumerate() {
+                    execute!(stdout, MoveTo(0, row as u16)).map_err(|e| e.to_string())?;
+                    write!(stdout, "{}", truncate_line(&line, width as usize))
+                        .map_err(|e| e.to_string())?;
+                }
+                stdout.flush().map_err(|error| error.to_string())?;
+                let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
+                    continue;
+                };
+                match key.code {
+                    KeyCode::Char(' ') | KeyCode::Enter => break,
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        results.push(aborted_trust_ux_result(
+                            &task.task_id,
+                            0.0,
+                            Vec::new(),
+                            None,
+                        ));
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+
+            let started = std::time::Instant::now();
+            let mut opened_card: Option<usize> = None;
+            let mut opened_card_ids = Vec::new();
+            let mut interaction_count = 0_u32;
+            let mut interactions_to_decisive = None;
+            let mut answering = false;
+            let mut selected_answer = 0_usize;
+            loop {
+                execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                    .map_err(|error| error.to_string())?;
+                let (width, height) = crossterm::terminal::size().map_err(|e| e.to_string())?;
+                let mut lines = vec![
+                    format!(
+                        "GeneGIS Map-first Trust UX  task {}/{}  category={}",
+                        task_index + 1,
+                        tasks.len(),
+                        task.category
+                    ),
+                    format!("Map: {}", task.map_title),
+                    String::new(),
+                ];
+                lines.extend(task.map_lines.iter().cloned());
+                lines.push(String::new());
+                lines.push("Evidence: [1] Source  [2] Contract/workflow  [3] I/O/artifact".into());
+                if let Some(card_index) = opened_card {
+                    let card = &task.evidence_cards[card_index];
+                    lines.push(format!("┌ {} ─────────────────────────", card.title));
+                    lines.push(format!("│ {}", card.detail));
+                    lines.push("└────────────────────────────────────────".into());
+                } else {
+                    lines.push("No evidence card opened; the map remains the primary view.".into());
+                }
+                lines.push(String::new());
+                if answering {
+                    lines.push("Choose the diagnosis:".into());
+                    lines.extend(
+                        task.answer_choices
+                            .iter()
+                            .enumerate()
+                            .map(|(index, choice)| {
+                                format!("{} {}", marker(index, selected_answer), choice.label)
+                            }),
+                    );
+                    lines.push("↑/↓ or j/k select  Enter submit  1/2/3 evidence  q abort".into());
+                } else {
+                    lines.push("1/2/3 open evidence  a answer  q record abort".into());
+                }
+                for (row, line) in lines.into_iter().take(height as usize).enumerate() {
+                    execute!(stdout, MoveTo(0, row as u16)).map_err(|e| e.to_string())?;
+                    write!(stdout, "{}", truncate_line(&line, width as usize))
+                        .map_err(|e| e.to_string())?;
+                }
+                stdout.flush().map_err(|error| error.to_string())?;
+                let Event::Key(key) = event::read().map_err(|error| error.to_string())? else {
+                    continue;
+                };
+                match key.code {
+                    KeyCode::Char(character @ '1'..='3') => {
+                        let card_index = character as usize - '1' as usize;
+                        opened_card = Some(card_index);
+                        opened_card_ids.push(task.evidence_cards[card_index].card_id.clone());
+                        interaction_count = interaction_count.saturating_add(1);
+                        if task.evidence_cards[card_index].card_id == task.decisive_card_id
+                            && interactions_to_decisive.is_none()
+                        {
+                            interactions_to_decisive = Some(interaction_count);
+                        }
+                    }
+                    KeyCode::Char('a') => answering = true,
+                    KeyCode::Down | KeyCode::Char('j') if answering => {
+                        selected_answer =
+                            (selected_answer + 1).min(task.answer_choices.len().saturating_sub(1));
+                    }
+                    KeyCode::Up | KeyCode::Char('k') if answering => {
+                        selected_answer = selected_answer.saturating_sub(1);
+                    }
+                    KeyCode::Enter if answering => {
+                        let answer_id = task.answer_choices[selected_answer].answer_id.clone();
+                        results.push(TrustUxTaskResult {
+                            task_id: task.task_id.clone(),
+                            correct: answer_id == task.expected_answer_id,
+                            answer_id: Some(answer_id),
+                            elapsed_seconds: started.elapsed().as_secs_f64(),
+                            interaction_count,
+                            opened_card_ids: opened_card_ids.clone(),
+                            interactions_to_decisive_evidence: interactions_to_decisive,
+                            aborted: false,
+                        });
+                        break;
+                    }
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        results.push(aborted_trust_ux_result(
+                            &task.task_id,
+                            started.elapsed().as_secs_f64(),
+                            opened_card_ids.clone(),
+                            interactions_to_decisive,
+                        ));
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    })();
+    let _ = disable_raw_mode();
+    let _ = execute!(stdout, Show, LeaveAlternateScreen);
+    interaction?;
+
+    let report = seal_trust_ux_session(TrustUxSessionReport {
+        schema_version: "0.1.0".into(),
+        session_kind,
+        reviewer_id,
+        facilitator_id,
+        runner_identity: format!(
+            "genegis-cli/{} map-first-trust-ux-v1",
+            env!("CARGO_PKG_VERSION")
+        ),
+        corpus_version: TRUST_UX_CORPUS_VERSION.into(),
+        corpus_digest: trust_ux_corpus_digest(),
+        started_at,
+        finished_at: chrono::Utc::now().to_rfc3339(),
+        results,
+        report_digest: String::new(),
+    });
+    validate_trust_ux_session(&report)?;
+    Ok(report)
+}
+
+fn aborted_trust_ux_result(
+    task_id: &str,
+    elapsed_seconds: f64,
+    opened_card_ids: Vec<String>,
+    interactions_to_decisive_evidence: Option<u32>,
+) -> genegis_testkit::TrustUxTaskResult {
+    genegis_testkit::TrustUxTaskResult {
+        task_id: task_id.into(),
+        answer_id: None,
+        correct: false,
+        elapsed_seconds,
+        interaction_count: opened_card_ids.len() as u32,
+        opened_card_ids,
+        interactions_to_decisive_evidence,
+        aborted: true,
     }
 }
 
@@ -2656,6 +2955,10 @@ Usage:
   genegis bench equivalence [--json]               Native/DuckDB/GDAL conformance corpus
   genegis bench external [--json]                  GeoBenchX-derived strict artifact adapter
   genegis bench review --reviewer ID [-o FILE]     Interactive Gate-B diagnosis timing
+  genegis bench trust-ux --human --reviewer-code ID --facilitator-code ID [-o FILE]
+                                                    Phase-12 map-first human Trust UX session
+  genegis bench trust-ux-aggregate --input FILE... [-o FILE]
+                                                    Aggregate Gate-E sessions; automation excluded
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline
   genegis workflow run remote-cog-demo             Print remote COG metadata workflow JSON

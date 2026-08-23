@@ -155,13 +155,23 @@
   },
   "gate_e_human_trust_ux": {
     "status": "not_measured",
+    "map_first_runner_status": "implemented_and_automated_integrity_tests_pass",
+    "corpus_version": "phase-12-map-first-trust-v1",
+    "corpus_digest": "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca",
+    "implemented_tasks": 12,
+    "required_categories_covered": 12,
     "minimum_human_reviewers": 3,
     "minimum_tasks": 12,
     "minimum_correctness": 0.9,
     "maximum_median_diagnosis_seconds": 120,
     "maximum_median_interactions": 2,
     "human_report": null,
-    "automated_sessions_can_pass": false
+    "automated_sessions_can_pass": false,
+    "partial_duplicate_changed_or_tampered_sessions_can_pass": false,
+    "preregistration": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-preregistration.json",
+    "protocol": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-protocol.md",
+    "readiness_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-readiness.json",
+    "remaining_external_work": "three_or_more_real_humans_must_complete_the_fixed_corpus"
   },
   "gate_f_source_truth_boundaries": {
     "status": "pass",
@@ -241,6 +251,25 @@
       "command": "cargo test -p genegis-crs -p genegis-contract -p genegis-storage -p genegis-style -p genegis-workflow -p genegis-core -p genegis-vector -p genegis-catalog --no-fail-fast",
       "status": "pass",
       "note": "Post-lint-refactor targeted regression; all unit, integration, and doc tests passed."
+    },
+    {
+      "command": "cargo test -p genegis-testkit -p genegis-cli --no-fail-fast",
+      "passed": 16,
+      "failed": 0,
+      "ignored": 1,
+      "note": "Includes six Gate E corpus, integrity, automation-exclusion, and independent-threshold tests plus an actual CLI automated-abort fixture."
+    },
+    {
+      "command": "cargo clippy -p genegis-testkit -p genegis-cli --all-targets --no-deps -- -D warnings",
+      "status": "pass"
+    },
+    {
+      "command": "target/debug/genegis bench trust-ux-aggregate --input crates/genegis-testkit/fixtures/phase-12-trust-ux-automated-abort.json",
+      "status": "pass_expected_gate_false",
+      "admitted_human_reviewers": 0,
+      "excluded_automated_sessions": 1,
+      "aborts": 1,
+      "gate_e_passed": false
     }
   ],
   "completion_decision": "no_go_requirements_remain_not_measured"

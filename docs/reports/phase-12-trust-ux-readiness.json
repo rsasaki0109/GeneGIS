@@ -1,0 +1,51 @@
+{
+  "report_schema_version": "0.1.0",
+  "measured_at": "2026-08-23",
+  "status": "runner_ready_human_measurement_not_performed",
+  "corpus_version": "phase-12-map-first-trust-v1",
+  "corpus_digest": "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca",
+  "tasks": 12,
+  "required_categories": 12,
+  "map_first": true,
+  "raw_json_in_task_ui": false,
+  "records": [
+    "anonymous reviewer code",
+    "facilitator code for human sessions",
+    "corpus and runner identity",
+    "per-task answer and correctness",
+    "per-task wall time",
+    "evidence-card opening count",
+    "map-to-decisive-evidence opening ordinal",
+    "aborts",
+    "session and report digests"
+  ],
+  "fail_closed_cases": [
+    "report digest mutation",
+    "corpus drift",
+    "oracle mismatch",
+    "invalid pseudonym",
+    "missing or same facilitator",
+    "task reordering",
+    "duplicate reviewer",
+    "partial session",
+    "missing decisive evidence",
+    "automated session"
+  ],
+  "automated_cli_smoke": {
+    "command": "cargo run -q -p genegis-cli -- bench trust-ux --reviewer-code robot-01 --output <temporary>/session.json",
+    "action": "open decisive Source card, submit the correct first diagnosis, then abort before revealing task two",
+    "session_kind": "automated",
+    "session_report_digest": "sha256:97005f442eb3b9f2fffb40a5b3b15959cc0be61bd139b17ba2655665637d4899",
+    "abort_preserved": true,
+    "aggregate_admitted_human_reviewers": 0,
+    "aggregate_excluded_automated_sessions": 1,
+    "aggregate_passed": false,
+    "fixture": "/home/sasaki/workspace/GeneGIS/crates/genegis-testkit/fixtures/phase-12-trust-ux-automated-abort.json"
+  },
+  "human_measurement": {
+    "status": "not_measured",
+    "reason": "User instructed that human work be skipped; no human result is fabricated.",
+    "minimum_reviewers": 3,
+    "result_report": null
+  }
+}

@@ -29,8 +29,8 @@ The authoritative requirements and exit gates are in
 | `P3-3` | Performance and budget report | p50/p95, RSS, transfer ratio, first frame, upload, FPS; budget gates | Complete 2026-08-23; 4/4 pass, hardware Vulkan GPU, zero whole-object fallbacks |
 | `P4-1` | Five-domain source corpus | Boundaries, population, raster, point cloud, temporal change with licenses and immutable snapshots | Complete 2026-08-23; three positive sources plus two real fail-closed sources with explicit limitations |
 | `P4-2` | Oracles and mutation harness | At least 100 mutations, score at least 95%, false verified/attested = 0 | Complete 2026-08-23; 112/112 caught, score 100%, false verified/attested 0 |
-| `P5-1` | Map-first Trust UX | Map-to-evidence navigation for all preregistered failure categories | Pending |
-| `P5-2` | Human UX study | At least 3 human reviewers, 12 tasks, correctness/time/interaction report | Pending |
+| `P5-1` | Map-first Trust UX | Map-to-evidence navigation for all preregistered failure categories | Complete 2026-08-23; fixed 12-task map-first TUI, interaction timing, abort preservation, digest binding |
+| `P5-2` | Human UX study | At least 3 human reviewers, 12 tasks, correctness/time/interaction report | Runner/protocol preregistered; real human execution pending per user instruction to skip human work |
 | `P6-1` | Capsule/standards integration | Source Assurance, adapter, edit, I/O, UX evidence bound into offline-verifiable capsule | Pending |
 | `P6-2` | Final acceptance and release audit | RFC row-by-row evidence, full tests, no LLM/server verification, main-ready worktree | Pending |
 
