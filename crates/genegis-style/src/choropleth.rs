@@ -70,8 +70,17 @@ impl ChoroplethStyle {
         for i in 0..classes {
             let lo = breaks[i];
             let hi = breaks[i + 1];
+            // Small ranges (real-data scores) need decimals or every bucket
+            // label collapses to the same integer.
+            let decimals = if step >= 1.0 {
+                0
+            } else if step >= 0.1 {
+                1
+            } else {
+                2
+            };
             legend.push(LegendItem {
-                label: format!("{lo:.0} – {hi:.0} {unit}"),
+                label: format!("{lo:.decimals$} – {hi:.decimals$} {unit}"),
                 color: palette[i],
             });
         }

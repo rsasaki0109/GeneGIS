@@ -1,26 +1,23 @@
 #!/usr/bin/env bash
-# Build docs/assets/usecase-showcase.gif from the RFC 0005 showcase frames.
+# Build a README showcase GIF from `genegis demo frames` output.
 #
-# Frames are rendered deterministically by `genegis demo frames`, then
-# assembled with ffmpeg's two-pass palette for crisp flat-color maps.
-# Usage: scripts/build-readme-showcase.sh [frames_dir] [out_gif]
+# Usage:
+#   scripts/build-readme-showcase.sh [frames_dir] [out_gif] [order_csv]
+#
+# Defaults assemble all seven synthetic-fixture frames. Pass a comma
+# separated frame list to build a subset, e.g. the real-data set:
+#   scripts/build-readme-showcase.sh .genegis/frames-real \
+#     docs/assets/usecase-showcase-real.gif density,flood,evacuation,xmin-city
 
 set -euo pipefail
 
 FRAMES_DIR="${1:-.genegis/frames}"
 OUT="${2:-docs/assets/usecase-showcase.gif}"
+ORDER_CSV="${3:-density,flood,evacuation,xmin-city,ndvi,uc5-epoch-a,uc5-epoch-b}"
+
+IFS=',' read -r -a ORDER <<< "$ORDER_CSV"
 SEQ="$(mktemp -d)"
 trap 'rm -rf "$SEQ"' EXIT
-
-ORDER=(
-  density
-  flood
-  evacuation
-  xmin-city
-  ndvi
-  uc5-epoch-a
-  uc5-epoch-b
-)
 
 for index in "${!ORDER[@]}"; do
   name="${ORDER[$index]}"

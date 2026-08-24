@@ -51,6 +51,13 @@ named verifier and an audit receipt — offline, deterministic, fail-closed:
   <img src="docs/assets/usecase-showcase.gif" alt="Five verified GeneGIS use cases: density, flood exposure, evacuation delay, 15-minute city, NDVI delta, point-cloud epochs" width="960" />
 </p>
 
+The same frames rendered on **real open data** (国交省 A31a flood polygons,
+OSM walk network, 名古屋市指定避難所 — see below for the one-command setup):
+
+<p align="center">
+  <img src="docs/assets/usecase-showcase-real.gif" alt="The same verified workflows on real open data: census density, MLIT A31a flood exposure, real-shelter evacuation delays on the OSM graph, real-POI 15-minute city" width="960" />
+</p>
+
 | Prompt | Workflow | Verifier |
 |---|---|---|
 | 「名古屋市の人口密度を表示」 | `nagoya-density` | DuckDB re-aggregation |
@@ -136,8 +143,13 @@ cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --plan-on
 # Rebuild measured README evidence and GIFs
 bash scripts/render-readme-hero.sh
 
-# Rebuild the RFC 0005 use-case showcase GIF
+# Rebuild the RFC 0005 use-case showcase GIF (synthetic fixtures)
 cargo run -p genegis-cli -- demo frames && bash scripts/build-readme-showcase.sh
+
+# Real-data variant (after fetch-real-data.py / fetch-osm-network.py + env vars)
+cargo run --release -p genegis-cli -- demo frames .genegis/frames-real
+bash scripts/build-readme-showcase.sh .genegis/frames-real \
+  docs/assets/usecase-showcase-real.gif density,flood,evacuation,xmin-city
 ```
 
 ## Architecture

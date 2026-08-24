@@ -292,6 +292,17 @@ fn ring_to_svg_path(ring: &[(f64, f64)], min_x: f64, min_y: f64, max_x: f64, max
     parts.join(" ")
 }
 
+/// Frame subtitle reflects which data tier produced the frames.
+fn subtitle() -> &'static str {
+    if std::env::var("GENEGIS_WALK_NETWORK_PATH").is_ok()
+        || std::env::var("GENEGIS_FLOOD_ZONES_PATH").is_ok()
+    {
+        "GeneGIS · real open data (国交省 A31a · OSM · 名古屋市) · RFC 0005"
+    } else {
+        "GeneGIS · verified offline fixture · RFC 0005"
+    }
+}
+
 fn wrap_svg(title: &str, body: &str, legend: &[(String, String)]) -> String {
     let mut legend_items = String::new();
     for (i, (label, color)) in legend.iter().enumerate() {
@@ -308,11 +319,12 @@ fn wrap_svg(title: &str, body: &str, legend: &[(String, String)]) -> String {
         r##"<svg xmlns="http://www.w3.org/2000/svg" width="{FRAME_W}" height="{FRAME_H}" viewBox="0 0 {FRAME_W} {FRAME_H}">
 <rect width="100%" height="100%" fill="#fafafa"/>
 <text x="34" y="44" font-family="Noto Serif CJK JP" font-size="24" font-weight="bold" fill="#263238">{}</text>
-<text x="34" y="70" font-family="Noto Serif CJK JP" font-size="13" fill="#607d8b">GeneGIS · verified offline fixture · RFC 0005</text>
+<text x="34" y="70" font-family="Noto Serif CJK JP" font-size="13" fill="#607d8b">{}</text>
 <g>{body}</g>
 <g>{legend_items}</g>
 </svg>"##,
         escape_xml(title),
+        escape_xml(subtitle()),
     )
 }
 
