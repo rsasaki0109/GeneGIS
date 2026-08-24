@@ -131,7 +131,7 @@ pub fn export_map_svg(result: &AnalysisResult, title: &str) -> String {
 
 pub fn export_png_map(result: &AnalysisResult, title: &str) -> Result<Vec<u8>, ExportError> {
     let svg = export_map_svg(result, title);
-    let tree = resvg::usvg::Tree::from_str(&svg, &resvg::usvg::Options::default())
+    let tree = resvg::usvg::Tree::from_str(&svg, &raster_options())
         .map_err(|err| ExportError::Svg(err.to_string()))?;
 
     let size = tree.size().to_int_size();
@@ -147,6 +147,18 @@ pub fn export_png_map(result: &AnalysisResult, title: &str) -> Result<Vec<u8>, E
     pixmap
         .encode_png()
         .map_err(|err| ExportError::Png(err.to_string()))
+}
+
+/// usvg options with system fonts loaded so PNG exports keep their labels.
+fn raster_options() -> resvg::usvg::Options<'static> {
+    let mut options = resvg::usvg::Options::<'static>::default();
+    let mut fonts = resvg::usvg::fontdb::Database::new();
+    fonts.load_system_fonts();
+    fonts.set_serif_family("Noto Serif CJK JP");
+    fonts.set_sans_serif_family("Noto Serif CJK JP");
+    options.fontdb = std::sync::Arc::new(fonts);
+    options.font_family = "Noto Serif CJK JP".into();
+    options
 }
 
 fn build_map_paths(result: &AnalysisResult, width: f64, height: f64, pad: f64) -> String {

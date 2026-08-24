@@ -42,6 +42,28 @@ Cloud metrics come from a reproducible
   <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open the zero-install Playground →</strong></a>
 </p>
 
+## Five flagship use cases, one verified pipeline
+
+Every RFC 0005 application case runs as an agent-executable workflow with a
+named verifier and an audit receipt — offline, deterministic, fail-closed:
+
+<p align="center">
+  <img src="docs/assets/usecase-showcase.gif" alt="Five verified GeneGIS use cases: density, flood exposure, evacuation delay, 15-minute city, NDVI delta, point-cloud epochs" width="960" />
+</p>
+
+| Prompt | Workflow | Verifier |
+|---|---|---|
+| 「名古屋市の人口密度を表示」 | `nagoya-density` | DuckDB re-aggregation |
+| 「名古屋市の洪水浸水リスクと人口曝露を表示」 | `nagoya-flood-exposure` | `duckdb_verify` |
+| 「名古屋市の洪水浸水リスクと避難所アクセシビリティを表示」 | `nagoya-evacuation-access` | `route_sanity_verify` |
+| 「名古屋市の15分都市アクセシビリティを表示」 | `nagoya-xmin-city` | `route_sanity_verify` |
+| 「名古屋周辺のNDVI時系列をSentinel-2から作成して検証」 | `sentinel-ndvi-timeseries` | `index_range_verify` |
+| 「2時期の点群から建物・植生の変化を抽出して検証」 | `copc-change-detect` | `volume_delta_verify` |
+
+Frames are synthetic offline fixtures, regenerated bit-stable by
+`cargo run -p genegis-cli -- demo frames` + `scripts/build-readme-showcase.sh`
+(spec: [`docs/rfcs/0005-application-use-cases.md`](docs/rfcs/0005-application-use-cases.md)).
+
 GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
 engines, and returns a map with CRS, units, sources, provenance, and independent
 checks. It is a verification workbench—not a QGIS clone.
@@ -71,6 +93,9 @@ cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --plan-on
 
 # Rebuild measured README evidence and GIFs
 bash scripts/render-readme-hero.sh
+
+# Rebuild the RFC 0005 use-case showcase GIF
+cargo run -p genegis-cli -- demo frames && bash scripts/build-readme-showcase.sh
 ```
 
 ## Architecture

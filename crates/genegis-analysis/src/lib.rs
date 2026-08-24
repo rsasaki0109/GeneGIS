@@ -12,6 +12,9 @@ pub mod ndvi;
 pub mod pipeline;
 pub mod preview;
 pub mod result;
+pub mod showcase;
+
+pub use showcase::{render_usecase_frames, ShowcaseFrame};
 
 pub use accessibility::{
     run_nagoya_accessibility, run_nagoya_accessibility_with_threshold, AccessibilityAnalysis,

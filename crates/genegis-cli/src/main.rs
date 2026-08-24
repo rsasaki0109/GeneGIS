@@ -59,11 +59,44 @@ fn main() {
         Some("agent") => handle_agent(&args[2..]),
         Some("capsule") => handle_capsule(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
+        Some("demo") => handle_demo(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
             print_help();
             process::exit(1);
         }
+    }
+}
+
+fn handle_demo(args: &[String]) {
+    let Some(action) = args.first().map(String::as_str) else {
+        eprintln!("Usage: genegis demo frames [DIR]  # render RFC 0005 showcase PNGs");
+        process::exit(1);
+    };
+    if action != "frames" {
+        eprintln!("Unknown demo action: {action}");
+        process::exit(1);
+    }
+    let dir = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| ".genegis/frames".to_string());
+    std::fs::create_dir_all(&dir).unwrap_or_else(|error| {
+        eprintln!("create {dir} failed: {error}");
+        process::exit(1);
+    });
+    std::env::set_var("GENEGIS_FRAMES_DIR", &dir);
+    let frames = genegis_analysis::render_usecase_frames().unwrap_or_else(|error| {
+        eprintln!("Showcase render error: {error}");
+        process::exit(1);
+    });
+    for frame in &frames {
+        let path = PathBuf::from(&dir).join(format!("{}.png", frame.name));
+        std::fs::write(&path, &frame.png).unwrap_or_else(|error| {
+            eprintln!("write {} failed: {error}", path.display());
+            process::exit(1);
+        });
+        println!("{} ({} bytes)", path.display(), frame.png.len());
     }
 }
 
