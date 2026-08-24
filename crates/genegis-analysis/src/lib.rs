@@ -13,6 +13,7 @@ pub mod pipeline;
 pub mod preview;
 pub mod result;
 pub mod showcase;
+pub mod zone_index;
 
 pub use showcase::{render_usecase_frames, ShowcaseFrame};
 

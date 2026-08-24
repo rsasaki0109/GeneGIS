@@ -14,6 +14,7 @@ use genegis_workflow::{Citation, GeoWorkflow};
 
 use crate::nagoya::run_nagoya_population_density;
 use crate::result::{VerificationCheck, VerificationReport};
+use crate::zone_index::ZoneIndex;
 use crate::AnalysisError;
 
 /// Deterministic sampling resolution per ward bbox axis.
@@ -140,6 +141,7 @@ pub fn run_nagoya_flood_exposure_with_options(
         ));
     }
 
+    let zone_index = ZoneIndex::build(zones)?;
     let mut features = Vec::with_capacity(density.features.len());
     for ward in &density.features {
         let (min_lon, min_lat, max_lon, max_lat) = ward_bbox(&ward.rings);
@@ -157,14 +159,7 @@ pub fn run_nagoya_flood_exposure_with_options(
                     continue;
                 }
                 sampled += 1;
-                let mut deepest_here = 0.0_f64;
-                for zone in &zones {
-                    if zone.depth_class_m > deepest_here
-                        && point_in_polygon_parts(point, &zone.rings)
-                    {
-                        deepest_here = zone.depth_class_m;
-                    }
-                }
+                let deepest_here = zone_index.depth_at(point);
                 if deepest_here > 0.0 {
                     flooded += 1;
                     max_depth = max_depth.max(deepest_here);
@@ -219,7 +214,8 @@ pub fn run_nagoya_flood_exposure_with_options(
         .iter()
         .map(|feature| feature.exposed_population)
         .sum();
-    let determinism_probe = resample_first_ward(&density.features[0], &zones, samples_per_axis);
+    let determinism_probe =
+        resample_first_ward(&density.features[0], &zone_index, samples_per_axis);
 
     let checks = vec![
         VerificationCheck {
@@ -227,7 +223,7 @@ pub fn run_nagoya_flood_exposure_with_options(
             passed: true,
             detail: format!(
                 "{} zones across depth bands {:?}",
-                zones.len(),
+                zone_index.len(),
                 DEPTH_BANDS_M
             ),
         },
@@ -305,14 +301,14 @@ pub fn run_nagoya_flood_exposure_with_options(
                 retrieved_at: None,
             },
         ],
-        zone_count: zones.len(),
+        zone_count: zone_index.len(),
         samples_per_axis,
     })
 }
 
 fn resample_first_ward(
     ward: &crate::result::DensityFeature,
-    zones: &[FloodZone],
+    zone_index: &ZoneIndex,
     samples_per_axis: u32,
 ) -> (u64, u64) {
     let (min_lon, min_lat, max_lon, max_lat) = ward_bbox(&ward.rings);
@@ -328,9 +324,7 @@ fn resample_first_ward(
                 continue;
             }
             sampled += 1;
-            if zones.iter().any(|zone| {
-                zone.depth_class_m > 0.0 && point_in_polygon_parts((lon, lat), &zone.rings)
-            }) {
+            if zone_index.depth_at((lon, lat)) > 0.0 {
                 flooded += 1;
             }
         }

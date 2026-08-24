@@ -15,6 +15,7 @@ use genegis_workflow::{Citation, GeoWorkflow};
 use crate::flood::{FloodZone, DEPTH_BANDS_M};
 use crate::nagoya::run_nagoya_population_density;
 use crate::result::{VerificationCheck, VerificationReport};
+use crate::zone_index::ZoneIndex;
 use crate::AnalysisError;
 
 /// Extra travel-time multiplier per metre of inundation depth.
@@ -100,6 +101,7 @@ pub fn run_nagoya_evacuation_access_with_penalty(
         other => AnalysisError::Message(other.to_string()),
     })?;
     let zones = load_flood_zones(zones_path)?;
+    let zone_index = ZoneIndex::build(zones.clone())?;
     let shelters = load_named_points(shelters_path, "name")?;
     if shelters.len() < 2 {
         return Err(AnalysisError::Message(
@@ -115,16 +117,12 @@ pub fn run_nagoya_evacuation_access_with_penalty(
     let penalty_for_depth = move |depth: f64| 1.0 + depth * depth_penalty_per_m;
     let flooded_edge_count;
     {
-        let zones_ref = &zones;
+        let zones_ref = &zone_index;
         let flooded_len_ref = &mut flooded_edge_length_m;
         flooded_edge_count = flooded_graph
             .scale_edge_costs(|from, to| {
                 let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
-                let depth = zones_ref
-                    .iter()
-                    .filter(|zone| point_in_polygon_parts(mid, &zone.rings))
-                    .map(|zone| zone.depth_class_m)
-                    .fold(0.0_f64, f64::max);
+                let depth = zones_ref.depth_at(mid);
                 if depth > 0.0 {
                     *flooded_len_ref += WalkGraph::euclidean_distance_m(from, to);
                 }

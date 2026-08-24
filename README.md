@@ -64,6 +64,30 @@ Frames are synthetic offline fixtures, regenerated bit-stable by
 `cargo run -p genegis-cli -- demo frames` + `scripts/build-readme-showcase.sh`
 (spec: [`docs/rfcs/0005-application-use-cases.md`](docs/rfcs/0005-application-use-cases.md)).
 
+## Same prompts, real open data
+
+The UC-1 workflows run unchanged on licensed real data. Fetch, convert and
+re-declare checksums (fail-closed receipts stay green only when the declared
+sha256 matches the bytes actually read):
+
+```bash
+python3 scripts/fetch-real-data.py   # downloads + converts, prints sha256s
+
+export GENEGIS_FLOOD_ZONES_PATH=examples/nagoya-population-density/data/real/nagoya-flood-zones-real.geojson
+export GENEGIS_FLOOD_ZONES_SHA=<printed sha256>
+export GENEGIS_SHELTERS_PATH=examples/nagoya-population-density/data/real/nagoya-shelters-real.geojson
+export GENEGIS_SHELTERS_SHA=<printed sha256>
+cargo run -p genegis-cli -- agent run "名古屋市の洪水浸水リスクと避難所アクセシビリティを表示"
+```
+
+Sources: 国土数値情報 洪水浸水想定区域（河川単位）A31a 愛知県 想定最大規模
+(MLIT, CC-BY 4.0) clipped to the Nagoya bbox, and 名古屋市指定避難所
+(令和7年8月時点, via BODIK CKAN, CC-BY 4.0). On the 2026-08 fetch this
+yields 46,856 depth-band polygons (33.8% of fixture street length flooded)
+and 803 real shelters — 中村区/中川区/西区 pick ~5-minute detours around the
+Shōnai-gawa corridor. **Not a hazard-map substitute**; always consult
+official 重ねるハザードマップ outputs for life-safety decisions.
+
 GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
 engines, and returns a map with CRS, units, sources, provenance, and independent
 checks. It is a verification workbench—not a QGIS clone.

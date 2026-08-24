@@ -47,10 +47,25 @@ pub fn nagoya_wards_geojson_path() -> &'static str {
 }
 
 /// Path to the bundled synthetic flood inundation zones fixture.
+///
+/// Set `GENEGIS_FLOOD_ZONES_PATH` (and `GENEGIS_FLOOD_ZONES_SHA`) to run the
+/// same workflows on real data, e.g. the A31a layer produced by
+/// `scripts/fetch-real-data.py`. Checksums must be re-declared alongside the
+/// path so receipts stay fail-closed.
 pub fn nagoya_flood_zones_path() -> &'static str {
+    if let Ok(path) = std::env::var("GENEGIS_FLOOD_ZONES_PATH") {
+        return Box::leak(path.into_boxed_str());
+    }
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../examples/nagoya-population-density/data/nagoya-flood-zones.geojson"
+    )
+}
+
+fn declared_checksum(env_key: &str, fixture: &str) -> String {
+    format!(
+        "sha256:{}",
+        std::env::var(env_key).unwrap_or_else(|_| fixture.to_string())
     )
 }
 
@@ -71,7 +86,14 @@ pub fn nagoya_pois_path() -> &'static str {
 }
 
 /// Path to the bundled evacuation-shelter fixture.
+///
+/// Set `GENEGIS_SHELTERS_PATH` (and `GENEGIS_SHELTERS_SHA`) to run on real
+/// shelter data, e.g. the 名古屋市指定避難所 conversion produced by
+/// `scripts/fetch-real-data.py`.
 pub fn nagoya_shelters_path() -> &'static str {
+    if let Ok(path) = std::env::var("GENEGIS_SHELTERS_PATH") {
+        return Box::leak(path.into_boxed_str());
+    }
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../examples/nagoya-population-density/data/nagoya-shelters.geojson"
@@ -177,9 +199,10 @@ fn nagoya_flood_zones_record() -> DatasetRecord {
         bbox: BoundingBox::new(136.842, 35.048, 136.971, 35.221),
         uri: nagoya_flood_zones_path().into(),
         license: "CC0-1.0 (synthetic fixture; 参考: 国土数値情報 A32 / ハザードマップポータルサイト)".into(),
-        checksum: Some(
-            "sha256:3d3fa3c7511cce237b3be186b63207760828b85c0e5377819ecf275b06790700".into(),
-        ),
+        checksum: Some(declared_checksum(
+            "GENEGIS_FLOOD_ZONES_SHA",
+            "3d3fa3c7511cce237b3be186b63207760828b85c0e5377819ecf275b06790700",
+        )),
         source_version: Some("nagoya-flood-fixture-v1".into()),
         tags: vec!["nagoya".into(), "flood".into(), "hazard".into(), "demo".into()],
     }
@@ -231,9 +254,10 @@ fn nagoya_shelters_record() -> DatasetRecord {
         bbox: BoundingBox::new(136.792, 35.034, 137.061, 35.260),
         uri: nagoya_shelters_path().into(),
         license: "CC0-1.0 (synthetic fixture; 参考: 国土地理院 指定緊急避難場所・指定避難所)".into(),
-        checksum: Some(
-            "sha256:696f9aad022cf498cfb1d01466c53f654541bb5f7077816fe6159921e1da5145".into(),
-        ),
+        checksum: Some(declared_checksum(
+            "GENEGIS_SHELTERS_SHA",
+            "696f9aad022cf498cfb1d01466c53f654541bb5f7077816fe6159921e1da5145",
+        )),
         source_version: Some("nagoya-shelter-fixture-v1".into()),
         tags: vec!["nagoya".into(), "shelter".into(), "evacuation".into(), "demo".into()],
     }
