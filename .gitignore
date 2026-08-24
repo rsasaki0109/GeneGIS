@@ -26,3 +26,6 @@ examples/nagoya-population-density/output/
 *.log
 **/.genegis/
 docs/assets/hero-frame-*.png
+
+# Real open data fetched by scripts/fetch-*.py (regenerable; flood layer is ~42 MB)
+examples/nagoya-population-density/data/real/
