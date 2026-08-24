@@ -301,14 +301,14 @@ impl WalkGraph {
     /// Returns the number of undirected edges whose factor exceeded 1.0.
     pub fn scale_edge_costs<F>(&mut self, mut factor: F) -> Result<usize, NetworkError>
     where
-        F: FnMut((f64, f64), (f64, f64)) -> f64,
+        F: FnMut((f64, f64), (f64, f64), u32, u32) -> f64,
     {
         let mut scaled = 0_usize;
         for from_index in 0..self.adjacency.len() {
             let from = self.nodes[from_index];
             for slot in &mut self.adjacency[from_index] {
                 let to = self.nodes[slot.0 as usize];
-                let factor = factor(from, to);
+                let factor = factor(from, to, from_index as u32, slot.0);
                 if !factor.is_finite() || factor < 0.0 {
                     return Err(NetworkError::Invalid(format!(
                         "edge cost factor must be finite and non-negative, got {factor}"
@@ -434,7 +434,7 @@ mod tests {
         let baseline = graph.route_minutes(origin, target).unwrap();
 
         let mut penalized = graph.clone();
-        let scaled = penalized.scale_edge_costs(|_, _| 2.0).unwrap();
+        let scaled = penalized.scale_edge_costs(|_, _, _, _| 2.0).unwrap();
         assert_eq!(scaled, graph.edge_count());
         let after = penalized.route_minutes(origin, target).unwrap();
         assert!((after - baseline * 2.0).abs() < 1e-9);
@@ -446,7 +446,7 @@ mod tests {
         // the outer columns must beat the direct flooded segment.
         let mut graph = graph();
         let scaled = graph
-            .scale_edge_costs(|from, to| {
+            .scale_edge_costs(|from, to, _, _| {
                 if (from.0 - to.0).abs() < 1e-9 && (from.0 - 0.0045).abs() < 1e-9 {
                     10.0
                 } else {
@@ -474,7 +474,9 @@ mod tests {
         let baseline = graph();
         let mut penalized = baseline.clone();
         penalized
-            .scale_edge_costs(|from, to| 1.0 + ((from.0 + to.0) * 1000.0).fract().abs().max(0.0))
+            .scale_edge_costs(|from, to, _, _| {
+                1.0 + ((from.0 + to.0) * 1000.0).fract().abs().max(0.0)
+            })
             .unwrap();
         for a in 0..baseline.node_count() as u32 {
             let clean = baseline.travel_times_from(a);
@@ -491,11 +493,11 @@ mod tests {
     fn rejects_non_finite_factors() {
         let mut graph = graph();
         assert!(matches!(
-            graph.scale_edge_costs(|_, _| f64::NAN),
+            graph.scale_edge_costs(|_, _, _, _| f64::NAN),
             Err(NetworkError::Invalid(_))
         ));
         assert!(matches!(
-            graph.scale_edge_costs(|_, _| -1.0),
+            graph.scale_edge_costs(|_, _, _, _| -1.0),
             Err(NetworkError::Invalid(_))
         ));
     }

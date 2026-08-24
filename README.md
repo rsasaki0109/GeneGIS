@@ -83,10 +83,28 @@ cargo run -p genegis-cli -- agent run "名古屋市の洪水浸水リスクと�
 Sources: 国土数値情報 洪水浸水想定区域（河川単位）A31a 愛知県 想定最大規模
 (MLIT, CC-BY 4.0) clipped to the Nagoya bbox, and 名古屋市指定避難所
 (令和7年8月時点, via BODIK CKAN, CC-BY 4.0). On the 2026-08 fetch this
-yields 46,856 depth-band polygons (33.8% of fixture street length flooded)
-and 803 real shelters — 中村区/中川区/西区 pick ~5-minute detours around the
-Shōnai-gawa corridor. **Not a hazard-map substitute**; always consult
-official 重ねるハザードマップ outputs for life-safety decisions.
+yields 46,856 depth-band polygons (19.4% of street length flooded) and
+803 real shelters — 中川区 +16 min, 南区 +11 min, 西区 +10 min around the
+Shōnai/Shinkawa corridors on the real OSM graph. **Not a hazard-map
+substitute**; always consult official 重ねるハザードマップ outputs for
+life-safety decisions.
+
+### Real OSM walk network (UC-1 + UC-4 fully real)
+
+```bash
+python3 scripts/fetch-osm-network.py   # Overpass API, © OpenStreetMap contributors (ODbL)
+
+export GENEGIS_WALK_NETWORK_PATH=examples/nagoya-population-density/data/real/nagoya-walk-network-real.geojson
+export GENEGIS_WALK_NETWORK_SHA=<printed sha256>
+export GENEGIS_POIS_PATH=examples/nagoya-population-density/data/real/nagoya-pois-real.geojson
+export GENEGIS_POIS_SHA=<printed sha256>
+cargo run --release -p genegis-cli -- agent run "名古屋市の15分都市アクセシビリティを表示"
+```
+
+On the 2026-08 fetch: 650k graph nodes / 775k edges / 21,353 km of
+walkable OSM highways, 4,218 real POIs (supermarket/clinic/school/park).
+UC-4 verifies in ~80 s and UC-1 in ~35 s (`--release`); both keep the
+same verifiers as the fixtures.
 
 GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
 engines, and returns a map with CRS, units, sources, provenance, and independent

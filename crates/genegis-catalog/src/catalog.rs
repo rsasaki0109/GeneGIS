@@ -70,7 +70,13 @@ fn declared_checksum(env_key: &str, fixture: &str) -> String {
 }
 
 /// Path to the bundled walk-network fixture.
+///
+/// Set `GENEGIS_WALK_NETWORK_PATH` (and `GENEGIS_WALK_NETWORK_SHA`) to run
+/// on the real OSM extract produced by `scripts/fetch-osm-network.py`.
 pub fn nagoya_walk_network_path() -> &'static str {
+    if let Ok(path) = std::env::var("GENEGIS_WALK_NETWORK_PATH") {
+        return Box::leak(path.into_boxed_str());
+    }
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../examples/nagoya-population-density/data/nagoya-walk-network.geojson"
@@ -78,7 +84,13 @@ pub fn nagoya_walk_network_path() -> &'static str {
 }
 
 /// Path to the bundled POI fixture.
+///
+/// Set `GENEGIS_POIS_PATH` (and `GENEGIS_POIS_SHA`) to run on the real OSM
+/// POI extract produced by `scripts/fetch-osm-network.py`.
 pub fn nagoya_pois_path() -> &'static str {
+    if let Ok(path) = std::env::var("GENEGIS_POIS_PATH") {
+        return Box::leak(path.into_boxed_str());
+    }
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../examples/nagoya-population-density/data/nagoya-pois.geojson"
@@ -218,9 +230,10 @@ fn nagoya_walk_network_record() -> DatasetRecord {
         bbox: BoundingBox::new(136.785, 35.025, 137.068, 35.268),
         uri: nagoya_walk_network_path().into(),
         license: "CC0-1.0 (synthetic fixture; 参考: OpenStreetMap walkers' spacing conventions)".into(),
-        checksum: Some(
-            "sha256:5e7e942f5c90382cb4e3a7861d2c792c5806d2fac168be53ef42193e9e1da20e".into(),
-        ),
+        checksum: Some(declared_checksum(
+            "GENEGIS_WALK_NETWORK_SHA",
+            "5e7e942f5c90382cb4e3a7861d2c792c5806d2fac168be53ef42193e9e1da20e",
+        )),
         source_version: Some("nagoya-walk-grid-v1".into()),
         tags: vec!["nagoya".into(), "walk".into(), "network".into(), "demo".into()],
     }
@@ -236,9 +249,10 @@ fn nagoya_pois_record() -> DatasetRecord {
         bbox: BoundingBox::new(136.855, 35.080, 136.995, 35.235),
         uri: nagoya_pois_path().into(),
         license: "CC0-1.0 (synthetic fixture)".into(),
-        checksum: Some(
-            "sha256:193327ce0c6d6a8c578325a748d693d4e9488ae2ec02b1dbdd5bd4c7d42e8c30".into(),
-        ),
+        checksum: Some(declared_checksum(
+            "GENEGIS_POIS_SHA",
+            "193327ce0c6d6a8c578325a748d693d4e9488ae2ec02b1dbdd5bd4c7d42e8c30",
+        )),
         source_version: Some("nagoya-poi-fixture-v1".into()),
         tags: vec!["nagoya".into(), "poi".into(), "walkability".into(), "demo".into()],
     }

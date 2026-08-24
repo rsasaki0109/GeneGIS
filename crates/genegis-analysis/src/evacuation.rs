@@ -7,7 +7,7 @@
 //! analytic product; it is only accepted after monotonicity, triangle and
 //! DuckDB cross-checks pass.
 
-use genegis_geometry::{point_in_polygon_parts, PolygonRing};
+use genegis_geometry::PolygonRing;
 use genegis_network::{NetworkError, WalkGraph};
 use genegis_style::{ChoroplethStyle, ColorRgba};
 use genegis_workflow::{Citation, GeoWorkflow};
@@ -119,11 +119,21 @@ pub fn run_nagoya_evacuation_access_with_penalty(
     {
         let zones_ref = &zone_index;
         let flooded_len_ref = &mut flooded_edge_length_m;
+        // Adjacency stores each undirected edge twice; memoize the depth per
+        // canonical (min, max) node pair so the zone index is queried once.
+        let mut edge_depth: std::collections::HashMap<(u32, u32), f64> =
+            std::collections::HashMap::new();
         flooded_edge_count = flooded_graph
-            .scale_edge_costs(|from, to| {
-                let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
-                let depth = zones_ref.depth_at(mid);
-                if depth > 0.0 {
+            .scale_edge_costs(|from, to, from_index, to_index| {
+                let key = if from_index < to_index {
+                    (from_index, to_index)
+                } else {
+                    (to_index, from_index)
+                };
+                let depth = *edge_depth.entry(key).or_insert_with(|| {
+                    zones_ref.depth_at(((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0))
+                });
+                if depth > 0.0 && from_index < to_index {
                     *flooded_len_ref += WalkGraph::euclidean_distance_m(from, to);
                 }
                 penalty_for_depth(depth)
@@ -214,15 +224,26 @@ pub fn run_nagoya_evacuation_access_with_penalty(
         .copied()
         .take(24)
         .collect();
+    // One Dijkstra per probe node, memoized — the naive triple loop would
+    // run one per (a, b) pair and dominates runtime on real OSM graphs.
+    let probe_times: Vec<Vec<Option<f64>>> = probe_nodes
+        .iter()
+        .map(|&node| flooded_graph.travel_times_from(node))
+        .collect();
+    let probe_slot = |node: u32| -> usize {
+        probe_nodes
+            .iter()
+            .position(|&candidate| candidate == node)
+            .unwrap_or(0)
+    };
     let mut triangle_samples = 0_usize;
     let mut triangle_ok = true;
-    for &a in &probe_nodes {
-        let times_a = flooded_graph.travel_times_from(a);
+    for times_a in &probe_times {
         for &b in &probe_nodes {
             let Some(ab) = times_a.get(b as usize).copied().flatten() else {
                 continue;
             };
-            let times_b = flooded_graph.travel_times_from(b);
+            let times_b = &probe_times[probe_slot(b)];
             for &c in &probe_nodes {
                 let Some(bc) = times_b.get(c as usize).copied().flatten() else {
                     continue;
@@ -250,15 +271,19 @@ pub fn run_nagoya_evacuation_access_with_penalty(
         let replay_graph = WalkGraph::from_geojson_path(network_path)
             .map_err(|error| AnalysisError::Message(error.to_string()))?;
         let mut replay_flooded = replay_graph.clone();
-        let zones_ref = &zones;
+        let zones_ref = &zone_index;
+        let mut replay_depth: std::collections::HashMap<(u32, u32), f64> =
+            std::collections::HashMap::new();
         replay_flooded
-            .scale_edge_costs(|from, to| {
-                let mid = ((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0);
-                let depth = zones_ref
-                    .iter()
-                    .filter(|zone| point_in_polygon_parts(mid, &zone.rings))
-                    .map(|zone| zone.depth_class_m)
-                    .fold(0.0_f64, f64::max);
+            .scale_edge_costs(|from, to, from_index, to_index| {
+                let key = if from_index < to_index {
+                    (from_index, to_index)
+                } else {
+                    (to_index, from_index)
+                };
+                let depth = *replay_depth.entry(key).or_insert_with(|| {
+                    zones_ref.depth_at(((from.0 + to.0) / 2.0, (from.1 + to.1) / 2.0))
+                });
                 penalty_for_depth(depth)
             })
             .map_err(|error| AnalysisError::Message(error.to_string()))?;
@@ -417,11 +442,11 @@ fn load_flood_zones(path: &str) -> Result<Vec<FloodZone>, AnalysisError> {
     Ok(zones)
 }
 
+/// One parsed named point: WGS84 position plus its display label.
+type NamedPoint = ((f64, f64), String);
+
 /// Load named point features (shelters) from raw GeoJSON.
-fn load_named_points(
-    path: &str,
-    name_key: &str,
-) -> Result<Vec<((f64, f64), String)>, AnalysisError> {
+fn load_named_points(path: &str, name_key: &str) -> Result<Vec<NamedPoint>, AnalysisError> {
     let text =
         std::fs::read_to_string(path).map_err(|error| AnalysisError::Message(error.to_string()))?;
     let parsed: serde_json::Value =
