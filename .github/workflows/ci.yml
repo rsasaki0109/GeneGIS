@@ -45,6 +45,34 @@ jobs:
           cargo run -p genegis-cli -- agent run "名古屋 wards GeoParquet を検証"
           cargo run -p genegis-cli -- agent run "外部STAC examples/stac/sample-collection.json を fetch"
           cargo run -p genegis-cli -- agent run "名古屋 GeoParquet 人口密度を表示"
+      - name: UC-2 — dashboard export smoke
+        run: |
+          cargo run -p genegis-cli -- agent run "名古屋市の人口密度をPMTilesダッシュボードに書き出し"
+          test -s .genegis/dashboard.pmtiles
+      - name: UC-1 — flood exposure smoke
+        run: |
+          cargo run -p genegis-cli -- workflow run nagoya-flood-exposure --execute > /dev/null
+          cargo run -p genegis-cli -- agent run "名古屋市の洪水浸水リスクと人口曝露を表示"
+      - name: UC-4 — 15-minute-city smoke
+        run: |
+          cargo run -p genegis-cli -- workflow run nagoya-xmin-city --execute > /dev/null
+          cargo run -p genegis-cli -- agent run "名古屋市の15分都市アクセシビリティを表示"
+      - name: Regenerate deterministic binary fixtures
+        run: |
+          cargo run -p genegis-raster --example write_ndvi_fixture
+          cargo run -p genegis-pointcloud --example write_change_fixture
+      - name: UC-1 — evacuation access smoke
+        run: |
+          cargo run -p genegis-cli -- workflow run nagoya-evacuation-access --execute > /dev/null
+          cargo run -p genegis-cli -- agent run "名古屋市の洪水浸水リスクと避難所アクセシビリティを表示"
+      - name: UC-3 — NDVI time series smoke
+        run: |
+          cargo run -p genegis-cli -- workflow run sentinel-ndvi-timeseries --execute > /dev/null
+          cargo run -p genegis-cli -- agent run "名古屋周辺のNDVI時系列をSentinel-2から作成して検証"
+      - name: UC-5 — point-cloud change smoke
+        run: |
+          cargo run -p genegis-cli -- workflow run copc-change-detect --execute > /dev/null
+          cargo run -p genegis-cli -- agent run "2時期の点群から建物・植生の変化を抽出して検証"
       - name: Phase 9 gamma — ask + overlay smoke
         run: |
           cargo run -p genegis-cli -- ask "名古屋 GeoParquet 人口密度を表示" --no-html

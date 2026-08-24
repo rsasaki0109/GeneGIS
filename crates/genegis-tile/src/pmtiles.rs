@@ -1,12 +1,14 @@
-//! PMTiles v3 header, directory, and tile range selection.
+//! PMTiles v3 header, directory, and tile range selection plus local archive writes.
 
 use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use genegis_storage::{
     fetch_http_range, is_remote_uri, probe_http_content_length, read_local_range, ByteRange,
     IoRequestEvidence,
 };
 use serde::{Deserialize, Serialize};
-use std::io::Read;
+use std::io::{Read, Write};
 use thiserror::Error;
 
 const HEADER_BYTES: u64 = 127;
@@ -277,23 +279,7 @@ fn parse_header(bytes: &[u8], object_bytes: u64) -> Result<PmTilesHeader, PmTile
 }
 
 fn decode_directory(bytes: &[u8], compression: u8) -> Result<Vec<DirectoryEntry>, PmTilesError> {
-    let decoded = match compression {
-        1 => bytes.to_vec(),
-        2 => {
-            let mut output = Vec::new();
-            GzDecoder::new(bytes)
-                .take(MAX_DIRECTORY_BYTES + 1)
-                .read_to_end(&mut output)
-                .map_err(|error| PmTilesError::Invalid(format!("gzip directory: {error}")))?;
-            if output.len() as u64 > MAX_DIRECTORY_BYTES {
-                return Err(PmTilesError::Invalid(
-                    "directory decompression budget exceeded".into(),
-                ));
-            }
-            output
-        }
-        other => return Err(PmTilesError::UnsupportedCompression(other)),
-    };
+    let decoded = decode_payload(bytes, compression, "directory")?;
     let mut cursor = 0;
     let count = read_varint(&decoded, &mut cursor)? as usize;
     if count == 0 || count > 1_000_000 {
@@ -347,6 +333,35 @@ fn decode_directory(bytes: &[u8], compression: u8) -> Result<Vec<DirectoryEntry>
     Ok(entries)
 }
 
+/// Decode one stored tile payload according to the header compression code.
+///
+/// The range reader returns still-encoded bytes; this helper performs the
+/// transparent gzip step for consumers that need the original payload.
+pub fn decode_tile_payload(bytes: &[u8], tile_compression: u8) -> Result<Vec<u8>, PmTilesError> {
+    decode_payload(bytes, tile_compression, "tile")
+}
+
+fn decode_payload(bytes: &[u8], compression: u8, section: &str) -> Result<Vec<u8>, PmTilesError> {
+    let decoded = match compression {
+        1 => bytes.to_vec(),
+        2 => {
+            let mut output = Vec::new();
+            GzDecoder::new(bytes)
+                .take(MAX_DIRECTORY_BYTES + 1)
+                .read_to_end(&mut output)
+                .map_err(|error| PmTilesError::Invalid(format!("gzip {section}: {error}")))?;
+            if output.len() as u64 > MAX_DIRECTORY_BYTES {
+                return Err(PmTilesError::Invalid(format!(
+                    "{section} decompression budget exceeded"
+                )));
+            }
+            output
+        }
+        other => return Err(PmTilesError::UnsupportedCompression(other)),
+    };
+    Ok(decoded)
+}
+
 fn read_varint(bytes: &[u8], cursor: &mut usize) -> Result<u64, PmTilesError> {
     let mut value = 0_u64;
     for shift in (0..=63).step_by(7) {
@@ -368,6 +383,254 @@ fn find_entry(entries: &[DirectoryEntry], tile_id: u64) -> Option<DirectoryEntry
         .take_while(|entry| entry.tile_id <= tile_id)
         .last()
         .cloned()
+}
+
+/// One tile payload positioned by its tile coordinates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PmTilesTileEntry {
+    /// Zoom level.
+    pub z: u8,
+    /// Tile column.
+    pub x: u32,
+    /// Tile row.
+    pub y: u32,
+    /// Encoded tile bytes stored verbatim.
+    pub bytes: Vec<u8>,
+}
+
+/// Options for writing one local PMTiles v3 archive.
+#[derive(Debug, Clone)]
+pub struct PmTilesWriteOptions {
+    /// JSON metadata stored in the archive metadata section.
+    pub metadata_json: String,
+    /// gzip-compress every tile payload instead of storing raw bytes.
+    pub compress_tiles: bool,
+}
+
+impl PmTilesWriteOptions {
+    /// Options with the supplied metadata and gzip-compressed tiles.
+    pub fn compressed(metadata_json: impl Into<String>) -> Self {
+        Self {
+            metadata_json: metadata_json.into(),
+            compress_tiles: true,
+        }
+    }
+}
+
+/// Summary evidence for one written PMTiles v3 archive.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PmTilesWriteReceipt {
+    /// Final encoded archive size in bytes.
+    pub object_bytes: u64,
+    /// Number of addressed tiles (run-length expanded).
+    pub addressed_tiles: u64,
+    /// Number of directory entries and distinct tile contents.
+    pub entry_count: u64,
+    /// Internal directory compression code written to the header.
+    pub internal_compression: u8,
+    /// Tile payload compression code written to the header.
+    pub tile_compression: u8,
+    /// Minimum zoom derived from entries.
+    pub minimum_zoom: u8,
+    /// Maximum zoom derived from entries.
+    pub maximum_zoom: u8,
+}
+
+/// Write a clustered single-root-directory PMTiles v3 archive to a local path.
+///
+/// The writer emits exactly the subset of PMTiles v3 that
+/// [`read_pmtiles_tile`] consumes fail-closed: no leaf directories, clustered
+/// contiguous tiles, gzip-compressed internal directory. Tile payloads may be
+/// pre-encoded MVT or any opaque media; the archive never interprets them.
+pub fn write_pmtiles_archive(
+    path: &str,
+    entries: &[PmTilesTileEntry],
+    options: &PmTilesWriteOptions,
+) -> Result<PmTilesWriteReceipt, PmTilesError> {
+    if entries.is_empty() {
+        return Err(PmTilesError::Invalid(
+            "archive requires at least one tile entry".into(),
+        ));
+    }
+    let mut sorted: Vec<(u64, &[u8])> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        if entry.bytes.is_empty() {
+            return Err(PmTilesError::Invalid(format!(
+                "tile {}/{}/{} has empty payload",
+                entry.z, entry.x, entry.y
+            )));
+        }
+        let tile_id = zxy_to_tile_id(entry.z, entry.x, entry.y)?;
+        sorted.push((tile_id, &entry.bytes));
+    }
+    sorted.sort_by_key(|(tile_id, _)| *tile_id);
+    let duplicate = sorted.windows(2).any(|pair| pair[0].0 == pair[1].0);
+    if duplicate {
+        return Err(PmTilesError::Invalid(
+            "duplicate tile identity in write request".into(),
+        ));
+    }
+
+    let tile_compression = if options.compress_tiles { 2 } else { 1 };
+    let mut encoded_payloads: Vec<(u64, Vec<u8>)> = Vec::with_capacity(sorted.len());
+    let mut directory: Vec<DirectoryEntry> = Vec::with_capacity(sorted.len());
+    let mut offset = 0_u64;
+    for (tile_id, bytes) in &sorted {
+        let encoded = encode_payload(bytes, tile_compression)?;
+        let length = encoded.len() as u64;
+        encoded_payloads.push((*tile_id, encoded));
+        directory.push(DirectoryEntry {
+            tile_id: *tile_id,
+            offset,
+            length,
+            run_length: 1,
+        });
+        offset += length;
+    }
+
+    let root_directory = gzip(&encode_directory(&directory)?)?;
+    let metadata_bytes = gzip(options.metadata_json.as_bytes())?;
+    let mut encoded_tiles: Vec<u8> = Vec::with_capacity(offset as usize);
+    for (_, payload) in &encoded_payloads {
+        encoded_tiles.extend_from_slice(payload);
+    }
+
+    let root_directory_offset = HEADER_BYTES;
+    let json_metadata_offset = root_directory_offset + root_directory.len() as u64;
+    let tile_data_offset = json_metadata_offset + metadata_bytes.len() as u64;
+    let addressed_tiles = directory.len() as u64;
+    let minimum_zoom = entries
+        .iter()
+        .map(|entry| entry.z)
+        .min()
+        .expect("non-empty");
+    let maximum_zoom = entries
+        .iter()
+        .map(|entry| entry.z)
+        .max()
+        .expect("non-empty");
+
+    let mut archive: Vec<u8> = Vec::with_capacity(tile_data_offset as usize + encoded_tiles.len());
+    let layout = ArchiveLayout {
+        root_length: root_directory.len() as u64,
+        metadata_length: metadata_bytes.len() as u64,
+        tile_data_offset,
+        tile_data_length: encoded_tiles.len() as u64,
+        addressed_tiles,
+        minimum_zoom,
+        maximum_zoom,
+    };
+    archive.extend_from_slice(&build_header(&layout, tile_compression));
+    archive.extend_from_slice(&root_directory);
+    archive.extend_from_slice(&metadata_bytes);
+    archive.extend_from_slice(&encoded_tiles);
+    std::fs::write(path, &archive).map_err(|error| PmTilesError::Storage(error.to_string()))?;
+    Ok(PmTilesWriteReceipt {
+        object_bytes: archive.len() as u64,
+        addressed_tiles,
+        entry_count: directory.len() as u64,
+        internal_compression: 2,
+        tile_compression,
+        minimum_zoom,
+        maximum_zoom,
+    })
+}
+
+fn build_header(layout: &ArchiveLayout, tile_compression: u8) -> [u8; 127] {
+    let mut header = [0_u8; 127];
+    header[..7].copy_from_slice(b"PMTiles");
+    header[7] = 3;
+    let mut put_u64 = |offset: usize, value: u64| {
+        header[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+    };
+    put_u64(8, HEADER_BYTES);
+    put_u64(16, layout.root_length);
+    put_u64(24, HEADER_BYTES + layout.root_length);
+    put_u64(32, layout.metadata_length);
+    put_u64(40, 0);
+    put_u64(48, 0);
+    put_u64(56, layout.tile_data_offset);
+    put_u64(64, layout.tile_data_length);
+    put_u64(72, layout.addressed_tiles);
+    put_u64(80, layout.addressed_tiles);
+    put_u64(88, layout.addressed_tiles);
+    header[96] = 1;
+    header[97] = 2;
+    header[98] = tile_compression;
+    header[99] = 1;
+    header[100] = layout.minimum_zoom;
+    header[101] = layout.maximum_zoom;
+    header
+}
+
+struct ArchiveLayout {
+    root_length: u64,
+    metadata_length: u64,
+    tile_data_offset: u64,
+    tile_data_length: u64,
+    addressed_tiles: u64,
+    minimum_zoom: u8,
+    maximum_zoom: u8,
+}
+
+fn encode_directory(entries: &[DirectoryEntry]) -> Result<Vec<u8>, PmTilesError> {
+    let mut buffer = Vec::new();
+    push_varint(&mut buffer, entries.len() as u64);
+    let mut last_id = 0_u64;
+    for entry in entries {
+        push_varint(&mut buffer, entry.tile_id - last_id);
+        last_id = entry.tile_id;
+    }
+    for entry in entries {
+        push_varint(&mut buffer, entry.run_length);
+    }
+    for entry in entries {
+        push_varint(&mut buffer, entry.length);
+    }
+    for (index, entry) in entries.iter().enumerate() {
+        if index == 0 {
+            push_varint(&mut buffer, entry.offset + 1);
+        } else {
+            let previous = &entries[index - 1];
+            if previous.offset + previous.length == entry.offset {
+                push_varint(&mut buffer, 0);
+            } else {
+                push_varint(&mut buffer, entry.offset + 1);
+            }
+        }
+    }
+    Ok(buffer)
+}
+
+fn push_varint(buffer: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value == 0 {
+            buffer.push(byte);
+            return;
+        }
+        buffer.push(byte | 0x80);
+    }
+}
+
+fn encode_payload(bytes: &[u8], compression: u8) -> Result<Vec<u8>, PmTilesError> {
+    match compression {
+        1 => Ok(bytes.to_vec()),
+        2 => gzip(bytes),
+        other => Err(PmTilesError::UnsupportedCompression(other)),
+    }
+}
+
+fn gzip(bytes: &[u8]) -> Result<Vec<u8>, PmTilesError> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(bytes)
+        .map_err(|error| PmTilesError::Storage(error.to_string()))?;
+    encoder
+        .finish()
+        .map_err(|error| PmTilesError::Storage(error.to_string()))
 }
 
 fn zxy_to_tile_id(z: u8, mut x: u32, mut y: u32) -> Result<u64, PmTilesError> {
@@ -398,9 +661,188 @@ fn zxy_to_tile_id(z: u8, mut x: u32, mut y: u32) -> Result<u64, PmTilesError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::{Read as _, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
+
+    mod write_round_trip {
+        use super::*;
+
+        fn sample_entries() -> Vec<PmTilesTileEntry> {
+            vec![
+                PmTilesTileEntry {
+                    z: 6,
+                    x: 30,
+                    y: 25,
+                    bytes: b"tile-a".to_vec(),
+                },
+                PmTilesTileEntry {
+                    z: 10,
+                    x: 908,
+                    y: 403,
+                    bytes: b"tile-c-payload-longer".to_vec(),
+                },
+                PmTilesTileEntry {
+                    z: 9,
+                    x: 454,
+                    y: 202,
+                    bytes: b"tile-b-payload".to_vec(),
+                },
+            ]
+        }
+
+        fn read_all(path: &str) -> Vec<PmTilesTileRead> {
+            sample_entries()
+                .iter()
+                .map(|entry| read_pmtiles_tile(path, entry.z, entry.x, entry.y).unwrap())
+                .collect()
+        }
+
+        fn stored_bytes(read: &PmTilesTileRead) -> Vec<u8> {
+            match read.header.tile_compression {
+                1 => read.bytes.clone(),
+                2 => {
+                    let mut output = Vec::new();
+                    GzDecoder::new(read.bytes.as_slice())
+                        .read_to_end(&mut output)
+                        .unwrap();
+                    output
+                }
+                other => panic!("unexpected tile compression {other}"),
+            }
+        }
+
+        #[test]
+        fn writes_uncompressed_archive_with_exact_byte_roundtrip() {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("raw.pmtiles");
+            let options = PmTilesWriteOptions {
+                metadata_json: r#"{"attribution":"GeneGIS"}"#.into(),
+                compress_tiles: false,
+            };
+            let receipt =
+                write_pmtiles_archive(path.to_str().unwrap(), &sample_entries(), &options).unwrap();
+            assert_eq!(receipt.addressed_tiles, 3);
+            assert_eq!(receipt.entry_count, 3);
+            assert_eq!(receipt.minimum_zoom, 6);
+            assert_eq!(receipt.maximum_zoom, 10);
+            assert_eq!(receipt.internal_compression, 2);
+            assert_eq!(
+                receipt.object_bytes,
+                std::fs::metadata(&path).unwrap().len()
+            );
+            // Metadata section is gzip-compressed per PMTiles v3; decode and compare.
+            let raw = std::fs::read(&path).unwrap();
+            let root_length = u64::from_le_bytes(raw[16..24].try_into().unwrap());
+            let metadata_offset = 127 + root_length as usize;
+            let metadata_length = u64::from_le_bytes(raw[32..40].try_into().unwrap()) as usize;
+            let decoded_metadata = decode_payload(
+                &raw[metadata_offset..metadata_offset + metadata_length],
+                2,
+                "metadata",
+            )
+            .unwrap();
+            assert_eq!(decoded_metadata, options.metadata_json.as_bytes());
+
+            for read in read_all(path.to_str().unwrap()) {
+                assert_eq!(read.requests.len(), 3);
+                assert!(read
+                    .requests
+                    .iter()
+                    .all(|request| request.http_status.is_none()));
+                let entries = sample_entries();
+                let expected = entries
+                    .iter()
+                    .find(|entry| {
+                        zxy_to_tile_id(entry.z, entry.x, entry.y).unwrap() == read.tile_id
+                    })
+                    .expect("entry for tile id");
+                assert_eq!(stored_bytes(&read), expected.bytes);
+                assert_eq!(read.header.version, 3);
+                assert_eq!(read.header.internal_compression, 2);
+                assert_eq!(read.header.minimum_zoom, 6);
+                assert_eq!(read.header.maximum_zoom, 10);
+            }
+        }
+
+        #[test]
+        fn writes_gzip_clustered_archive_readable_through_range_selection() {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("gz.pmtiles");
+            let mut entries = sample_entries();
+            entries[2].bytes = b"compressible-payload-".repeat(512);
+            let read_entries = entries.clone();
+            let receipt = write_pmtiles_archive(
+                path.to_str().unwrap(),
+                &entries,
+                &PmTilesWriteOptions::compressed("{}"),
+            )
+            .unwrap();
+            assert_eq!(receipt.tile_compression, 2);
+            let raw_bytes = write_pmtiles_archive(
+                temp.path().join("raw.pmtiles").to_str().unwrap(),
+                &entries,
+                &PmTilesWriteOptions {
+                    metadata_json: "{}".into(),
+                    compress_tiles: false,
+                },
+            )
+            .unwrap()
+            .object_bytes;
+            assert!(std::fs::metadata(path.to_str().unwrap()).unwrap().len() < raw_bytes);
+            for entry in &read_entries {
+                let read =
+                    read_pmtiles_tile(path.to_str().unwrap(), entry.z, entry.x, entry.y).unwrap();
+                assert_eq!(read.header.tile_compression, 2);
+            }
+        }
+
+        #[test]
+        fn rejects_empty_entry_lists_and_duplicate_identities() {
+            let temp = tempfile::tempdir().unwrap();
+            let empty = write_pmtiles_archive(
+                temp.path().join("empty.pmtiles").to_str().unwrap(),
+                &[],
+                &PmTilesWriteOptions::compressed("{}"),
+            );
+            assert!(matches!(empty, Err(PmTilesError::Invalid(_))));
+            let duplicated = write_pmtiles_archive(
+                temp.path().join("dupe.pmtiles").to_str().unwrap(),
+                &[
+                    PmTilesTileEntry {
+                        z: 0,
+                        x: 0,
+                        y: 0,
+                        bytes: b"one".to_vec(),
+                    },
+                    PmTilesTileEntry {
+                        z: 0,
+                        x: 0,
+                        y: 0,
+                        bytes: b"two".to_vec(),
+                    },
+                ],
+                &PmTilesWriteOptions::compressed("{}"),
+            );
+            assert!(matches!(duplicated, Err(PmTilesError::Invalid(_))));
+        }
+
+        #[test]
+        fn rejects_empty_tile_payloads() {
+            let temp = tempfile::tempdir().unwrap();
+            let result = write_pmtiles_archive(
+                temp.path().join("void.pmtiles").to_str().unwrap(),
+                &[PmTilesTileEntry {
+                    z: 1,
+                    x: 0,
+                    y: 0,
+                    bytes: Vec::new(),
+                }],
+                &PmTilesWriteOptions::compressed("{}"),
+            );
+            assert!(matches!(result, Err(PmTilesError::Invalid(_))));
+        }
+    }
 
     fn fixture() -> Vec<u8> {
         let root = [1_u8, 0, 1, 5, 1];

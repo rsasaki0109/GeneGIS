@@ -1,7 +1,9 @@
 use chrono::Utc;
 use genegis_ai::{plan_with_config, PlanResult, WorkflowId, DEFAULT_AGENT_PLAN_PATH};
 use genegis_analysis::{
-    build_ask_result_from_dispatch, build_geoparquet_ask_result, build_remote_cog_ask_result,
+    build_accessibility_ask_result, build_ask_result_from_dispatch, build_change_ask_result,
+    build_dashboard_ask_result, build_evacuation_ask_result, build_flood_ask_result,
+    build_geoparquet_ask_result, build_ndvi_ask_result, build_remote_cog_ask_result,
     build_stac_collection_ask_result, execute_workflow_for_plan_with_origin,
     verify_executed_workflow, ExecutedWorkflow, ExecutedWorkflowOutput, NagoyaDispatch,
 };
@@ -157,6 +159,37 @@ impl AgentOrchestrator {
                         .map_err(|err| AgentError::Message(err.to_string()))?;
                 ask.summary
             }
+            ExecutedWorkflow::DashboardExport(report) => {
+                let ask = build_dashboard_ask_result(prompt, &plan, report, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::FloodExposure(analysis) => {
+                let ask = build_flood_ask_result(prompt, &plan, analysis, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::Accessibility(analysis) => {
+                let ask =
+                    build_accessibility_ask_result(prompt, &plan, analysis, dataset, verified)
+                        .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::Evacuation(analysis) => {
+                let ask = build_evacuation_ask_result(prompt, &plan, analysis, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::NdviTimeseries(analysis) => {
+                let ask = build_ndvi_ask_result(prompt, &plan, analysis, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
+            ExecutedWorkflow::PointCloudChange(analysis) => {
+                let ask = build_change_ask_result(prompt, &plan, analysis, dataset, verified)
+                    .map_err(|err| AgentError::Message(err.to_string()))?;
+                ask.summary
+            }
         };
 
         Ok(AgentRun {
@@ -188,6 +221,24 @@ fn legacy_workflow(executed: &ExecutedWorkflowOutput) -> ExecutedWorkflow {
         }
         ExecutedWorkflowOutput::StacCollection(collection) => {
             ExecutedWorkflow::StacCollection(collection.clone())
+        }
+        ExecutedWorkflowOutput::DashboardExport(report) => {
+            ExecutedWorkflow::DashboardExport(report.clone())
+        }
+        ExecutedWorkflowOutput::FloodExposure(analysis) => {
+            ExecutedWorkflow::FloodExposure(analysis.clone())
+        }
+        ExecutedWorkflowOutput::Accessibility(analysis) => {
+            ExecutedWorkflow::Accessibility(analysis.clone())
+        }
+        ExecutedWorkflowOutput::Evacuation(analysis) => {
+            ExecutedWorkflow::Evacuation(analysis.clone())
+        }
+        ExecutedWorkflowOutput::NdviTimeseries(analysis) => {
+            ExecutedWorkflow::NdviTimeseries(analysis.clone())
+        }
+        ExecutedWorkflowOutput::PointCloudChange(analysis) => {
+            ExecutedWorkflow::PointCloudChange(analysis.clone())
         }
     }
 }
@@ -340,6 +391,71 @@ fn record_execute_step(
             format!("Fetch external STAC collection (attempt {attempt})"),
             collection.summary_json(),
         ),
+        (WorkflowId::NagoyaFloodExposure, ExecutedWorkflow::FloodExposure(analysis)) => (
+            "run_flood_exposure",
+            "flood_executor",
+            format!("Overlay flood zones over ward population (attempt {attempt})"),
+            serde_json::json!({
+                "ward_count": analysis.features.len(),
+                "zone_count": analysis.zone_count,
+                "samples_per_axis": analysis.samples_per_axis,
+            }),
+        ),
+        (WorkflowId::NagoyaXminCity, ExecutedWorkflow::Accessibility(analysis)) => (
+            "run_accessibility_score",
+            "network_executor",
+            format!("Score 15-minute accessibility over walk graph (attempt {attempt})"),
+            serde_json::json!({
+                "ward_count": analysis.features.len(),
+                "threshold_minutes": analysis.threshold_minutes,
+                "graph_nodes": analysis.node_count,
+                "graph_edges": analysis.edge_count,
+            }),
+        ),
+        (WorkflowId::NagoyaEvacuationAccess, ExecutedWorkflow::Evacuation(analysis)) => (
+            "run_evacuation_access",
+            "network_executor",
+            format!("Route ward centroids to shelters with flood penalties (attempt {attempt})"),
+            serde_json::json!({
+                "ward_count": analysis.features.len(),
+                "shelter_count": analysis.shelter_count,
+                "flooded_edges": analysis.flooded_edge_count,
+                "graph_nodes": analysis.node_count,
+            }),
+        ),
+        (WorkflowId::SentinelNdviTimeseries, ExecutedWorkflow::NdviTimeseries(analysis)) => (
+            "run_index_timeseries",
+            "raster_executor",
+            format!("Compute NDVI time series over STAC epochs (attempt {attempt})"),
+            serde_json::json!({
+                "epoch_count": analysis.epochs.len(),
+                "ward_count": analysis.features.len(),
+                "raster_width": analysis.width,
+                "raster_height": analysis.height,
+            }),
+        ),
+        (WorkflowId::CopcChangeDetect, ExecutedWorkflow::PointCloudChange(analysis)) => (
+            "run_copc_change",
+            "pointcloud_executor",
+            format!("Diff two point-cloud epochs on a shared grid (attempt {attempt})"),
+            serde_json::json!({
+                "epoch_a_points": analysis.epoch_a_points,
+                "epoch_b_points": analysis.epoch_b_points,
+                "cells_compared": analysis.cells_compared,
+                "class_count": analysis.summaries.len(),
+            }),
+        ),
+        (WorkflowId::DashboardExportDemo, ExecutedWorkflow::DashboardExport(report)) => (
+            "run_pmtiles_export",
+            "dashboard_executor",
+            format!("Export verified density result as PMTiles (attempt {attempt})"),
+            serde_json::json!({
+                "tile_count": report.tile_count,
+                "ward_count": report.ward_count,
+                "object_bytes": report.object_bytes,
+                "zoom_range": [report.minimum_zoom, report.maximum_zoom],
+            }),
+        ),
         _ => {
             return Err(AgentError::Message(format!(
                 "workflow mismatch for {}",
@@ -388,6 +504,36 @@ fn record_verify_step(
             "stac_collection_verify",
             "catalog_verifier",
             format!("Validate STAC collection payload (attempt {attempt})"),
+        ),
+        WorkflowId::DashboardExportDemo => (
+            "tile_roundtrip_verify",
+            "tile_verifier",
+            format!("Round-trip sampled PMTiles tiles byte-exactly (attempt {attempt})"),
+        ),
+        WorkflowId::NagoyaFloodExposure => (
+            "duckdb_verify",
+            "duckdb_verifier",
+            format!("Re-aggregate exposure rows in DuckDB (attempt {attempt})"),
+        ),
+        WorkflowId::NagoyaXminCity => (
+            "route_sanity_verify",
+            "network_verifier",
+            format!("Check route sanity and threshold monotonicity (attempt {attempt})"),
+        ),
+        WorkflowId::NagoyaEvacuationAccess => (
+            "route_sanity_verify",
+            "network_verifier",
+            format!("Check penalty monotonicity and triangle inequality (attempt {attempt})"),
+        ),
+        WorkflowId::SentinelNdviTimeseries => (
+            "index_range_verify",
+            "index_verifier",
+            format!("Check NDVI range, pixel reconciliation and determinism (attempt {attempt})"),
+        ),
+        WorkflowId::CopcChangeDetect => (
+            "volume_delta_verify",
+            "volume_verifier",
+            format!("Check volume signs, control stability and replay (attempt {attempt})"),
         ),
     };
 

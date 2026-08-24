@@ -10,9 +10,11 @@ pub mod registry;
 pub mod stac;
 
 pub use catalog::{
-    alpha_catalog, extended_catalog, nagoya_wards_geojson_path, nagoya_wards_geoparquet_path,
-    repo_root, Catalog, EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_DENSITY_ID,
-    NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
+    alpha_catalog, extended_catalog, nagoya_flood_zones_path, nagoya_pointcloud_epoch_a_path,
+    nagoya_pointcloud_epoch_b_path, nagoya_pois_path, nagoya_shelters_path,
+    nagoya_walk_network_path, nagoya_wards_geojson_path, nagoya_wards_geoparquet_path, repo_root,
+    Catalog, EXTERNAL_STAC_DEMO_ID, LOCAL_COG_DEMO_ID, NAGOYA_FLOOD_ZONES_ID, NAGOYA_SHELTERS_ID,
+    NAGOYA_WARDS_DENSITY_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID, SENTINEL_NDVI_DEMO_ID,
 };
 pub use dataset::{DatasetFormat, DatasetRecord};
 pub use error::CatalogError;

@@ -1,14 +1,37 @@
 //! Spatial analysis engine — workflow execution and operators.
 
+pub mod accessibility;
+pub mod change;
+pub mod dashboard;
 pub mod error;
+pub mod evacuation;
 pub mod export;
+pub mod flood;
 pub mod nagoya;
+pub mod ndvi;
 pub mod pipeline;
 pub mod preview;
 pub mod result;
 
+pub use accessibility::{
+    run_nagoya_accessibility, run_nagoya_accessibility_with_threshold, AccessibilityAnalysis,
+    AccessibilityFeature, DEFAULT_THRESHOLD_MINUTES,
+};
+pub use change::{
+    run_pointcloud_change_detection, ChangeClassSummary, ChangeDetectionAnalysis,
+    CHANGE_CELL_SIZE_M, CONTROL_AREA,
+};
+pub use dashboard::{export_dashboard_pmtiles, DashboardExportOptions, DashboardExportReport};
 pub use error::AnalysisError;
+pub use evacuation::{
+    run_nagoya_evacuation_access, run_nagoya_evacuation_access_with_penalty, EvacuationAnalysis,
+    EvacuationFeature, DEFAULT_DEPTH_SPEED_PENALTY_PER_M,
+};
 pub use export::{export_html_map, export_map_svg, export_png_map, ExportError};
+pub use flood::{
+    export_flood_html_map, run_nagoya_flood_exposure, run_nagoya_flood_exposure_with_options,
+    FloodExposureAnalysis, FloodExposureFeature, FloodZone, DEFAULT_SAMPLES_PER_AXIS,
+};
 pub use nagoya::{
     canonical_nagoya_execution_digest, default_nagoya_data_path, default_nagoya_dataset_id,
     nagoya_population_density_workflow_for_dataset, run_nagoya_population_density,
@@ -16,15 +39,22 @@ pub use nagoya::{
     run_nagoya_population_density_geoparquet, verify_nagoya_analysis, NagoyaArtifactDigests,
     NagoyaExecutionOutput, NagoyaWorkflowExecutor,
 };
+pub use ndvi::{
+    run_nagoya_ndvi_timeseries, NdviEpochSummary, NdviFeature, NdviTimeseriesAnalysis,
+    CHANGE_THRESHOLD_NDVI,
+};
 pub use pipeline::{
-    build_ask_result, build_ask_result_from_dispatch, build_geoparquet_ask_result,
+    build_accessibility_ask_result, build_ask_result, build_ask_result_from_dispatch,
+    build_change_ask_result, build_dashboard_ask_result, build_evacuation_ask_result,
+    build_flood_ask_result, build_geoparquet_ask_result, build_ndvi_ask_result,
     build_remote_cog_ask_result, build_stac_collection_ask_result, execute_from_plan,
     execute_from_plan_with_origin, execute_workflow_for_plan,
     execute_workflow_for_plan_with_origin, execution_receipt_for_workflow,
     execution_receipt_for_workflow_with_checks, execution_receipt_for_workflow_with_executor,
     run_analysis_for_plan, run_ask_pipeline, run_ask_pipeline_with_config,
-    run_ask_pipeline_with_config_and_origin, verify_analysis_densities, verify_executed_workflow,
-    verify_geoparquet_features, verify_remote_cog_metadata, verify_stac_collection,
+    run_ask_pipeline_with_config_and_origin, verify_analysis_densities, verify_dashboard_export,
+    verify_evacuation_analysis, verify_executed_workflow, verify_geoparquet_features,
+    verify_ndvi_timeseries_analysis, verify_remote_cog_metadata, verify_stac_collection,
     AskPipelineResult, ExecutedWorkflow, ExecutedWorkflowOutput, NagoyaDispatch,
 };
 pub use preview::{

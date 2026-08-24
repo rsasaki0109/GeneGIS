@@ -21,6 +21,12 @@ const EXECUTOR_TOOLS: &[&str] = &[
     "run_geoparquet_read",
     "run_geoparquet_density",
     "run_stac_fetch",
+    "run_pmtiles_export",
+    "run_flood_exposure",
+    "run_accessibility_score",
+    "run_evacuation_access",
+    "run_index_timeseries",
+    "run_copc_change",
     "verify_retry",
 ];
 
@@ -29,6 +35,10 @@ const VERIFIER_TOOLS: &[&str] = &[
     "cog_metadata_verify",
     "geoparquet_feature_verify",
     "stac_collection_verify",
+    "tile_roundtrip_verify",
+    "route_sanity_verify",
+    "index_range_verify",
+    "volume_delta_verify",
 ];
 
 /// Validate planner tool calls against the Phase 6 allowlist (ADR 0003).

@@ -46,7 +46,14 @@ impl ParsedIntent {
             &["人口密度", "人口", "density", "population density"],
         );
 
-        if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
+        if contains_any(
+            &normalized,
+            &["pmtiles", "ダッシュボード", "dashboard", "タイル配信"],
+        ) {
+            signals.metric = Some("pmtiles_export".into());
+            signals.matched_tokens.push("metric:pmtiles_export".into());
+            score += 0.45;
+        } else if contains_any(&normalized, &["cog", "geotiff", "ラスタ", "raster"])
             && contains_any(&normalized, &["ローカル", "local", "同梱", "bundled"])
         {
             signals.metric = Some("local_cog".into());
@@ -67,6 +74,31 @@ impl ParsedIntent {
         {
             signals.metric = Some("external_stac".into());
             signals.matched_tokens.push("metric:external_stac".into());
+            score += 0.45;
+        } else if contains_any(&normalized, &["点群", "lidar", "copc", "3d変化"]) {
+            signals.metric = Some("change_detect".into());
+            signals.matched_tokens.push("metric:change_detect".into());
+            score += 0.45;
+        } else if contains_any(&normalized, &["ndvi", "植生", "時系列", "sentinel"]) {
+            signals.metric = Some("ndvi_timeseries".into());
+            signals.matched_tokens.push("metric:ndvi_timeseries".into());
+            score += 0.45;
+        } else if contains_any(&normalized, &["避難", "evacuation", "shelter"]) {
+            signals.metric = Some("evacuation_access".into());
+            signals
+                .matched_tokens
+                .push("metric:evacuation_access".into());
+            score += 0.45;
+        } else if contains_any(
+            &normalized,
+            &["15分", "x分", "アクセシビリティ", "walkable", "徒歩圏"],
+        ) {
+            signals.metric = Some("xmin_city".into());
+            signals.matched_tokens.push("metric:xmin_city".into());
+            score += 0.45;
+        } else if contains_any(&normalized, &["洪水", "浸水", "ハザード", "flood"]) {
+            signals.metric = Some("flood_exposure".into());
+            signals.matched_tokens.push("metric:flood_exposure".into());
             score += 0.45;
         } else if has_geoparquet && has_density {
             signals.metric = Some("geoparquet_density".into());

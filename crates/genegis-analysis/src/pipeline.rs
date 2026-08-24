@@ -25,13 +25,19 @@ use genegis_workflow::{
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use crate::accessibility::{run_nagoya_accessibility, AccessibilityAnalysis};
+use crate::change::{run_pointcloud_change_detection, ChangeDetectionAnalysis};
+use crate::dashboard::{export_dashboard_pmtiles, DashboardExportOptions, DashboardExportReport};
 use crate::error::AnalysisError;
+use crate::evacuation::{run_nagoya_evacuation_access, EvacuationAnalysis};
 use crate::export::{export_html_map, export_png_map};
+use crate::flood::{export_flood_html_map, run_nagoya_flood_exposure, FloodExposureAnalysis};
 use crate::nagoya::{
     canonical_nagoya_execution_digest, nagoya_population_density_workflow_for_dataset,
     nagoya_source_assurance, nagoya_verification_observations, verify_nagoya_analysis,
     NagoyaArtifactDigests, NagoyaExecutionOutput, NagoyaWorkflowExecutor,
 };
+use crate::ndvi::{run_nagoya_ndvi_timeseries, NdviTimeseriesAnalysis};
 use crate::result::{
     AnalysisResult, EngineIdentity, ExecutionReceipt, VerificationCheck, VerificationReport,
 };
@@ -43,16 +49,29 @@ pub enum ExecutedWorkflow {
     CogMetadata(CogInfo),
     Geoparquet(VectorDataset),
     StacCollection(StacCollection),
+    DashboardExport(DashboardExportReport),
+    FloodExposure(FloodExposureAnalysis),
+    Accessibility(AccessibilityAnalysis),
+    Evacuation(EvacuationAnalysis),
+    NdviTimeseries(NdviTimeseriesAnalysis),
+    PointCloudChange(ChangeDetectionAnalysis),
 }
 
 /// Internal/public additive form retaining the single CommandExecution
 /// payload needed to build an ask result without running the executor twice.
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // payload variants mirror ExecutedWorkflow precedent
 pub enum ExecutedWorkflowOutput {
     NagoyaDensity(NagoyaDispatch),
     CogMetadata(CogInfo),
     Geoparquet(VectorDataset),
     StacCollection(StacCollection),
+    DashboardExport(DashboardExportReport),
+    FloodExposure(FloodExposureAnalysis),
+    Accessibility(AccessibilityAnalysis),
+    Evacuation(EvacuationAnalysis),
+    NdviTimeseries(NdviTimeseriesAnalysis),
+    PointCloudChange(ChangeDetectionAnalysis),
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +151,29 @@ pub fn run_analysis_for_plan(
             "stac collection workflow does not produce AnalysisResult; use execute_workflow_for_plan"
                 .into(),
         )),
+        (ExecutedWorkflow::DashboardExport(_), _) => Err(AnalysisError::Message(
+            "dashboard export workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
+        (ExecutedWorkflow::FloodExposure(_), _) => Err(AnalysisError::Message(
+            "flood exposure workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
+        (ExecutedWorkflow::Accessibility(_), _) => Err(AnalysisError::Message(
+            "accessibility workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
+        (ExecutedWorkflow::Evacuation(_), _) => Err(AnalysisError::Message(
+            "evacuation workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
+        (ExecutedWorkflow::NdviTimeseries(_), _) => Err(AnalysisError::Message(
+            "ndvi workflow does not produce AnalysisResult; use execute_workflow_for_plan".into(),
+        )),
+        (ExecutedWorkflow::PointCloudChange(_), _) => Err(AnalysisError::Message(
+            "pointcloud change workflow does not produce AnalysisResult; use execute_workflow_for_plan"
+                .into(),
+        )),
     }
 }
 
@@ -161,6 +203,131 @@ pub fn execute_workflow_for_plan_with_origin(
             let execution = execute_nagoya_with_dispatch(&dataset_record, origin)?;
             Ok((
                 ExecutedWorkflowOutput::NagoyaDensity(execution),
+                dataset_record,
+            ))
+        }
+        WorkflowId::DashboardExportDemo => {
+            let output_path = std::path::Path::new(".genegis").join("dashboard.pmtiles");
+            if let Some(parent) = output_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|error| AnalysisError::Message(error.to_string()))?;
+            }
+            let analysis = crate::nagoya::run_nagoya_population_density(&dataset_record.uri)
+                .map_err(|error| AnalysisError::Message(error.to_string()))?;
+            let report = export_dashboard_pmtiles(
+                &analysis,
+                output_path.to_str().ok_or_else(|| {
+                    AnalysisError::Message("dashboard output path is not UTF-8".into())
+                })?,
+                &DashboardExportOptions::default(),
+            )?;
+            if !report.verification_passed {
+                return Err(AnalysisError::Message(
+                    "dashboard export verification failed; archive withheld".into(),
+                ));
+            }
+            Ok((
+                ExecutedWorkflowOutput::DashboardExport(report),
+                dataset_record,
+            ))
+        }
+        WorkflowId::NagoyaFloodExposure => {
+            let analysis = run_nagoya_flood_exposure(
+                genegis_catalog::nagoya_wards_geojson_path(),
+                &dataset_record.uri,
+            )?;
+            if !analysis
+                .verification
+                .checks
+                .iter()
+                .all(|check| check.passed)
+            {
+                return Err(AnalysisError::Message(
+                    "flood exposure verification failed; map withheld".into(),
+                ));
+            }
+            Ok((
+                ExecutedWorkflowOutput::FloodExposure(analysis),
+                dataset_record,
+            ))
+        }
+        WorkflowId::NagoyaXminCity => {
+            let analysis = run_nagoya_accessibility(
+                genegis_catalog::nagoya_wards_geojson_path(),
+                &dataset_record.uri,
+                genegis_catalog::nagoya_pois_path(),
+            )?;
+            if !analysis
+                .verification
+                .checks
+                .iter()
+                .all(|check| check.passed)
+            {
+                return Err(AnalysisError::Message(
+                    "accessibility verification failed; map withheld".into(),
+                ));
+            }
+            Ok((
+                ExecutedWorkflowOutput::Accessibility(analysis),
+                dataset_record,
+            ))
+        }
+        WorkflowId::NagoyaEvacuationAccess => {
+            let analysis = run_nagoya_evacuation_access(
+                genegis_catalog::nagoya_wards_geojson_path(),
+                genegis_catalog::nagoya_walk_network_path(),
+                genegis_catalog::nagoya_flood_zones_path(),
+                &dataset_record.uri,
+            )?;
+            if !analysis
+                .verification
+                .checks
+                .iter()
+                .all(|check| check.passed)
+            {
+                return Err(AnalysisError::Message(
+                    "evacuation verification failed; map withheld".into(),
+                ));
+            }
+            Ok((ExecutedWorkflowOutput::Evacuation(analysis), dataset_record))
+        }
+        WorkflowId::SentinelNdviTimeseries => {
+            let analysis = run_nagoya_ndvi_timeseries(
+                &dataset_record.uri,
+                genegis_catalog::nagoya_wards_geojson_path(),
+            )?;
+            if !analysis
+                .verification
+                .checks
+                .iter()
+                .all(|check| check.passed)
+            {
+                return Err(AnalysisError::Message(
+                    "NDVI verification failed; chart withheld".into(),
+                ));
+            }
+            Ok((
+                ExecutedWorkflowOutput::NdviTimeseries(analysis),
+                dataset_record,
+            ))
+        }
+        WorkflowId::CopcChangeDetect => {
+            let analysis = run_pointcloud_change_detection(
+                &dataset_record.uri,
+                genegis_catalog::nagoya_pointcloud_epoch_b_path(),
+            )?;
+            if !analysis
+                .verification
+                .checks
+                .iter()
+                .all(|check| check.passed)
+            {
+                return Err(AnalysisError::Message(
+                    "change-detection verification failed; report withheld".into(),
+                ));
+            }
+            Ok((
+                ExecutedWorkflowOutput::PointCloudChange(analysis),
                 dataset_record,
             ))
         }
@@ -223,8 +390,26 @@ fn legacy_workflow(executed: &ExecutedWorkflowOutput) -> ExecutedWorkflow {
         ExecutedWorkflowOutput::Geoparquet(dataset) => {
             ExecutedWorkflow::Geoparquet(dataset.clone())
         }
+        ExecutedWorkflowOutput::Evacuation(analysis) => {
+            ExecutedWorkflow::Evacuation(analysis.clone())
+        }
+        ExecutedWorkflowOutput::NdviTimeseries(analysis) => {
+            ExecutedWorkflow::NdviTimeseries(analysis.clone())
+        }
+        ExecutedWorkflowOutput::PointCloudChange(analysis) => {
+            ExecutedWorkflow::PointCloudChange(analysis.clone())
+        }
         ExecutedWorkflowOutput::StacCollection(collection) => {
             ExecutedWorkflow::StacCollection(collection.clone())
+        }
+        ExecutedWorkflowOutput::DashboardExport(report) => {
+            ExecutedWorkflow::DashboardExport(report.clone())
+        }
+        ExecutedWorkflowOutput::FloodExposure(analysis) => {
+            ExecutedWorkflow::FloodExposure(analysis.clone())
+        }
+        ExecutedWorkflowOutput::Accessibility(analysis) => {
+            ExecutedWorkflow::Accessibility(analysis.clone())
         }
     }
 }
@@ -275,7 +460,110 @@ pub fn verify_executed_workflow(result: &ExecutedWorkflow) -> Result<bool, Analy
         ExecutedWorkflow::CogMetadata(info) => verify_remote_cog_metadata(info),
         ExecutedWorkflow::Geoparquet(dataset) => verify_geoparquet_features(dataset),
         ExecutedWorkflow::StacCollection(collection) => verify_stac_collection(collection),
+        ExecutedWorkflow::DashboardExport(report) => verify_dashboard_export(report),
+        ExecutedWorkflow::FloodExposure(analysis) => verify_flood_exposure_analysis(analysis),
+        ExecutedWorkflow::Accessibility(analysis) => verify_accessibility_analysis(analysis),
+        ExecutedWorkflow::Evacuation(analysis) => verify_evacuation_analysis(analysis),
+        ExecutedWorkflow::NdviTimeseries(analysis) => verify_ndvi_timeseries_analysis(analysis),
+        ExecutedWorkflow::PointCloudChange(analysis) => verify_change_detection_analysis(analysis),
     }
+}
+
+/// Native route-sanity re-check for accessibility results.
+pub fn verify_accessibility_analysis(
+    analysis: &AccessibilityAnalysis,
+) -> Result<bool, AnalysisError> {
+    Ok(analysis
+        .verification
+        .checks
+        .iter()
+        .all(|check| check.passed)
+        && analysis.features.iter().all(|feature| {
+            feature.accessibility_score >= 0.0
+                && feature.accessibility_score <= 1.0
+                && feature.reachable_pois <= feature.poi_total
+        }))
+}
+
+/// Native route-sanity re-check for evacuation results.
+pub fn verify_evacuation_analysis(analysis: &EvacuationAnalysis) -> Result<bool, AnalysisError> {
+    Ok(analysis
+        .verification
+        .checks
+        .iter()
+        .all(|check| check.passed)
+        && analysis
+            .features
+            .iter()
+            .all(|feature| feature.delay_minutes >= -1e-6))
+}
+
+/// Native re-check for NDVI time-series results.
+pub fn verify_ndvi_timeseries_analysis(
+    analysis: &NdviTimeseriesAnalysis,
+) -> Result<bool, AnalysisError> {
+    Ok(analysis
+        .verification
+        .checks
+        .iter()
+        .all(|check| check.passed)
+        && analysis.epochs.len() >= 2
+        && analysis.features.iter().all(|feature| {
+            feature.mean_ndvi_per_epoch.len() == analysis.epochs.len()
+                && feature
+                    .mean_ndvi_per_epoch
+                    .iter()
+                    .all(|value| (-1.0..=1.0).contains(value))
+        }))
+}
+
+/// Native re-check for point-cloud change detection.
+pub fn verify_change_detection_analysis(
+    analysis: &ChangeDetectionAnalysis,
+) -> Result<bool, AnalysisError> {
+    Ok(analysis
+        .verification
+        .checks
+        .iter()
+        .all(|check| check.passed)
+        && analysis
+            .summaries
+            .iter()
+            .all(|summary| summary.cell_count > 0))
+}
+
+/// Re-aggregate flood exposure rows in DuckDB as the independent verifier.
+pub fn verify_flood_exposure_analysis(
+    analysis: &FloodExposureAnalysis,
+) -> Result<bool, AnalysisError> {
+    let rows: Vec<(String, u64, u64, f64)> = analysis
+        .features
+        .iter()
+        .map(|feature| {
+            (
+                feature.ward_name.clone(),
+                feature.exposed_population,
+                feature.population,
+                feature.exposure_rate,
+            )
+        })
+        .collect();
+    let duckdb_ok = genegis_query::verify_flood_exposure(&rows)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    Ok(duckdb_ok
+        && analysis
+            .verification
+            .checks
+            .iter()
+            .all(|check| check.passed))
+}
+
+/// Fail-closed re-check of a dashboard export receipt plus its artifact.
+pub fn verify_dashboard_export(report: &DashboardExportReport) -> Result<bool, AnalysisError> {
+    let artifact_exists = std::fs::metadata(&report.output_path)
+        .map(|meta| meta.len() == report.object_bytes && report.object_bytes > 0)
+        .unwrap_or(false);
+    Ok(report.verification_passed && !report.checks.is_empty() && artifact_exists)
 }
 
 pub fn verify_analysis_densities(analysis: &AnalysisResult) -> Result<bool, AnalysisError> {
@@ -825,6 +1113,64 @@ pub fn execute_from_plan_with_origin(
             }
             build_geoparquet_ask_result_with_origin(prompt, plan, vector, dataset, verified, origin)
         }
+        ExecutedWorkflowOutput::DashboardExport(report) => {
+            let verified = verify_dashboard_export(&report)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_dashboard_ask_result_with_origin(prompt, plan, report, dataset, verified, origin)
+        }
+        ExecutedWorkflowOutput::FloodExposure(analysis) => {
+            let verified = verify_flood_exposure_analysis(&analysis)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_flood_ask_result_with_origin(prompt, plan, analysis, dataset, verified, origin)
+        }
+        ExecutedWorkflowOutput::Accessibility(analysis) => {
+            let verified = verify_accessibility_analysis(&analysis)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_accessibility_ask_result_with_origin(
+                prompt, plan, analysis, dataset, verified, origin,
+            )
+        }
+        ExecutedWorkflowOutput::Evacuation(analysis) => {
+            let verified = verify_evacuation_analysis(&analysis)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_evacuation_ask_result_with_origin(
+                prompt, plan, analysis, dataset, verified, origin,
+            )
+        }
+        ExecutedWorkflowOutput::NdviTimeseries(analysis) => {
+            let verified = verify_ndvi_timeseries_analysis(&analysis)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_ndvi_ask_result_with_origin(prompt, plan, analysis, dataset, verified, origin)
+        }
+        ExecutedWorkflowOutput::PointCloudChange(analysis) => {
+            let verified = verify_change_detection_analysis(&analysis)?;
+            if !verified {
+                return Err(AnalysisError::Message(
+                    "workflow verification failed".into(),
+                ));
+            }
+            build_change_ask_result_with_origin(prompt, plan, analysis, dataset, verified, origin)
+        }
         ExecutedWorkflowOutput::StacCollection(collection) => {
             let verified = verify_stac_collection(&collection)?;
             if !verified {
@@ -1017,6 +1363,482 @@ pub fn build_stac_collection_ask_result(
     )
 }
 
+/// Assemble the ask result for a verified PMTiles dashboard export.
+pub fn build_flood_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: FloodExposureAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_flood_ask_result_with_origin(prompt, plan, analysis, dataset, verified, CommandOrigin::Ai)
+}
+
+fn build_flood_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: FloodExposureAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let html = export_flood_html_map(&analysis, &plan.resolved.goal);
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "flood_exposure": {
+            "zone_count": analysis.zone_count,
+            "samples_per_axis": analysis.samples_per_axis,
+            "wards": analysis.features.iter().map(|feature| serde_json::json!({
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "exposed_population": feature.exposed_population,
+                "exposure_rate": feature.exposure_rate,
+                "max_depth_class_m": feature.max_depth_class_m,
+            })).collect::<Vec<_>>(),
+        },
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = analysis.verification.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "exposed persons",
+        "grid_sampling_even_odd_point_in_polygon",
+        verified,
+        "duckdb_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "n/a".into(),
+            area_method: "grid_sampling_even_odd_point_in_polygon".into(),
+            density_unit: "exposed persons".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html,
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: verified,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+/// Assemble the ask result for a verified 15-minute-city analysis.
+pub fn build_accessibility_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: AccessibilityAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_accessibility_ask_result_with_origin(
+        prompt,
+        plan,
+        analysis,
+        dataset,
+        verified,
+        CommandOrigin::Ai,
+    )
+}
+
+fn build_accessibility_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: AccessibilityAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "accessibility": {
+            "threshold_minutes": analysis.threshold_minutes,
+            "graph": {
+                "nodes": analysis.node_count,
+                "edges": analysis.edge_count,
+                "length_km": analysis.total_length_km,
+            },
+            "wards": analysis.features.iter().map(|feature| serde_json::json!({
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "reachable_pois": feature.reachable_pois,
+                "poi_total": feature.poi_total,
+                "isochrone_area_m2": feature.isochrone_area_m2,
+                "nearest_cost_minutes": feature.nearest_cost_minutes,
+                "accessibility_score": feature.accessibility_score,
+            })).collect::<Vec<_>>(),
+        },
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = analysis.verification.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "reachable POI share",
+        "dijkstra_grid_walk_graph",
+        verified,
+        "route_sanity_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "n/a".into(),
+            area_method: "dijkstra_grid_walk_graph".into(),
+            density_unit: "reachable POI share".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: false,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+/// Assemble the ask result for a verified flood-penalized evacuation analysis.
+pub fn build_evacuation_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: EvacuationAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_evacuation_ask_result_with_origin(
+        prompt,
+        plan,
+        analysis,
+        dataset,
+        verified,
+        CommandOrigin::Ai,
+    )
+}
+
+fn build_evacuation_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: EvacuationAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "evacuation": {
+            "shelter_count": analysis.shelter_count,
+            "depth_penalty_per_m": analysis.depth_penalty_per_m,
+            "flooded_edge_count": analysis.flooded_edge_count,
+            "flooded_length_share": analysis.flooded_length_share,
+            "graph": {
+                "nodes": analysis.node_count,
+                "edges": analysis.edge_count,
+                "length_km": analysis.total_length_km,
+            },
+            "wards": analysis.features.iter().map(|feature| serde_json::json!({
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "shelter_name": feature.shelter_name,
+                "baseline_minutes": feature.baseline_minutes,
+                "flooded_minutes": feature.flooded_minutes,
+                "delay_minutes": feature.delay_minutes,
+                "flooded_shelter_name": feature.flooded_shelter_name,
+            })).collect::<Vec<_>>(),
+        },
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = analysis.verification.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "evacuation minutes",
+        "dijkstra_penalized_walk_graph",
+        verified,
+        "route_sanity_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "n/a".into(),
+            area_method: "dijkstra_penalized_walk_graph".into(),
+            density_unit: "evacuation minutes".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: false,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+/// Assemble the ask result for a verified NDVI time-series run.
+/// Assemble the ask result for a verified point-cloud change detection run.
+pub fn build_change_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: ChangeDetectionAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_change_ask_result_with_origin(
+        prompt,
+        plan,
+        analysis,
+        dataset,
+        verified,
+        CommandOrigin::Ai,
+    )
+}
+
+fn build_change_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: ChangeDetectionAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "change_detection": {
+            "epoch_a_points": analysis.epoch_a_points,
+            "epoch_b_points": analysis.epoch_b_points,
+            "cell_size_m": analysis.cell_size_m,
+            "cells_compared": analysis.cells_compared,
+            "aoi_bounds_xy": analysis.aoi_bounds_xy,
+            "classes": analysis.summaries.iter().map(|summary| serde_json::json!({
+                "class": summary.class,
+                "cell_count": summary.cell_count,
+                "mean_delta_m": summary.mean_delta_m,
+            })).collect::<Vec<_>>(),
+        },
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = analysis.verification.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "nDSM delta (m)",
+        "cell_p90_height_diff",
+        verified,
+        "volume_delta_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "m²".into(),
+            area_method: "cell_p90_height_diff".into(),
+            density_unit: "nDSM Δ (m)".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: false,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+pub fn build_ndvi_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: NdviTimeseriesAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_ndvi_ask_result_with_origin(prompt, plan, analysis, dataset, verified, CommandOrigin::Ai)
+}
+
+fn build_ndvi_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    analysis: NdviTimeseriesAnalysis,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "ndvi_timeseries": {
+            "epochs": analysis.epochs,
+            "raster": { "width": analysis.width, "height": analysis.height },
+            "wards": analysis.features.iter().map(|feature| serde_json::json!({
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "mean_ndvi_per_epoch": feature.mean_ndvi_per_epoch,
+                "delta_ndvi": feature.delta_ndvi,
+                "change_class": feature.change_class,
+                "sampled_pixels": feature.sampled_pixels,
+            })).collect::<Vec<_>>(),
+        },
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = analysis.verification.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "NDVI",
+        "pixel_center_zonal_mean",
+        verified,
+        "index_range_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "n/a".into(),
+            area_method: "pixel_center_zonal_mean".into(),
+            density_unit: "NDVI".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: false,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+pub fn build_dashboard_ask_result(
+    prompt: &str,
+    plan: &PlanResult,
+    report: DashboardExportReport,
+    dataset: DatasetRecord,
+    verified: bool,
+) -> Result<AskPipelineResult, AnalysisError> {
+    build_dashboard_ask_result_with_origin(
+        prompt,
+        plan,
+        report,
+        dataset,
+        verified,
+        CommandOrigin::Ai,
+    )
+}
+
 fn build_stac_collection_ask_result_with_origin(
     prompt: &str,
     plan: &PlanResult,
@@ -1045,6 +1867,71 @@ fn build_stac_collection_ask_result_with_origin(
         "n/a",
         verified,
         "stac_collection_verify",
+        origin,
+        &checks,
+    )?;
+    add_receipt_to_summary(&mut summary, &execution_receipt)?;
+
+    Ok(AskPipelineResult {
+        prompt: prompt.to_string(),
+        workflow_id: plan.resolved.workflow_id.as_str().to_string(),
+        confidence: plan.resolved.confidence,
+        ambiguities: plan.resolved.ambiguities.clone(),
+        workflow_steps: plan.workflow.steps.len(),
+        verification: VerificationReport {
+            crs: dataset.crs.clone(),
+            coordinate_unit: coordinate_unit_for_crs(&dataset.crs).into(),
+            area_unit: "n/a".into(),
+            area_method: "n/a".into(),
+            density_unit: "n/a".into(),
+            source: source.clone(),
+            checks,
+        },
+        analysis: None,
+        summary,
+        html: String::new(),
+        png: Vec::new(),
+        png_base64: String::new(),
+        duckdb_verified: verified,
+        dataset: dataset.clone(),
+        stac_item: dataset.to_stac_item(),
+        command,
+        execution_receipt,
+        workflow,
+        provenance,
+    })
+}
+
+fn build_dashboard_ask_result_with_origin(
+    prompt: &str,
+    plan: &PlanResult,
+    report: DashboardExportReport,
+    dataset: DatasetRecord,
+    verified: bool,
+    origin: CommandOrigin,
+) -> Result<AskPipelineResult, AnalysisError> {
+    let source = source_metadata(&dataset);
+    let export_json =
+        serde_json::to_value(&report).map_err(|err| AnalysisError::Message(err.to_string()))?;
+    let mut summary = serde_json::json!({
+        "goal": plan.resolved.goal,
+        "dataset": dataset.summary_json(),
+        "dashboard_export": export_json,
+        "verification_passed": verified && source.checksum_verified(),
+        "source": source,
+    });
+    let checks = report.checks.clone();
+
+    let (command, workflow, provenance, execution_receipt) = execution_receipt_with_origin(
+        plan,
+        plan.workflow.clone(),
+        &dataset,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        "tiles",
+        "n/a",
+        verified,
+        "tile_roundtrip_verify",
         origin,
         &checks,
     )?;

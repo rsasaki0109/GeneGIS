@@ -27,10 +27,12 @@ use genegis_vector::{
     GeoParquetReadOptions,
 };
 use genegis_workflow::{
-    external_stac_fetch_template, federated_stac_search_template, local_cog_metadata_template,
-    nagoya_geoparquet_density_template, nagoya_geoparquet_template,
-    nagoya_population_density_template, remote_cog_metadata_template,
-    remote_geoparquet_range_template, stac_endpoint_registry_template,
+    copc_change_detect_template, dashboard_export_template, external_stac_fetch_template,
+    federated_stac_search_template, local_cog_metadata_template, nagoya_evacuation_template,
+    nagoya_flood_exposure_template, nagoya_geoparquet_density_template, nagoya_geoparquet_template,
+    nagoya_population_density_template, nagoya_xmin_city_template, remote_cog_metadata_template,
+    remote_geoparquet_range_template, sentinel_ndvi_timeseries_template,
+    stac_endpoint_registry_template,
 };
 use std::env;
 use std::io::{self, IsTerminal, Read, Write};
@@ -48,6 +50,7 @@ fn main() {
         Some("bench") => handle_bench(&args[2..]),
         Some("storage") => handle_storage(&args[2..]),
         Some("raster") => handle_raster(&args[2..]),
+        Some("tile") => handle_tile(&args[2..]),
         Some("pointcloud") => handle_pointcloud(&args[2..]),
         Some("plugin") => handle_plugin(&args[2..]),
         Some("catalog") => handle_catalog(&args[2..]),
@@ -1585,6 +1588,76 @@ fn handle_pointcloud(args: &[String]) {
     }
 }
 
+fn handle_tile(args: &[String]) {
+    const TILE_USAGE: &str = "Usage: genegis tile export --dataset nagoya-density [-o OUT.pmtiles] [--min-zoom 7] [--max-zoom 11]";
+    match args.first().map(String::as_str) {
+        Some("export") => {
+            let dataset = option_value(args, "--dataset").unwrap_or_else(|| {
+                eprintln!("--dataset is required (supported: nagoya-density)");
+                process::exit(1);
+            });
+            if dataset != "nagoya-density" {
+                eprintln!("Unknown dashboard dataset: {dataset}");
+                process::exit(1);
+            }
+            let output = option_value(args, "-o")
+                .or_else(|| option_value(args, "--out"))
+                .unwrap_or_else(|| ".genegis/dashboard.pmtiles".to_string());
+            let minimum_zoom = option_value(args, "--min-zoom")
+                .map(|value| {
+                    value.parse::<u8>().unwrap_or_else(|_| {
+                        eprintln!("--min-zoom must be an integer zoom level");
+                        process::exit(1);
+                    })
+                })
+                .unwrap_or(7);
+            let maximum_zoom = option_value(args, "--max-zoom")
+                .map(|value| {
+                    value.parse::<u8>().unwrap_or_else(|_| {
+                        eprintln!("--max-zoom must be an integer zoom level");
+                        process::exit(1);
+                    })
+                })
+                .unwrap_or(11);
+            let result = genegis_analysis::run_nagoya_population_density(
+                genegis_analysis::default_nagoya_data_path(),
+            )
+            .unwrap_or_else(|error| {
+                eprintln!("Dashboard export error: {error}");
+                process::exit(1);
+            });
+            if let Some(parent) = std::path::Path::new(&output).parent() {
+                if !parent.as_os_str().is_empty() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+            }
+            let report = match genegis_analysis::export_dashboard_pmtiles(
+                &result,
+                &output,
+                &genegis_analysis::DashboardExportOptions {
+                    minimum_zoom,
+                    maximum_zoom,
+                    ..Default::default()
+                },
+            ) {
+                Ok(report) => report,
+                Err(err) => {
+                    eprintln!("Dashboard export error: {err}");
+                    process::exit(1);
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&report).expect("json"));
+            if !report.verification_passed {
+                process::exit(1);
+            }
+        }
+        _ => {
+            eprintln!("{TILE_USAGE}");
+            process::exit(1);
+        }
+    }
+}
+
 fn handle_raster(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("info") => {
@@ -1783,7 +1856,7 @@ fn handle_agent(args: &[String]) {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(DEFAULT_AGENT_RUN_PATH));
 
-            let prompt = collect_prompt(args);
+            let prompt = collect_prompt(&args[1..]);
             if prompt.is_empty() {
                 eprintln!(
                     "Usage: genegis agent run \"名古屋市の人口密度を表示\" [--plan-only] [--planner rule|llm] [--verify-retries N] [--push] [--link-collab] [--json] [-o FILE]"
@@ -1902,7 +1975,7 @@ fn handle_agent(args: &[String]) {
         Some("plan") => {
             let planner_config = planner_config_from_args(args);
             let output = agent_output_path(args);
-            let prompt = collect_prompt(args);
+            let prompt = collect_prompt(&args[1..]);
             if prompt.is_empty() {
                 eprintln!(
                     "Usage: genegis agent plan \"名古屋市の人口密度を表示\" [--planner rule|llm] [-o FILE]"
@@ -2879,6 +2952,48 @@ fn handle_workflow(args: &[String]) {
                         print_workflow_json(&external_stac_fetch_template());
                     }
                 }
+                "dashboard-export-demo" => {
+                    if execute {
+                        run_dashboard_export_execute();
+                    } else {
+                        print_workflow_json(&dashboard_export_template());
+                    }
+                }
+                "nagoya-flood-exposure" => {
+                    if execute {
+                        run_flood_exposure_execute();
+                    } else {
+                        print_workflow_json(&nagoya_flood_exposure_template());
+                    }
+                }
+                "nagoya-xmin-city" => {
+                    if execute {
+                        run_xmin_city_execute();
+                    } else {
+                        print_workflow_json(&nagoya_xmin_city_template());
+                    }
+                }
+                "nagoya-evacuation-access" => {
+                    if execute {
+                        run_evacuation_execute();
+                    } else {
+                        print_workflow_json(&nagoya_evacuation_template());
+                    }
+                }
+                "sentinel-ndvi-timeseries" => {
+                    if execute {
+                        run_ndvi_execute();
+                    } else {
+                        print_workflow_json(&sentinel_ndvi_timeseries_template());
+                    }
+                }
+                "copc-change-detect" => {
+                    if execute {
+                        run_change_execute();
+                    } else {
+                        print_workflow_json(&copc_change_detect_template());
+                    }
+                }
                 _ => {
                     eprintln!("Unknown workflow: {name}");
                     process::exit(1);
@@ -2887,11 +3002,164 @@ fn handle_workflow(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet|nagoya-geoparquet-density|external-stac-demo] [--execute] [--html] [--png] [-o FILE]"
+                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet|nagoya-geoparquet-density|external-stac-demo|dashboard-export-demo|
+                                             nagoya-flood-exposure|nagoya-xmin-city] [--execute] [--html] [--png] [-o FILE]"
             );
             process::exit(1);
         }
     }
+}
+
+fn run_xmin_city_execute() {
+    let plan_prompt = "名古屋市の15分都市アクセシビリティを表示";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan_with_origin(
+        plan_prompt,
+        &plan,
+        genegis_core::CommandOrigin::Cli,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_change_execute() {
+    let plan_prompt = "2時期の点群から建物・植生の変化を抽出して検証";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan_with_origin(
+        plan_prompt,
+        &plan,
+        genegis_core::CommandOrigin::Cli,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_ndvi_execute() {
+    let plan_prompt = "名古屋周辺のNDVI時系列をSentinel-2から作成して検証";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan_with_origin(
+        plan_prompt,
+        &plan,
+        genegis_core::CommandOrigin::Cli,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_evacuation_execute() {
+    let plan_prompt = "名古屋市の洪水浸水リスクと避難所アクセシビリティを表示";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan_with_origin(
+        plan_prompt,
+        &plan,
+        genegis_core::CommandOrigin::Cli,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_flood_exposure_execute() {
+    let plan_prompt = "名古屋市の洪水浸水リスクと人口曝露を表示";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan_with_origin(
+        plan_prompt,
+        &plan,
+        genegis_core::CommandOrigin::Cli,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_dashboard_export_execute() {
+    let plan_prompt = "名古屋市の人口密度をPMTilesダッシュボードに書き出し";
+    let plan = match genegis_ai::plan_with_config(plan_prompt, &Default::default()) {
+        Ok(plan) => plan,
+        Err(err) => {
+            eprintln!("Planner error: {err}");
+            process::exit(1);
+        }
+    };
+    let result = match genegis_analysis::execute_from_plan(plan_prompt, &plan) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Workflow error: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result.summary).expect("json")
+    );
 }
 
 fn print_help() {
@@ -2910,6 +3178,12 @@ Usage:
   genegis bench equivalence --json                 Native/DuckDB/GDAL 20+ case corpus
   genegis storage fetch URL [--range START-END]    HTTP range-read smoke fetch
   genegis raster info PATH                         COG / GeoTIFF metadata JSON (local or URL)
+  genegis tile export --dataset nagoya-density     Verified PMTiles dashboard bundle + provenance
+  genegis workflow run nagoya-flood-exposure --execute  Flood × population exposure overlay (UC-1)
+  genegis workflow run nagoya-xmin-city --execute   15-minute-city accessibility scores (UC-4)
+  genegis workflow run nagoya-evacuation-access --execute  Flood-penalized evacuation routing (UC-1)
+  genegis workflow run sentinel-ndvi-timeseries --execute NDVI time series from STAC epochs (UC-3)
+  genegis workflow run copc-change-detect --execute   Point-cloud epoch change detection (UC-5)
   genegis pointcloud info PATH|URL                 COPC metadata JSON (local or HTTP range-read)
   genegis plugin list [DIR]                        List plugin manifests (default: ./plugins)
   genegis plugin info BUNDLE_DIR                   Show one plugin manifest + effective caps

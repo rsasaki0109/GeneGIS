@@ -30,6 +30,13 @@ impl DatasetFormat {
             media_type: "image/tiff".into(),
         }
     }
+
+    pub fn las() -> Self {
+        Self {
+            kind: "las".into(),
+            media_type: "application/vnd.las".into(),
+        }
+    }
 }
 
 /// Catalog entry describing a discoverable dataset.

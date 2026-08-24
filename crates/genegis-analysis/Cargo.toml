@@ -16,7 +16,10 @@ genegis-ai = { path = "../genegis-ai" }
 genegis-catalog = { path = "../genegis-catalog" }
 genegis-query = { path = "../genegis-query" }
 genegis-render = { path = "../genegis-render" }
+genegis-network = { path = "../genegis-network" }
+genegis-pointcloud = { path = "../genegis-pointcloud" }
 genegis-style = { path = "../genegis-style" }
+genegis-tile = { path = "../genegis-tile" }
 genegis-vector = { path = "../genegis-vector" }
 genegis-raster = { path = "../genegis-raster" }
 genegis-workflow = { path = "../genegis-workflow" }
@@ -30,3 +33,4 @@ uuid.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+tempfile = "3"

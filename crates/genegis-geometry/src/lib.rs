@@ -4,6 +4,7 @@ pub mod area;
 pub mod bbox;
 pub mod point;
 pub mod polygon;
+pub mod predicate;
 
 pub use area::{
     area_km2_for_crs, area_km2_rings_for_crs, ellipsoidal_area_km2_rings,
@@ -14,3 +15,4 @@ pub use area::{
 pub use bbox::BoundingBox;
 pub use point::{Coord, Point};
 pub use polygon::PolygonRing;
+pub use predicate::{point_in_polygon_parts, point_in_ring};

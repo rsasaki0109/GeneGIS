@@ -12,6 +12,7 @@ members = [
     "crates/genegis-raster",
     "crates/genegis-pointcloud",
     "crates/genegis-tile",
+    "crates/genegis-network",
     "crates/genegis-render",
     "crates/genegis-style",
     "crates/genegis-query",

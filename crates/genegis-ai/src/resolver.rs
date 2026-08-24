@@ -15,6 +15,12 @@ pub enum WorkflowId {
     NagoyaGeoparquet,
     NagoyaGeoparquetDensity,
     ExternalStacDemo,
+    DashboardExportDemo,
+    NagoyaFloodExposure,
+    NagoyaXminCity,
+    NagoyaEvacuationAccess,
+    SentinelNdviTimeseries,
+    CopcChangeDetect,
 }
 
 impl WorkflowId {
@@ -26,6 +32,12 @@ impl WorkflowId {
             Self::NagoyaGeoparquet => "nagoya-geoparquet",
             Self::NagoyaGeoparquetDensity => "nagoya-geoparquet-density",
             Self::ExternalStacDemo => "external-stac-demo",
+            Self::DashboardExportDemo => "dashboard-export-demo",
+            Self::NagoyaFloodExposure => "nagoya-flood-exposure",
+            Self::NagoyaXminCity => "nagoya-xmin-city",
+            Self::NagoyaEvacuationAccess => "nagoya-evacuation-access",
+            Self::SentinelNdviTimeseries => "sentinel-ndvi-timeseries",
+            Self::CopcChangeDetect => "copc-change-detect",
         }
     }
 
@@ -37,6 +49,12 @@ impl WorkflowId {
             Self::NagoyaGeoparquet => &["nagoya", "geoparquet", "demo"],
             Self::NagoyaGeoparquetDensity => &["nagoya", "geoparquet", "density"],
             Self::ExternalStacDemo => &["stac", "external", "demo"],
+            Self::DashboardExportDemo => &["nagoya", "density", "population"],
+            Self::NagoyaFloodExposure => &["nagoya", "flood", "hazard"],
+            Self::NagoyaXminCity => &["nagoya", "walk", "network"],
+            Self::NagoyaEvacuationAccess => &["nagoya", "shelter", "evacuation"],
+            Self::SentinelNdviTimeseries => &["ndvi", "sentinel", "timeseries"],
+            Self::CopcChangeDetect => &["pointcloud", "change", "demo"],
         }
     }
 }
@@ -71,6 +89,108 @@ pub fn resolve_workflow_with_catalog(
     let local_cog = intent.signals.metric.as_deref() == Some("local_cog");
     let geoparquet = intent.signals.metric.as_deref() == Some("geoparquet");
     let external_stac = intent.signals.metric.as_deref() == Some("external_stac");
+    let pmtiles_export = intent.signals.metric.as_deref() == Some("pmtiles_export");
+    let flood_exposure = intent.signals.metric.as_deref() == Some("flood_exposure");
+    let xmin_city = intent.signals.metric.as_deref() == Some("xmin_city");
+    let evacuation_access = intent.signals.metric.as_deref() == Some("evacuation_access");
+    let ndvi_timeseries = intent.signals.metric.as_deref() == Some("ndvi_timeseries");
+    let change_detect = intent.signals.metric.as_deref() == Some("change_detect");
+
+    if change_detect {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::CopcChangeDetect,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Point-cloud epochs are a synthetic LAS fixture; real GSI COPC arrives via adapters".into(),
+                "Classification uses geometric height thresholds, not learned segmentation".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if ndvi_timeseries {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::SentinelNdviTimeseries,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Raster fixtures are synthetic Sentinel-2-like COGs, not real scenes".into(),
+                "Zonal means use pixel-center sampling inside ward polygons".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if evacuation_access {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::NagoyaEvacuationAccess,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Shelters are a synthetic offline fixture placed outside flood zones".into(),
+                "Edge costs are slowed by 1 + depth × 2 per flooded segment".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if xmin_city {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::NagoyaXminCity,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Walk network is a synthetic ~400m grid fixture, not OSM survey data".into(),
+                "Scores use the cumulative-opportunity measure within the threshold".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if flood_exposure {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::NagoyaFloodExposure,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Flood zones are a synthetic offline fixture, not survey data".into(),
+                "Exposure rates are grid-sampling estimates, not parcel-level truth".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
+
+    if pmtiles_export {
+        let mut resolved = ResolvedWorkflow {
+            workflow_id: WorkflowId::DashboardExportDemo,
+            dataset_id: String::new(),
+            goal: intent.raw_prompt.clone(),
+            confidence: intent.confidence,
+            rationale: intent.signals.matched_tokens.clone(),
+            ambiguities: vec![
+                "Exports the verified Nagoya density result as a PMTiles bundle".into(),
+                "Round-trip tile verification runs before the export is accepted".into(),
+            ],
+        };
+        bind_catalog_dataset(catalog, &mut resolved)?;
+        return Ok(resolved);
+    }
 
     if external_stac {
         let mut resolved = ResolvedWorkflow {

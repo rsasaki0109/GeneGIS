@@ -38,8 +38,5 @@ impl ByteSource for HttpByteSource {
 }
 
 fn map_storage_error(err: genegis_storage::StorageError) -> CopcError {
-    CopcError::Io(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        err.to_string(),
-    ))
+    CopcError::Io(std::io::Error::other(err.to_string()))
 }

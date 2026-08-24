@@ -1,8 +1,10 @@
 use genegis_catalog::alpha_catalog;
 use genegis_workflow::{
-    external_stac_fetch_template, local_cog_metadata_template, nagoya_geoparquet_density_template,
-    nagoya_geoparquet_template, nagoya_population_density_template, remote_cog_metadata_template,
-    GeoWorkflow,
+    copc_change_detect_template, dashboard_export_template, external_stac_fetch_template,
+    local_cog_metadata_template, nagoya_evacuation_template, nagoya_flood_exposure_template,
+    nagoya_geoparquet_density_template, nagoya_geoparquet_template,
+    nagoya_population_density_template, nagoya_xmin_city_template, remote_cog_metadata_template,
+    sentinel_ndvi_timeseries_template, GeoWorkflow,
 };
 
 use crate::backend::{PlannerBackend, PlannerConfig};
@@ -108,6 +110,12 @@ fn workflow_for(id: WorkflowId) -> GeoWorkflow {
         WorkflowId::NagoyaGeoparquet => nagoya_geoparquet_template(),
         WorkflowId::NagoyaGeoparquetDensity => nagoya_geoparquet_density_template(),
         WorkflowId::ExternalStacDemo => external_stac_fetch_template(),
+        WorkflowId::DashboardExportDemo => dashboard_export_template(),
+        WorkflowId::NagoyaFloodExposure => nagoya_flood_exposure_template(),
+        WorkflowId::NagoyaXminCity => nagoya_xmin_city_template(),
+        WorkflowId::NagoyaEvacuationAccess => nagoya_evacuation_template(),
+        WorkflowId::SentinelNdviTimeseries => sentinel_ndvi_timeseries_template(),
+        WorkflowId::CopcChangeDetect => copc_change_detect_template(),
     }
 }
 

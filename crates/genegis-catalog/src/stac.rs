@@ -233,7 +233,7 @@ mod tests {
                 .summaries
                 .get("item_count")
                 .and_then(Value::as_u64),
-            Some(5)
+            Some(11)
         );
         let ids = collection
             .summaries

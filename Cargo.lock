@@ -2402,16 +2402,20 @@ dependencies = [
  "genegis-core",
  "genegis-crs",
  "genegis-geometry",
+ "genegis-network",
+ "genegis-pointcloud",
  "genegis-query",
  "genegis-raster",
  "genegis-render",
  "genegis-style",
+ "genegis-tile",
  "genegis-vector",
  "genegis-workflow",
  "resvg",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.18",
  "uuid",
 ]
@@ -2558,6 +2562,17 @@ version = "0.1.0"
 dependencies = [
  "genegis-crs",
  "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "genegis-network"
+version = "0.1.0"
+dependencies = [
+ "genegis-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

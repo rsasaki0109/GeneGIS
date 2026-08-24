@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Generate the synthetic Nagoya walk-network and POI fixtures (UC-4).
+
+The street network is a deterministic ~400 m grid over the Nagoya bbox — a
+planning-level walkability approximation, NOT survey geometry. POIs are
+placed deterministically near ward centroids using a fixed offset table.
+
+Outputs:
+  examples/nagoya-population-density/data/nagoya-walk-network.geojson
+  examples/nagoya-population-density/data/nagoya-pois.geojson
+
+Both are pure functions of this script; no randomness, no downloads.
+"""
+
+import json
+import pathlib
+
+DATA = pathlib.Path(__file__).resolve().parent.parent / (
+    "examples/nagoya-population-density/data"
+)
+
+# Nagoya bbox (wards fixture extent, padded slightly)
+LON0, LAT0, LON1, LAT1 = 136.785, 35.025, 137.068, 35.268
+D_LON = 0.0045   # ≈ 407 m east-west
+D_LAT = 0.0036   # ≈ 400 m north-south
+WALK_SPEED_M_PER_MIN = 80.0  # 4.8 km/h
+
+
+def build_network_features():
+    features = []
+    lons = []
+    lon = LON0
+    while lon <= LON1 + 1e-9:
+        lons.append(round(lon, 6))
+        lon += D_LON
+    lats = []
+    lat = LAT0
+    while lat <= LAT1 + 1e-9:
+        lats.append(round(lat, 6))
+        lat += D_LAT
+
+    def meters_per_deg_lat():
+        return 111_320.0
+
+    def meters_per_deg_lon():
+        import math
+        mid = math.radians((LAT0 + LAT1) / 2)
+        return 111_320.0 * math.cos(mid)
+
+    for x in lons:
+        coords = [[x, lat] for lat in lats]
+        length_m = (lats[-1] - LAT0) * meters_per_deg_lat()
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "kind": "street",
+                "orientation": "ns",
+                "length_m": round(length_m, 1),
+                "walk_min": round(length_m / WALK_SPEED_M_PER_MIN, 2),
+            },
+            "geometry": {"type": "LineString", "coordinates": coords},
+        })
+    for y in lats:
+        coords = [[lon, y] for lon in lons]
+        length_m = (lons[-1] - LON0) * meters_per_deg_lon()
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "kind": "street",
+                "orientation": "ew",
+                "length_m": round(length_m, 1),
+                "walk_min": round(length_m / WALK_SPEED_M_PER_MIN, 2),
+            },
+            "geometry": {"type": "LineString", "coordinates": coords},
+        })
+    return features
+
+
+def derive_ward_centroids():
+    """Vertex-mean centroid of exterior rings — mirrors the Rust engine."""
+    import json as _json
+    wards = _json.loads((DATA / "nagoya-wards.geojson").read_text())
+    centroids = []
+    for feature in wards["features"]:
+        name = feature["properties"]["ward_name"]
+        geometry = feature["geometry"]
+        polys = (
+            [geometry["coordinates"]]
+            if geometry["type"] == "Polygon"
+            else geometry["coordinates"]
+        )
+        xs = [c[0] for poly in polys for ring in poly for c in ring]
+        ys = [c[1] for poly in polys for ring in poly for c in ring]
+        centroids.append(
+            (name, sum(xs) / len(xs), sum(ys) / len(ys))
+        )
+    return sorted(centroids)
+
+
+WARD_CENTROIDS = derive_ward_centroids()
+
+POI_CATEGORIES = ["supermarket", "clinic", "school", "park"]
+# fixed per-ward offsets in degrees (~tens of metres), deterministic
+OFFSETS = [
+    (0.0000, 0.0000), (0.0022, 0.0011), (-0.0017, 0.0019), (0.0012, -0.0021),
+    (-0.0021, -0.0014), (0.0018, 0.0023), (-0.0013, 0.0017), (0.0025, -0.0009),
+    (0.0006, 0.0026), (-0.0026, 0.0006), (0.0031, 0.0015), (-0.0009, -0.0027),
+]
+# inner wards host extra facilities; outer wards depend on neighbours.
+EXTRA_POIS = {
+    "中区": 8, "昭和区": 6, "東区": 6, "瑞穂区": 4, "熱田区": 4,
+    "中村区": 2, "千種区": 2, "西区": 2, "北区": 2,
+}
+
+
+def build_poi_features():
+    features = []
+    poi_id = 1
+    for ward_name, clon, clat in WARD_CENTROIDS:
+        count = len(POI_CATEGORIES) + EXTRA_POIS.get(ward_name, 0)
+        for index in range(count):
+            category = POI_CATEGORIES[index % len(POI_CATEGORIES)]
+            dlon, dlat = OFFSETS[index % len(OFFSETS)]
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "poi_id": f"poi-{poi_id:03d}",
+                    "category": category,
+                    "ward_name": ward_name,
+                    "capacity": 1,
+                },
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        round(clon + dlon + (index % 4) * 0.0004, 6),
+                        round(clat + dlat - (index // 4) * 0.00035, 6),
+                    ],
+                },
+            })
+            poi_id += 1
+    return features
+
+
+def main():
+    network = {
+        "type": "FeatureCollection",
+        "name": "nagoya-walk-network",
+        "crs": "EPSG:4326",
+        "description": "Synthetic ~400m walking grid over the Nagoya bbox. "
+        "Planning-level approximation generated by scripts/build-nagoya-walk-network.py; "
+        "not OSM survey geometry.",
+        "walk_speed_m_per_min": WALK_SPEED_M_PER_MIN,
+        "features": build_network_features(),
+    }
+    pois = {
+        "type": "FeatureCollection",
+        "name": "nagoya-pois",
+        "crs": "EPSG:4326",
+        "description": "Deterministic synthetic POIs near ward centroids for the "
+        "15-minute-city demo.",
+        "categories": POI_CATEGORIES,
+        "features": build_poi_features(),
+    }
+    for name, payload in (
+        ("nagoya-walk-network.geojson", network),
+        ("nagoya-pois.geojson", pois),
+    ):
+        path = DATA / name
+        path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+        print(f"wrote {path} ({len(payload['features'])} features)")
+
+
+if __name__ == "__main__":
+    main()

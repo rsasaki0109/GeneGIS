@@ -1517,6 +1517,344 @@ pub fn external_stac_fetch_template() -> GeoWorkflow {
     workflow
 }
 
+/// UC-2: verified PMTiles dashboard export over the north-star density result.
+pub fn dashboard_export_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("検証済み人口密度を PMTiles ダッシュボードとして書き出し");
+    workflow
+        .assumptions
+        .push("Input is the bundled Nagoya density result".into());
+    workflow
+        .assumptions
+        .push("Tiles are encoded from WGS84 lon/lat into Web Mercator at zoom 7–11".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-dataset",
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "density", "population"] }),
+            &[],
+        ),
+        dag_step(
+            "run-density-analysis",
+            "RunDensityAnalysis",
+            serde_json::json!({ "tool": "density" }),
+            &["find-dataset"],
+        ),
+        dag_step(
+            "encode-vector-tiles",
+            "EncodeVectorTiles",
+            serde_json::json!({ "extent": 4096, "zoom_range": [7, 11] }),
+            &["run-density-analysis"],
+        ),
+        dag_step(
+            "write-pmtiles-archive",
+            "WritePmTilesArchive",
+            serde_json::json!({ "format": "pmtiles-v3", "clustered": true }),
+            &["encode-vector-tiles"],
+        ),
+        dag_step(
+            "verify-roundtrip",
+            "VerifyRoundTrip",
+            serde_json::json!({ "sampled_tiles": 8 }),
+            &["write-pmtiles-archive"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-roundtrip"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
+/// UC-1: per-ward population exposure to bundled flood inundation zones.
+pub fn nagoya_flood_exposure_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋市の洪水浸水リスクと人口曝露を表示");
+    workflow
+        .assumptions
+        .push("Flood zones are the bundled synthetic depth-band fixture".into());
+    workflow
+        .assumptions
+        .push("Exposure is estimated by deterministic even-odd grid sampling".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-flood-dataset",
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "flood", "hazard"] }),
+            &[],
+        ),
+        dag_step(
+            "load-ward-population",
+            "LoadWardPopulation",
+            serde_json::json!({ "dataset": "nagoya-wards-density" }),
+            &["find-flood-dataset"],
+        ),
+        dag_step(
+            "grid-sample-exposure",
+            "GridSampleExposure",
+            serde_json::json!({ "samples_per_axis": 96, "predicate": "even_odd_point_in_polygon" }),
+            &["load-ward-population"],
+        ),
+        dag_step(
+            "classify-depth-bands",
+            "ClassifyDepthBands",
+            serde_json::json!({ "bands_m": [0.5, 3.0, 5.0] }),
+            &["grid-sample-exposure"],
+        ),
+        dag_step(
+            "verify-exposure",
+            "VerifyExposure",
+            serde_json::json!({ "tool": "duckdb_verify" }),
+            &["classify-depth-bands"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-exposure"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
+/// UC-4: 15-minute-city accessibility over the synthetic walk grid.
+pub fn nagoya_xmin_city_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋市の15分都市アクセシビリティを表示");
+    workflow
+        .assumptions
+        .push("Walk network is the bundled ~400m grid fixture".into());
+    workflow
+        .assumptions
+        .push("Scores are cumulative-opportunity counts within 15 walk minutes".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-network-dataset",
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "walk", "network"] }),
+            &[],
+        ),
+        dag_step(
+            "load-ward-population",
+            "LoadWardPopulation",
+            serde_json::json!({ "dataset": "nagoya-wards-density" }),
+            &["find-network-dataset"],
+        ),
+        dag_step(
+            "build-walk-graph",
+            "BuildWalkGraph",
+            serde_json::json!({ "algorithm": "dijkstra", "snap_tolerance": "nearest_node" }),
+            &["find-network-dataset"],
+        ),
+        dag_step(
+            "snap-pois-and-centroids",
+            "SnapPoisAndCentroids",
+            serde_json::json!({}),
+            &["build-walk-graph"],
+        ),
+        dag_step(
+            "compute-accessibility-scores",
+            "ComputeAccessibilityScores",
+            serde_json::json!({ "measure": "cumulative_opportunity", "threshold_min": 15 }),
+            &["snap-pois-and-centroids"],
+        ),
+        dag_step(
+            "verify-route-sanity",
+            "VerifyRouteSanity",
+            serde_json::json!({ "checks": ["triangle_inequality", "threshold_monotonicity"] }),
+            &["compute-accessibility-scores"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-route-sanity"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
+/// UC-1 network part: flood-penalized evacuation routing to shelters.
+pub fn nagoya_evacuation_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋市の洪水浸水リスクと避難所アクセシビリティを表示");
+    workflow.assumptions.push(
+        "Shelters are the bundled synthetic fixture (2 per ward, outside flood zones)".into(),
+    );
+    workflow
+        .assumptions
+        .push("Flooded segments are slowed by 1 + depth × penalty per metre of inundation".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-shelter-dataset",
+            "FindDataset",
+            serde_json::json!({ "tags": ["nagoya", "shelter", "evacuation"] }),
+            &[],
+        ),
+        dag_step(
+            "load-ward-population",
+            "LoadWardPopulation",
+            serde_json::json!({ "dataset": "nagoya-wards-density" }),
+            &["find-shelter-dataset"],
+        ),
+        dag_step(
+            "build-walk-graph",
+            "BuildWalkGraph",
+            serde_json::json!({ "algorithm": "dijkstra", "snap_tolerance": "nearest_node" }),
+            &["find-shelter-dataset"],
+        ),
+        dag_step(
+            "classify-flooded-segments",
+            "ClassifyFloodedSegments",
+            serde_json::json!({ "bands_m": [0.5, 3.0, 5.0], "cost_model": "speed_x_depth" }),
+            &["build-walk-graph"],
+        ),
+        dag_step(
+            "route-centroids-to-shelters",
+            "RouteCentroidsToShelters",
+            serde_json::json!({ "clean_baseline": true, "penalized_route": true }),
+            &["classify-flooded-segments"],
+        ),
+        dag_step(
+            "verify-evacuation",
+            "VerifyEvacuation",
+            serde_json::json!({
+                "checks": ["penalty_monotonicity", "triangle_inequality", "duckdb_cross_check"]
+            }),
+            &["route-centroids-to-shelters"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-evacuation"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
+/// UC-3: NDVI time series from a STAC-discovered two-epoch COG fixture.
+pub fn sentinel_ndvi_timeseries_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("名古屋周辺のNDVI時系列をSentinel-2から作成して検証");
+    workflow
+        .assumptions
+        .push("Raster fixtures are synthetic Sentinel-2-like COGs (two epochs)".into());
+    workflow
+        .assumptions
+        .push("Zonal means use pixel-center sampling inside ward polygons".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-ndvi-collection",
+            "FindDataset",
+            serde_json::json!({ "tags": ["ndvi", "sentinel", "timeseries"] }),
+            &[],
+        ),
+        dag_step(
+            "fetch-stac-items",
+            "FetchStacItems",
+            serde_json::json!({ "tool": "stac_fetch", "min_items": 2 }),
+            &["find-ndvi-collection"],
+        ),
+        dag_step(
+            "range-read-band-assets",
+            "RangeReadBandAssets",
+            serde_json::json!({ "bands": ["red", "nir"], "mode": "window_decode" }),
+            &["fetch-stac-items"],
+        ),
+        dag_step(
+            "compute-ndvi",
+            "ComputeNdvi",
+            serde_json::json!({ "formula": "(nir - red) / (nir + red)", "clamp": [-1, 1] }),
+            &["range-read-band-assets"],
+        ),
+        dag_step(
+            "zonal-mean-per-ward",
+            "ZonalMeanPerWard",
+            serde_json::json!({ "method": "pixel_center_point_in_polygon" }),
+            &["compute-ndvi"],
+        ),
+        dag_step(
+            "verify-index-range",
+            "VerifyIndexRange",
+            serde_json::json!({
+                "checks": ["index_range_all_pixels", "pixel_reconciliation", "determinism_recompute"]
+            }),
+            &["zonal-mean-per-ward"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-index-range"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
+/// UC-5: two-epoch point-cloud change detection over the synthetic LAS AOI.
+pub fn copc_change_detect_template() -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("2時期の点群から建物・植生の変化を抽出して検証");
+    workflow.assumptions.push(
+        "Fixtures are synthetic uncompressed LAS epochs; COPC streams via the same reader".into(),
+    );
+    workflow
+        .assumptions
+        .push("Classification uses per-cell p90 nDSM deltas with geometric thresholds".into());
+    workflow.steps = vec![
+        dag_step(
+            "find-pointcloud-dataset",
+            "FindDataset",
+            serde_json::json!({ "tags": ["pointcloud", "change", "demo"] }),
+            &[],
+        ),
+        dag_step(
+            "load-epoch-clouds",
+            "LoadEpochClouds",
+            serde_json::json!({ "epochs": ["a", "b"], "reader": "las_or_copc_streaming" }),
+            &["find-pointcloud-dataset"],
+        ),
+        dag_step(
+            "grid-height-statistics",
+            "GridHeightStatistics",
+            serde_json::json!({ "cell_size_m": 5, "stat": "p90_minus_min" }),
+            &["load-epoch-clouds"],
+        ),
+        dag_step(
+            "epoch-difference",
+            "EpochDifference",
+            serde_json::json!({ "ground_ref": "epoch_a_min" }),
+            &["grid-height-statistics"],
+        ),
+        dag_step(
+            "classify-changes",
+            "ClassifyChanges",
+            serde_json::json!({
+                "classes": ["building_added", "building_removed", "vegetation_growth", "vegetation_removal", "stable"]
+            }),
+            &["epoch-difference"],
+        ),
+        dag_step(
+            "verify-volume-delta",
+            "VerifyVolumeDelta",
+            serde_json::json!({
+                "checks": ["volume_sign_consistency", "control_area_stable", "nn_control_exact_match"]
+            }),
+            &["classify-changes"],
+        ),
+        dag_step(
+            "attach-sources",
+            "AttachSources",
+            serde_json::json!({}),
+            &["verify-volume-delta"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-sources");
+    workflow
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1539,6 +1877,12 @@ mod tests {
             nagoya_geoparquet_template(),
             nagoya_geoparquet_density_template(),
             external_stac_fetch_template(),
+            dashboard_export_template(),
+            nagoya_flood_exposure_template(),
+            nagoya_xmin_city_template(),
+            nagoya_evacuation_template(),
+            sentinel_ndvi_timeseries_template(),
+            copc_change_detect_template(),
         ]
     }
 
