@@ -328,7 +328,7 @@ fn wrap_svg(title: &str, body: &str, legend: &[(String, String)]) -> String {
     )
 }
 
-fn rasterize_svg(svg: &str) -> Result<Vec<u8>, AnalysisError> {
+pub(crate) fn rasterize_svg(svg: &str) -> Result<Vec<u8>, AnalysisError> {
     let mut options = resvg::usvg::Options::<'static>::default();
     let mut fonts = resvg::usvg::fontdb::Database::new();
     fonts.load_system_fonts();
@@ -351,7 +351,7 @@ fn rasterize_svg(svg: &str) -> Result<Vec<u8>, AnalysisError> {
         .map_err(|err| AnalysisError::Message(format!("png encode: {err}")))
 }
 
-fn escape_xml(value: &str) -> String {
+pub(crate) fn escape_xml(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")

@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod change;
 pub mod dashboard;
+pub mod district3d;
 pub mod error;
 pub mod evacuation;
 pub mod export;
@@ -26,6 +27,7 @@ pub use change::{
     CHANGE_CELL_SIZE_M, CONTROL_AREA,
 };
 pub use dashboard::{export_dashboard_pmtiles, DashboardExportOptions, DashboardExportReport};
+pub use district3d::{render_district3d_frames, District3dFrame};
 pub use error::AnalysisError;
 pub use evacuation::{
     run_nagoya_evacuation_access, run_nagoya_evacuation_access_with_penalty, EvacuationAnalysis,

@@ -71,6 +71,18 @@ Frames are synthetic offline fixtures, regenerated bit-stable by
 `cargo run -p genegis-cli -- demo frames` + `scripts/build-readme-showcase.sh`
 (spec: [`docs/rfcs/0005-application-use-cases.md`](docs/rfcs/0005-application-use-cases.md)).
 
+### 3D district exploration
+
+The Phase 14 district view combines point-cloud terrain, LOD1 buildings,
+roads, POIs, and a linked dashboard in one deterministic orbit:
+
+<p align="center">
+  <img src="docs/assets/district3d.gif" alt="Verified offline 3D district fixture with point-cloud terrain, LOD1 buildings, roads, POIs, and dashboard" width="800" />
+</p>
+
+This is a verified offline fixture with a local metric CRS; its sources and
+units remain explicit and the frames are reproducible from the workflow output.
+
 ## Same prompts, real open data
 
 The UC-1 workflows run unchanged on licensed real data. Fetch, convert and
@@ -145,6 +157,10 @@ bash scripts/render-readme-hero.sh
 
 # Rebuild the RFC 0005 use-case showcase GIF (synthetic fixtures)
 cargo run -p genegis-cli -- demo frames && bash scripts/build-readme-showcase.sh
+
+# Rebuild the Phase 14 M0 3D district orbit
+cargo run -p genegis-cli -- demo frames-3d .genegis/frames-3d
+bash scripts/build-district3d-gif.sh
 
 # Real-data variant (after fetch-real-data.py / fetch-osm-network.py + env vars)
 cargo run --release -p genegis-cli -- demo frames .genegis/frames-real

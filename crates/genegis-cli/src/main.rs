@@ -71,32 +71,51 @@ fn main() {
 fn handle_demo(args: &[String]) {
     let Some(action) = args.first().map(String::as_str) else {
         eprintln!("Usage: genegis demo frames [DIR]  # render RFC 0005 showcase PNGs");
+        eprintln!("       genegis demo frames-3d [DIR] # render Phase 14 3D district orbit PNGs");
         process::exit(1);
     };
-    if action != "frames" {
+    if action != "frames" && action != "frames-3d" {
         eprintln!("Unknown demo action: {action}");
         process::exit(1);
     }
-    let dir = args
-        .get(1)
-        .cloned()
-        .unwrap_or_else(|| ".genegis/frames".to_string());
+    let dir = args.get(1).cloned().unwrap_or_else(|| {
+        if action == "frames-3d" {
+            ".genegis/frames-3d".into()
+        } else {
+            ".genegis/frames".into()
+        }
+    });
     std::fs::create_dir_all(&dir).unwrap_or_else(|error| {
         eprintln!("create {dir} failed: {error}");
         process::exit(1);
     });
-    std::env::set_var("GENEGIS_FRAMES_DIR", &dir);
-    let frames = genegis_analysis::render_usecase_frames().unwrap_or_else(|error| {
-        eprintln!("Showcase render error: {error}");
-        process::exit(1);
-    });
-    for frame in &frames {
-        let path = PathBuf::from(&dir).join(format!("{}.png", frame.name));
-        std::fs::write(&path, &frame.png).unwrap_or_else(|error| {
+    let frames: Vec<(String, Vec<u8>)> = if action == "frames-3d" {
+        genegis_analysis::render_district3d_frames()
+            .unwrap_or_else(|error| {
+                eprintln!("3D showcase render error: {error}");
+                process::exit(1);
+            })
+            .into_iter()
+            .map(|frame| (frame.name, frame.png))
+            .collect()
+    } else {
+        std::env::set_var("GENEGIS_FRAMES_DIR", &dir);
+        genegis_analysis::render_usecase_frames()
+            .unwrap_or_else(|error| {
+                eprintln!("Showcase render error: {error}");
+                process::exit(1);
+            })
+            .into_iter()
+            .map(|frame| (frame.name, frame.png))
+            .collect()
+    };
+    for (name, png) in &frames {
+        let path = PathBuf::from(&dir).join(format!("{name}.png"));
+        std::fs::write(&path, png).unwrap_or_else(|error| {
             eprintln!("write {} failed: {error}", path.display());
             process::exit(1);
         });
-        println!("{} ({} bytes)", path.display(), frame.png.len());
+        println!("{} ({} bytes)", path.display(), png.len());
     }
 }
 
