@@ -35,7 +35,7 @@ impl PluginCapability {
         }
     }
 
-    /// All capabilities defined by the Phase 4 alpha contract.
+    /// All capabilities defined by the SDK v1 contract.
     pub fn all() -> &'static [Self] {
         &[
             Self::ReadCatalog,

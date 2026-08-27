@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "id": "managed-cloud-v1",
+  "class": "managed_cloud",
+  "network": {"mode": "allow_list", "origins": ["https://catalog.internal.example", "https://object.internal.example"]},
+  "persistence": "object_storage",
+  "identity": "oidc",
+  "maximum_concurrent_workflows": 32,
+  "command_workflow_required": true,
+  "offline_capsule_verification": true,
+  "allowed_open_formats": ["cog", "copc", "geoparquet", "pmtiles", "stac"],
+  "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+  "registry_snapshot_digest": null
+}

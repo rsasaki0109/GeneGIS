@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.4",
+  "status": "complete",
+  "rule_contract": {
+    "allowed": ["numeric_threshold", "digest_bound_z_score_anomaly"],
+    "llm_judgement_allowed": false,
+    "field_and_unit_match_required": true,
+    "freshness_policy_enforced": true
+  },
+  "alert_evidence": [
+    "triggering_cursor_window",
+    "triggering_watermark_window",
+    "observation_snapshot_digests",
+    "triggering_result_digest",
+    "policy",
+    "policy_digest",
+    "metric_and_unit",
+    "evaluation_value",
+    "verifier_identity",
+    "verifier_checks",
+    "trigger_time",
+    "acknowledgement_history"
+  ],
+  "identity": {
+    "alert_id": "stable original trigger digest",
+    "record_digest": "alert id plus append-only acknowledgements"
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-analysis verified_alert --offline",
+      "result": "2 passed; 0 failed"
+    }
+  ],
+  "negative_coverage": [
+    "stale required-fresh input",
+    "field or unit mismatch",
+    "invalid z-score baseline",
+    "alert content tampering",
+    "acknowledgement duplicate identity",
+    "acknowledgement time regression"
+  ]
+}

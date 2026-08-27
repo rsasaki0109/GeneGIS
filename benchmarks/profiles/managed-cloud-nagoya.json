@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0.0",
+  "id": "managed-cloud-nagoya",
+  "deployment_class": "managed_cloud",
+  "dataset_id": "nagoya-population-2020",
+  "dataset_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+  "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+  "metrics": [
+    {
+      "id": "cpu.workflow_p95_ms",
+      "dimension": "cpu",
+      "unit": "ms",
+      "comparator": "at_most",
+      "threshold": 3000,
+      "required": true
+    },
+    {
+      "id": "gpu.first_frame_p95_ms",
+      "dimension": "gpu",
+      "unit": "ms",
+      "comparator": "at_most",
+      "threshold": 1000,
+      "required": true,
+      "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2"
+    },
+    {
+      "id": "gpu.steady_state_fps",
+      "dimension": "gpu",
+      "unit": "frames_per_second",
+      "comparator": "at_least",
+      "threshold": 30,
+      "required": true,
+      "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2"
+    },
+    {
+      "id": "dataset.selected_bytes",
+      "dimension": "dataset",
+      "unit": "bytes",
+      "comparator": "at_most",
+      "threshold": 10485760,
+      "required": true
+    },
+    {
+      "id": "network.range_requests",
+      "dimension": "network",
+      "unit": "requests",
+      "comparator": "at_most",
+      "threshold": 64,
+      "required": true
+    },
+    {
+      "id": "concurrency.workflow_p95_ms",
+      "dimension": "concurrency",
+      "unit": "ms",
+      "comparator": "at_most",
+      "threshold": 5000,
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+[
+  {
+    "type": "readers.las",
+    "filename": "../../examples/nagoya-population-density/data/nagoya-change-epoch-b.las",
+    "override_srs": "EPSG:6675"
+  },
+  {
+    "type": "filters.transformation",
+    "matrix": "1 0 0 -23686.13 0 1 0 -90773.70 0 0 1 0 0 0 0 1"
+  },
+  {
+    "type": "writers.copc",
+    "filename": "../../examples/nagoya-population-density/data/nagoya-scene.copc.laz",
+    "a_srs": "EPSG:6675",
+    "forward": "all",
+    "scale_x": 0.01,
+    "scale_y": 0.01,
+    "scale_z": 0.01,
+    "offset_x": "auto",
+    "offset_y": "auto",
+    "offset_z": "auto",
+    "creation_doy": 238,
+    "creation_year": 2026,
+    "fixed_seed": true,
+    "threads": 1
+  }
+]

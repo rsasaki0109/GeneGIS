@@ -110,6 +110,15 @@ fn build_info<S: copc_streaming::ByteSource>(
 }
 
 fn format_crs(header: &las::Header) -> String {
+    if let Some(bytes) = header.get_wkt_crs_bytes() {
+        let wkt = String::from_utf8_lossy(bytes);
+        if let Some(code) = last_quoted_epsg_authority(&wkt) {
+            return format!("EPSG:{code}");
+        }
+        if let Some(code) = last_wkt2_epsg_id(&wkt) {
+            return format!("EPSG:{code}");
+        }
+    }
     header
         .vlrs()
         .iter()
@@ -121,6 +130,21 @@ fn format_crs(header: &las::Header) -> String {
             }
         })
         .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn last_quoted_epsg_authority(wkt: &str) -> Option<&str> {
+    const PREFIX: &str = "AUTHORITY[\"EPSG\",\"";
+    let tail = wkt.rsplit_once(PREFIX)?.1;
+    let code = tail.split('"').next()?;
+    (!code.is_empty() && code.bytes().all(|byte| byte.is_ascii_digit())).then_some(code)
+}
+
+fn last_wkt2_epsg_id(wkt: &str) -> Option<&str> {
+    const PREFIX: &str = "ID[\"EPSG\",";
+    let tail = wkt.rsplit_once(PREFIX)?.1.trim_start();
+    let end = tail.find(|character: char| !character.is_ascii_digit())?;
+    let code = &tail[..end];
+    (!code.is_empty()).then_some(code)
 }
 
 fn map_copc_error(err: copc_streaming::CopcError) -> PointcloudError {
@@ -139,6 +163,13 @@ mod tests {
 
     fn fixture_path() -> &'static str {
         concat!(env!("CARGO_MANIFEST_DIR"), "/testdata/lone-star.copc.laz")
+    }
+
+    fn nagoya_scene_fixture_path() -> &'static str {
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/nagoya-population-density/data/nagoya-scene.copc.laz"
+        )
     }
 
     struct HttpCopcFixture {
@@ -235,6 +266,18 @@ mod tests {
         assert_eq!(info.read_mode.as_deref(), Some("local"));
         assert!(info.hierarchy_entries > 0);
         assert!(info.copc_halfsize > 0.0);
+    }
+
+    #[test]
+    fn reads_nagoya_acceptance_copc_with_exact_crs() {
+        let info = read_copc_path(nagoya_scene_fixture_path()).expect("read Nagoya COPC");
+        assert_eq!(info.point_count, 40_949);
+        assert_eq!(info.crs, "EPSG:6675");
+        assert_eq!(info.bounds[0], -23_686.13);
+        assert_eq!(info.bounds[1], -90_773.70);
+        assert_eq!(info.bounds[3], -23_086.13);
+        assert_eq!(info.bounds[4], -90_373.70);
+        assert!(info.hierarchy_entries > 0);
     }
 
     #[test]

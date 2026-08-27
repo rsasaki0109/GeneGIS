@@ -28,6 +28,8 @@ pub struct HttpFetchResult {
     pub bytes: Vec<u8>,
     /// Raw `Content-Range` header when present.
     pub content_range: Option<String>,
+    /// Response media type without interpretation.
+    pub content_type: Option<String>,
 }
 
 /// Download the full resource body with a plain GET.
@@ -55,6 +57,11 @@ pub fn fetch_http_bytes_with_policy(
         return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
     }
 
+    let content_type = response
+        .headers()
+        .get("Content-Type")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
     let bytes = response
         .body_mut()
         .with_config()
@@ -66,6 +73,7 @@ pub fn fetch_http_bytes_with_policy(
         status,
         bytes,
         content_range: None,
+        content_type,
     })
 }
 
@@ -118,6 +126,11 @@ pub fn post_http_json_bytes_with_policy(
         return Err(StorageError::Http(format!("HTTP {status}: {detail}")));
     }
 
+    let content_type = response
+        .headers()
+        .get("Content-Type")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
     let bytes = response
         .body_mut()
         .with_config()
@@ -129,6 +142,7 @@ pub fn post_http_json_bytes_with_policy(
         status,
         bytes,
         content_range: None,
+        content_type,
     })
 }
 
@@ -173,6 +187,11 @@ pub fn fetch_http_range_with_policy(
         .get("Content-Range")
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
+    let content_type = response
+        .headers()
+        .get("Content-Type")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
 
     let bytes = response
         .body_mut()
@@ -193,6 +212,7 @@ pub fn fetch_http_range_with_policy(
         status,
         bytes,
         content_range,
+        content_type,
     })
 }
 

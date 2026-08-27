@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.1",
+  "status": "complete",
+  "adapter": {
+    "adapter_id": "org.genegis.live-feed",
+    "build_digest": "sha256:30f3b84ce623e454876103d83b2e73e5f12953d7ef40dbfe79bb43ec09f7fe11",
+    "domains": ["weather", "hazard", "mobility", "sensor", "change"],
+    "capability": "network_read"
+  },
+  "window_contract": {
+    "cursor": "exclusive monotone u64",
+    "watermark": "monotone RFC3339 event time",
+    "freshness": ["evaluated_at", "max_age_seconds", "allowed_lateness_seconds", "reject_stale"],
+    "bounds": ["max_page_size", "max_retained_observations"],
+    "snapshot_fields": ["id", "sequence", "observed_at", "crs", "geometry", "values", "source_revision", "snapshot_digest"]
+  },
+  "workflow_steps": [
+    "AdmitLiveFeedAdapter",
+    "ReadLiveFeedCursorWindow",
+    "ValidateLiveFeedCursorWatermarkFreshness",
+    "SealImmutableObservationSnapshots",
+    "CommitLiveFeedCursorWatermark"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-adapter live_feed --offline",
+      "result": "2 passed; 0 failed; all five domains exercised"
+    },
+    {
+      "command": "cargo test -p genegis-analysis live_feed --offline",
+      "result": "1 passed; 0 failed; Command/Workflow digest equality proven"
+    },
+    {
+      "command": "cargo check -p genegis-workbench --offline",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "cursor regression",
+    "watermark regression",
+    "non-monotone sequence",
+    "observation beyond next cursor",
+    "late observation",
+    "stale or empty page",
+    "invalid geometry",
+    "page and retention overflow",
+    "unsupported content type",
+    "network capability admission"
+  ]
+}

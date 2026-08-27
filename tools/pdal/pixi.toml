@@ -1,0 +1,13 @@
+[workspace]
+name = "genegis-pdal-toolchain"
+version = "0.1.0"
+description = "Pinned toolchain for generating and validating GeneGIS COPC acceptance fixtures"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+pdal = "2.9.*"
+
+[tasks]
+version = "pdal --version"
+drivers = "pdal --drivers"

@@ -94,6 +94,10 @@ impl RenderCanvas {
         &self.device
     }
 
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
     pub fn format(&self) -> wgpu::TextureFormat {
         self.config.format
     }
@@ -140,6 +144,64 @@ impl RenderCanvas {
             draw(&mut pass);
         }
 
+        self.queue.submit(Some(encoder.finish()));
+        frame.present();
+        Ok(())
+    }
+
+    pub fn render_with_depth(
+        &self,
+        clear: wgpu::Color,
+        draw: impl FnOnce(&mut wgpu::RenderPass<'_>),
+    ) -> Result<(), SurfaceError> {
+        let frame = self.surface.get_current_texture()?;
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let depth = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("genegis-depth"),
+            size: wgpu::Extent3d {
+                width: self.config.width,
+                height: self.config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("genegis-3d-frame"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("genegis-3d-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(clear),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            draw(&mut pass);
+        }
         self.queue.submit(Some(encoder.finish()));
         frame.present();
         Ok(())

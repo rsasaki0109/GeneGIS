@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.2",
+  "status": "complete",
+  "scheduler_contract": {
+    "partition_identity": "stable string key",
+    "invalidation": "changed input consumers plus downstream nodes for the same partition",
+    "ordering": "topological",
+    "unaffected_partitions_recomputed": false,
+    "retry_exhaustion_commits_downstream": false
+  },
+  "receipt_fields": [
+    "workflow_digest",
+    "change_digest",
+    "input_cursor_window",
+    "input_watermark_window",
+    "late_data",
+    "input_replacement",
+    "attempt",
+    "retry",
+    "failure",
+    "output_digest",
+    "replaced_output_digest",
+    "state_digest"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-core incremental --offline",
+      "result": "2 passed; 0 failed"
+    }
+  ],
+  "proved_cases": [
+    "one ward partition recomputed without touching another ward",
+    "transient verifier failure retried and receipted",
+    "late-data invalidation propagated downstream",
+    "replacement invalidation recorded old input and old node outputs",
+    "append-only scheduler history retained both runs"
+  ]
+}

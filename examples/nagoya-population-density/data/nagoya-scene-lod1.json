@@ -1,0 +1,47 @@
+{
+  "schema_version": "0.1.0",
+  "crs": "EPSG:6675",
+  "coordinate_unit": "metres",
+  "vertical_unit": "metres",
+  "source": {
+    "kind": "deterministic_synthetic_fixture",
+    "generator": "crates/genegis-pointcloud/examples/write_change_fixture.rs",
+    "source_epoch": "nagoya-change-epoch-b.las",
+    "translation_metres": [-23686.13, -90773.70, 0.0]
+  },
+  "buildings": [
+    {
+      "id": "synthetic-building-1",
+      "footprint": [
+        [-23586.13, -90693.70],
+        [-23546.13, -90693.70],
+        [-23546.13, -90653.70],
+        [-23586.13, -90653.70]
+      ],
+      "base_z": 0.0,
+      "height": 12.0
+    },
+    {
+      "id": "synthetic-building-2",
+      "footprint": [
+        [-23386.13, -90573.70],
+        [-23346.13, -90573.70],
+        [-23346.13, -90533.70],
+        [-23386.13, -90533.70]
+      ],
+      "base_z": 0.0,
+      "height": 8.0
+    },
+    {
+      "id": "synthetic-building-added",
+      "footprint": [
+        [-23506.13, -90513.70],
+        [-23466.13, -90513.70],
+        [-23466.13, -90473.70],
+        [-23506.13, -90473.70]
+      ],
+      "base_z": 0.0,
+      "height": 10.0
+    }
+  ]
+}

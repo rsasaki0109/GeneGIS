@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H2.4",
+  "status": "complete",
+  "view_contract": {
+    "schema_version": "0.1.0",
+    "ordered_frame_fields": ["id", "title", "text", "map", "media", "dashboard"],
+    "map_state_fields": ["center", "zoom", "bearing", "pitch", "temporal_cursor", "layers"],
+    "layer_bindings": ["result_digest", "style_digest"],
+    "media_policy": "content-addressed relative or HTTPS references with alt text; no local paths",
+    "dashboard_policy": "dashboard result digest must equal narrative subject result digest",
+    "screenshots_copied": false
+  },
+  "execution_boundary": {
+    "command": "Command::RunWorkflow",
+    "steps": [
+      "ValidateNarrativeResultIdentity",
+      "ComposeNarrativeFrames",
+      "ValidateNarrativeMediaReferences",
+      "BindNarrativeDashboardDigests",
+      "SealNarrativeProjectView"
+    ]
+  },
+  "live_http_evidence": {
+    "north_star_result_digest": "sha256:8d55da3a68f314e8a2c1ffc479cc1b9d58326949164b78aadc710ea0b413515f",
+    "command_id": "83339d00-560c-4346-85b2-fe0d349854a4",
+    "workflow_digest": "sha256:ada531e024dfa054ee3919cece21da6a99c8025cc866954b068c5d1951d8552c",
+    "view_digest": "sha256:1069350cfb356c709c2c9d0738845ccc4ddc1cc1b959bebba5c1aec3ecc4a659",
+    "frame_count": 1,
+    "screenshot_copies": 0,
+    "unknown_result_digest_http_status": 409
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-capsule narrative --offline",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench --offline",
+      "result": "passed"
+    },
+    {
+      "command": "node --check apps/desktop/ui/app.js",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "unverified session result digest",
+    "sealed view tampering",
+    "local media path",
+    "cross-result dashboard",
+    "invalid camera and opacity",
+    "duplicate frame and layer identities"
+  ]
+}

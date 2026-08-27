@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0.0",
+  "minimum_samples": 20,
+  "aggregation": {
+    "first_frame": "nearest_rank_p95",
+    "steady_state_fps": "minimum"
+  },
+  "receipts": [
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt.json",
+      "receipt_digest": "sha256:5e3e5338c33198accfbaa384e9fa4dd4f636997879652c0786d320768e82802b"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-2.json",
+      "receipt_digest": "sha256:ab4d0b8cb6efd55e6f60563f95bcca0447dbba610341a83402631c545e88aa2a"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-3.json",
+      "receipt_digest": "sha256:79a178833ae7b67f4026e898244188a8daa9a8c0da6e1e0cc8c487a165e7b2b3"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-4.json",
+      "receipt_digest": "sha256:57e8c8cba1004421a3911b30dba1b27d0fef21ad0a07c5392bc112f8de726bb4"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-5.json",
+      "receipt_digest": "sha256:9629d1684241851f3870ef25609ebed85b6c882305ae8a095cf8fb414a7be499"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-6.json",
+      "receipt_digest": "sha256:801aaa6ef7025a3891040a267aaa18d62ee66bac79ff2c63edbec7ff6babd795"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-7.json",
+      "receipt_digest": "sha256:85da6992418e52aeaa9db839d4ad21b14bf141a78fc673818f2da54c239b61dc"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-8.json",
+      "receipt_digest": "sha256:9234f00efa94493e73fef64745ae7c18a0c20e5ccf56bd7d08a2187a29f14a78"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-9.json",
+      "receipt_digest": "sha256:a161d8e44e568f54e9ee945dd2ddeafcd0c3e6075e970b21b6cb24e30ccf01b4"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-10.json",
+      "receipt_digest": "sha256:f2ee8d61d123fd37b722698df1f119475b2ee399b675e5704dcfbb7f363a7e1e"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-11.json",
+      "receipt_digest": "sha256:5abe36d3cffead0ac5855f7d0f8781f359bd029131b98d5771684a099917e5aa"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-12.json",
+      "receipt_digest": "sha256:40aec63ae7f6445a6e373ffef3150dd507909ff4fe638b92526cd3be96df0e2c"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-13.json",
+      "receipt_digest": "sha256:afe77dc2d23bcd0ffb946beff6110b1f5da797e7f8be3f18f646ef854c75c4ba"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-14.json",
+      "receipt_digest": "sha256:ead76c2aa115af7ea1f3f7bdbbc106ceb08d7f48c095917e040dbc8d71eb40ec"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-15.json",
+      "receipt_digest": "sha256:5648e4392ef03b0ece62016e04ddc7a0294209a37e8788199fda9c253faa814f"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-16.json",
+      "receipt_digest": "sha256:2dc252c9ff87774cfe8a7e08652817b76a469d3c1d460669c2678b3f25d67932"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-17.json",
+      "receipt_digest": "sha256:16b2395459cdbe09b3a4aadc2abd5b55a9c1ea195413d79a3ced0cfe90fd58e6"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-18.json",
+      "receipt_digest": "sha256:32490d310dd6a53d5e820aeda0bd4c6942b5d6be3a93356f6ede45653a248273"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-19.json",
+      "receipt_digest": "sha256:a3d9075da56129bcd4a48445e6d8a09a1f6c6bf201304b7eb79167be19d0e6f1"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-schema-1-2-sample-20.json",
+      "receipt_digest": "sha256:277a51645f90b73ac2204cce87bacd322e9e6d2f542997df19420216958c984e"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H2.3",
+  "status": "complete",
+  "template_count": 12,
+  "required_category_coverage": {
+    "density": ["nagoya-density", "nagoya-geoparquet-density"],
+    "exposure": ["flood-exposure"],
+    "accessibility": ["xmin-city", "evacuation"],
+    "change": ["ndvi-timeseries", "pointcloud-change"],
+    "suitability": ["evacuation"],
+    "proximity": ["xmin-city", "evacuation"],
+    "aggregation": ["nagoya-density", "nagoya-geoparquet-density", "flood-exposure", "ndvi-timeseries"],
+    "geocoding": ["geocoding"]
+  },
+  "utility_templates": [
+    "nagoya-geoparquet",
+    "local-cog-metadata",
+    "external-stac",
+    "dashboard-export"
+  ],
+  "catalog_contract": {
+    "fields": ["id", "title", "node_count", "workflow_digest", "categories", "verification_profile"],
+    "all_graphs_validate": true,
+    "all_digests_sha256": true,
+    "missing_required_category_fails_test": true
+  },
+  "reproducible_fixtures": [
+    {
+      "files": "nagoya-sentinel-{red,nir}-2025-{04,10}.tif",
+      "generator": "crates/genegis-raster/examples/write_ndvi_fixture.rs",
+      "provenance": "deterministic synthetic test evidence; not observed Sentinel-2 data"
+    },
+    {
+      "files": "nagoya-change-epoch-{a,b}.las",
+      "generator": "crates/genegis-pointcloud/examples/write_change_fixture.rs",
+      "provenance": "deterministic synthetic test evidence; not survey data"
+    }
+  ],
+  "source_integrity_repair": {
+    "asset": "examples/nagoya-population-density/data/nagoya-population-2020.json",
+    "content_changed": false,
+    "corrected_sha256": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+    "updated_surfaces": ["source manifest", "analysis constant", "testkit", "ADR", "RFC", "Phase 12 report"]
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-workflow composer --offline",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis --lib --offline",
+      "result": "40 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis ogc_service::tests::command_workflow_fails_closed_on_service_exception --offline",
+      "result": "1 passed; 0 failed"
+    }
+  ]
+}

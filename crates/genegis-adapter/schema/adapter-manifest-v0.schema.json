@@ -24,7 +24,7 @@
       "additionalProperties": false,
       "required": ["family", "engine_version", "build_digest", "components"],
       "properties": {
-        "family": { "enum": ["gdal", "duck_db_spatial", "postgis", "grass", "qgis_processing"] },
+        "family": { "enum": ["gdal", "duck_db_spatial", "postgis", "grass", "qgis_processing", "ogc_web_service", "geocoding", "live_feed"] },
         "engine_version": { "type": "string", "minLength": 1 },
         "build_digest": { "$ref": "#/$defs/digest" },
         "components": { "type": "object", "additionalProperties": { "type": "string" } }

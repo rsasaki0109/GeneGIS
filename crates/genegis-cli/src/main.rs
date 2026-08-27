@@ -96,7 +96,7 @@ fn handle_demo(args: &[String]) {
                 process::exit(1);
             })
             .into_iter()
-            .map(|frame| (frame.name, frame.png))
+            .map(|frame| (frame.name.to_string(), frame.png))
             .collect()
     } else {
         std::env::set_var("GENEGIS_FRAMES_DIR", &dir);
@@ -106,7 +106,7 @@ fn handle_demo(args: &[String]) {
                 process::exit(1);
             })
             .into_iter()
-            .map(|frame| (frame.name, frame.png))
+            .map(|frame| (frame.name.to_string(), frame.png))
             .collect()
     };
     for (name, png) in &frames {
@@ -901,6 +901,45 @@ fn planner_config_from_args(args: &[String]) -> PlannerConfig {
     config
 }
 
+fn load_and_verify_trust_ux_study_manifest(
+    path: &Path,
+    observed_runner_digest: &str,
+) -> Result<(genegis_testkit::TrustUxStudyManifest, Vec<u8>, String), String> {
+    use genegis_testkit::{
+        trust_ux_evidence_digest, validate_trust_ux_study_manifest, TrustUxStudyManifest,
+    };
+
+    let absolute = std::fs::canonicalize(path)
+        .map_err(|error| format!("resolve {}: {error}", path.display()))?;
+    let bytes = std::fs::read(&absolute)
+        .map_err(|error| format!("read {}: {error}", absolute.display()))?;
+    let manifest: TrustUxStudyManifest = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse {}: {error}", absolute.display()))?;
+    validate_trust_ux_study_manifest(&manifest)?;
+    let repository = absolute
+        .ancestors()
+        .find(|ancestor| {
+            ancestor.join("Cargo.lock").is_file() && ancestor.join(&manifest.protocol).is_file()
+        })
+        .ok_or_else(|| "study manifest is not inside a GeneGIS checkout".to_string())?;
+    let build_lock_digest = trust_ux_evidence_digest(
+        &std::fs::read(repository.join("Cargo.lock"))
+            .map_err(|error| format!("read Cargo.lock: {error}"))?,
+    );
+    let protocol_digest = trust_ux_evidence_digest(
+        &std::fs::read(repository.join(&manifest.protocol))
+            .map_err(|error| format!("read {}: {error}", manifest.protocol))?,
+    );
+    if manifest.build_lock_digest != build_lock_digest
+        || manifest.protocol_digest != protocol_digest
+        || manifest.runner_digest != observed_runner_digest
+    {
+        return Err("study build, runner, or protocol digest no longer matches".into());
+    }
+    let digest = trust_ux_evidence_digest(&bytes);
+    Ok((manifest, bytes, digest))
+}
+
 fn handle_bench(args: &[String]) {
     use genegis_testkit::{
         benchmark_pipeline, benchmark_render_mesh, run_all_benchmarks,
@@ -910,6 +949,14 @@ fn handle_bench(args: &[String]) {
 
     let json_output = args.iter().any(|a| a == "--json");
     if args.iter().any(|argument| argument == "trust-ux-aggregate") {
+        let study_manifest_path = PathBuf::from(required_option(args, "--study-manifest"));
+        let observed_runner_digest = required_option(args, "--runner-digest");
+        let (study_manifest, study_manifest_bytes, _) =
+            load_and_verify_trust_ux_study_manifest(&study_manifest_path, &observed_runner_digest)
+                .unwrap_or_else(|error| {
+                    eprintln!("Invalid Trust UX study manifest: {error}");
+                    process::exit(1);
+                });
         let inputs = args
             .windows(2)
             .filter(|pair| pair[0] == "--input")
@@ -932,7 +979,15 @@ fn handle_bench(args: &[String]) {
                 })
             })
             .collect::<Vec<genegis_testkit::TrustUxSessionReport>>();
-        let report = genegis_testkit::aggregate_trust_ux_sessions(&sessions);
+        let report = genegis_testkit::aggregate_trust_ux_study(
+            &study_manifest,
+            &study_manifest_bytes,
+            &sessions,
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("Trust UX study aggregation failed: {error}");
+            process::exit(1);
+        });
         if let Some(output) = option_value(args, "--output").or_else(|| option_value(args, "-o")) {
             write_bytes(
                 Path::new(&output),
@@ -944,6 +999,9 @@ fn handle_bench(args: &[String]) {
             "{}",
             serde_json::to_string_pretty(&report).expect("Trust UX aggregate JSON")
         );
+        if !report.aggregate.passed {
+            process::exit(2);
+        }
         return;
     }
     if args.iter().any(|argument| argument == "trust-ux") {
@@ -965,15 +1023,43 @@ fn handle_bench(args: &[String]) {
                 option_value(args, "--facilitator-code")
             }
         };
+        let study_manifest_digest = match session_kind {
+            genegis_testkit::TrustUxSessionKind::Human => {
+                let path = PathBuf::from(required_option(args, "--study-manifest"));
+                let observed_runner_digest = required_option(args, "--runner-digest");
+                let (manifest, _, digest) =
+                    load_and_verify_trust_ux_study_manifest(&path, &observed_runner_digest)
+                        .unwrap_or_else(|error| {
+                            eprintln!("Invalid Trust UX study manifest: {error}");
+                            process::exit(1);
+                        });
+                let terminal = crossterm::terminal::size().unwrap_or_else(|error| {
+                    eprintln!("Unable to read study terminal size: {error}");
+                    process::exit(1);
+                });
+                if u32::from(terminal.0) != manifest.terminal_columns
+                    || u32::from(terminal.1) != manifest.terminal_rows
+                {
+                    eprintln!(
+                        "Study terminal drifted: expected {}x{}, observed {}x{}",
+                        manifest.terminal_columns, manifest.terminal_rows, terminal.0, terminal.1
+                    );
+                    process::exit(1);
+                }
+                Some(digest)
+            }
+            genegis_testkit::TrustUxSessionKind::Automated => None,
+        };
         let output = option_value(args, "--output")
             .or_else(|| option_value(args, "-o"))
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from(format!("phase-12-trust-ux-{reviewer}.json")));
         let report =
-            run_trust_ux_session(reviewer, facilitator, session_kind).unwrap_or_else(|error| {
-                eprintln!("Trust UX session failed: {error}");
-                process::exit(1);
-            });
+            run_trust_ux_session(reviewer, facilitator, session_kind, study_manifest_digest)
+                .unwrap_or_else(|error| {
+                    eprintln!("Trust UX session failed: {error}");
+                    process::exit(1);
+                });
         write_bytes(
             &output,
             &serde_json::to_vec_pretty(&report).expect("Trust UX session JSON"),
@@ -1133,6 +1219,7 @@ fn run_trust_ux_session(
     reviewer_id: String,
     facilitator_id: Option<String>,
     session_kind: genegis_testkit::TrustUxSessionKind,
+    study_manifest_digest: Option<String>,
 ) -> Result<genegis_testkit::TrustUxSessionReport, String> {
     use crossterm::cursor::{Hide, MoveTo, Show};
     use crossterm::event::{self, Event, KeyCode};
@@ -1312,6 +1399,7 @@ fn run_trust_ux_session(
             "genegis-cli/{} map-first-trust-ux-v1",
             env!("CARGO_PKG_VERSION")
         ),
+        study_manifest_digest,
         corpus_version: TRUST_UX_CORPUS_VERSION.into(),
         corpus_digest: trust_ux_corpus_digest(),
         started_at,
@@ -3281,9 +3369,9 @@ Usage:
   genegis bench equivalence [--json]               Native/DuckDB/GDAL conformance corpus
   genegis bench external [--json]                  GeoBenchX-derived strict artifact adapter
   genegis bench review --reviewer ID [-o FILE]     Interactive Gate-B diagnosis timing
-  genegis bench trust-ux --human --reviewer-code ID --facilitator-code ID [-o FILE]
+  genegis bench trust-ux --human --study-manifest FILE --runner-digest SHA256 --reviewer-code ID --facilitator-code ID [-o FILE]
                                                     Phase-12 map-first human Trust UX session
-  genegis bench trust-ux-aggregate --input FILE... [-o FILE]
+  genegis bench trust-ux-aggregate --study-manifest FILE --runner-digest SHA256 --input FILE... [-o FILE]
                                                     Aggregate Gate-E sessions; automation excluded
   genegis workflow run nagoya-density              Print workflow graph JSON
   genegis workflow run nagoya-density --execute    Run MVP analysis pipeline

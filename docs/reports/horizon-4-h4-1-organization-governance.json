@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H4.1",
+  "status": "complete",
+  "policy_contract": {
+    "boundaries": ["organization", "project", "active member", "role"],
+    "capabilities": [
+      "view",
+      "execute",
+      "publish",
+      "manage_projects",
+      "manage_membership",
+      "approve",
+      "export_audit",
+      "manage_retention"
+    ],
+    "approvals": "action-specific threshold of distinct independent approvers bound to an exact resource digest",
+    "retention": "non-destructive keep/eligible plan with minimum/maximum days, protected classes, and legal hold",
+    "audit": "portable SHA-256 hash chain bound to the exact organization policy"
+  },
+  "runtime_surfaces": {
+    "desktop_and_browser": "/api/governance/execute in genegis-workbench",
+    "server": "/api/governance/execute in genegis-server",
+    "shared_engine": "genegis-collab governance state executed by genegis-analysis CommandBus"
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-collab governance --offline",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis governance_transition_is_command_and_workflow_bound --offline",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench -p genegis-server --offline",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "inactive or missing member",
+    "role lacking capability",
+    "cross-organization project",
+    "requester self-approval",
+    "duplicate or completed approval",
+    "invalid digest or timestamp",
+    "future retention record",
+    "tampered audit event or chain"
+  ]
+}

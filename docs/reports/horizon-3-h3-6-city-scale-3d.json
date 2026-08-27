@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.6",
+  "status": "complete",
+  "open_layer_contracts": [
+    "COG terrain",
+    "COPC point clouds",
+    "OGC 3D Tiles 1.1 buildings",
+    "PMTiles/COG 2D context"
+  ],
+  "shared_state": [
+    "CRS",
+    "camera and viewport",
+    "feature selection",
+    "temporal cursor",
+    "verified source snapshots"
+  ],
+  "streaming_contract": {
+    "selection": "deterministic screen-space-error hierarchy frontier",
+    "hard_limits": ["tile count", "transfer bytes"],
+    "identity": "canonical SHA-256 frame-plan digest",
+    "operation": "RunWorkflow through CommandBus",
+    "workbench_api": "/api/city-scene/plan"
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-render city_scene --offline",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis plans_city_frame_through_command_bus --offline",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench --offline",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "unknown CRS",
+    "unverified source",
+    "duplicate tile or layer identity",
+    "missing hierarchy root",
+    "missing parent or hierarchy cycle",
+    "invalid camera, geometric error, digest, or budget",
+    "sealed frame-plan tampering"
+  ]
+}

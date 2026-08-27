@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "id": "environment-monitoring",
+  "version": "1.0.0",
+  "domain": "environment",
+  "title": "Environment Monitoring",
+  "license": "Apache-2.0 OR MIT",
+  "template_ids": [
+    "ndvi-timeseries",
+    "flood-exposure",
+    "external-stac"
+  ],
+  "plugin_requirements": [
+    {
+      "plugin_id": "genegis-environment-tools",
+      "version": "1.0.0",
+      "capabilities": [
+        "read_catalog",
+        "read_storage",
+        "analysis_step"
+      ]
+    }
+  ],
+  "open_state_formats": [
+    "genegis-project-json",
+    "workflow-json",
+    "result-capsule"
+  ]
+}

@@ -19,13 +19,23 @@ dist/
 *.laz
 *.las
 *.copc.laz
+!examples/nagoya-population-density/data/nagoya-sentinel-red-2025-04.tif
+!examples/nagoya-population-density/data/nagoya-sentinel-nir-2025-04.tif
+!examples/nagoya-population-density/data/nagoya-sentinel-red-2025-10.tif
+!examples/nagoya-population-density/data/nagoya-sentinel-nir-2025-10.tif
+!examples/nagoya-population-density/data/nagoya-change-epoch-a.las
+!examples/nagoya-population-density/data/nagoya-change-epoch-b.las
 !crates/genegis-pointcloud/testdata/*.copc.laz
+!examples/nagoya-population-density/data/nagoya-scene.copc.laz
 datasets/cache/
 .genegis/cache/
 examples/nagoya-population-density/output/
 *.log
 **/.genegis/
 docs/assets/hero-frame-*.png
+/gate-e-study/
+__pycache__/
+*.py[cod]
 
 # Real open data fetched by scripts/fetch-*.py (regenerable; flood layer is ~42 MB)
 examples/nagoya-population-density/data/real/

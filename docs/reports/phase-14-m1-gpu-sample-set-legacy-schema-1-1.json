@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "minimum_samples": 5,
+  "aggregation": {
+    "first_frame": "nearest_rank_p95",
+    "steady_state_fps": "minimum"
+  },
+  "receipts": [
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt.json",
+      "receipt_digest": "sha256:d54f790208a8ce08d37631ce7209bcfc22c102ca4befc25213e76ea9f0ab252b"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-bound-sequential-2.json",
+      "receipt_digest": "sha256:0c95859ad25574a59826940a3d6a7f91dbb06c0fa113389863264ec2d20c8e13"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-bound-sequential-3.json",
+      "receipt_digest": "sha256:56a2c9d3a6d61d63d8c460aacf015aefa93481f9e84ac2406106fc09e29f01cb"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-bound-sequential-4.json",
+      "receipt_digest": "sha256:98e83729b6b72e5412816fc25cd5d032c7cafc7979fac4ce25b4f8c042018a26"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-hardware-receipt-bound-sequential-5.json",
+      "receipt_digest": "sha256:71746d16a8c9f2651a1ada6f9946630534d36ae175f2559ab62982eb0a35c606"
+    }
+  ]
+}

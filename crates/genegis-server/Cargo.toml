@@ -18,8 +18,12 @@ path = "src/main.rs"
 [dependencies]
 axum = "0.8"
 genegis-agent = { path = "../genegis-agent" }
+genegis-analysis = { path = "../genegis-analysis" }
 genegis-collab = { path = "../genegis-collab" }
-serde = { workspace = true }
+genegis-core = { path = "../genegis-core" }
+genegis-catalog = { path = "../genegis-catalog" }
+genegis-plugin-host = { path = "../genegis-plugin-host" }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tower-http = { version = "0.6", features = ["cors"] }

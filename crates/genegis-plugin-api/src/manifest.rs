@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::{Component, Path};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +9,7 @@ use crate::version::{is_api_compatible, MANIFEST_FILENAME, PLUGIN_API_VERSION};
 
 /// WASM module metadata embedded in a plugin bundle.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WasmModuleSpec {
     /// Relative path to the compiled `.wasm` module inside the plugin bundle.
     pub entry: String,
@@ -15,6 +17,7 @@ pub struct WasmModuleSpec {
 
 /// Declarative metadata shipped with a GeneGIS WASM plugin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginManifest {
     /// Stable plugin identifier (`demo-filter`, kebab-case).
     pub id: String,
@@ -33,6 +36,8 @@ pub struct PluginManifest {
     pub author: String,
     /// Capabilities requested by the plugin.
     pub capabilities: Vec<PluginCapability>,
+    /// SHA-256 identity of the distributed plugin artifact.
+    pub artifact_digest: String,
     /// Optional WASM entry when the bundle ships a module.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wasm: Option<WasmModuleSpec>,
@@ -48,6 +53,7 @@ impl Default for PluginManifest {
             description: String::new(),
             author: String::new(),
             capabilities: Vec::new(),
+            artifact_digest: String::new(),
             wasm: None,
         }
     }
@@ -88,6 +94,7 @@ impl PluginManifest {
             "description": self.description,
             "author": self.author,
             "capabilities": self.capabilities,
+            "artifact_digest": self.artifact_digest,
             "wasm_entry": self.wasm.as_ref().map(|spec| spec.entry.clone()),
         })
     }
@@ -110,10 +117,19 @@ impl PluginManifest {
     pub fn validate(&self) -> Result<(), PluginApiError> {
         validate_id(&self.id)?;
         validate_semver(&self.version, "version")?;
+        validate_semver(&self.api_version, "api_version")?;
 
-        if self.capabilities.is_empty() {
+        if self.capabilities.is_empty()
+            || self.capabilities.iter().collect::<HashSet<_>>().len() != self.capabilities.len()
+        {
             return Err(PluginApiError::InvalidManifest(
-                "capabilities must not be empty".into(),
+                "capabilities must be non-empty and unique".into(),
+            ));
+        }
+
+        if !valid_sha256(&self.artifact_digest) {
+            return Err(PluginApiError::InvalidManifest(
+                "artifact_digest must be sha256:<64 lowercase or uppercase hex characters>".into(),
             ));
         }
 
@@ -125,9 +141,15 @@ impl PluginManifest {
         }
 
         if let Some(wasm) = &self.wasm {
-            if wasm.entry.trim().is_empty() {
+            let path = Path::new(&wasm.entry);
+            if wasm.entry.trim().is_empty()
+                || path.is_absolute()
+                || path
+                    .components()
+                    .any(|component| !matches!(component, Component::Normal(_)))
+            {
                 return Err(PluginApiError::InvalidManifest(
-                    "wasm.entry must not be empty".into(),
+                    "wasm.entry must be a normalized relative bundle path".into(),
                 ));
             }
             if !wasm.entry.ends_with(".wasm") {
@@ -158,6 +180,7 @@ pub fn demo_manifest() -> PluginManifest {
         description: "Example analysis filter plugin".into(),
         author: "GeneGIS".into(),
         capabilities: vec![PluginCapability::AnalysisStep],
+        artifact_digest: format!("sha256:{}", "0".repeat(64)),
         wasm: Some(WasmModuleSpec {
             entry: "demo_filter.wasm".into(),
         }),
@@ -202,6 +225,12 @@ fn validate_semver(value: &str, field: &str) -> Result<(), PluginApiError> {
     Ok(())
 }
 
+fn valid_sha256(value: &str) -> bool {
+    value
+        .strip_prefix("sha256:")
+        .is_some_and(|hex| hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,8 +248,9 @@ mod tests {
         let json = r#"{
             "id": "demo-filter",
             "version": "0.1.0",
-            "api_version": "0.1.0",
+            "api_version": "1.0.0",
             "capabilities": ["analysis_step"],
+            "artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "wasm": { "entry": "demo_filter.wasm" }
         }"#;
 
@@ -234,8 +264,9 @@ mod tests {
         let json = r#"{
             "id": "bad-plugin",
             "version": "0.1.0",
-            "api_version": "0.1.0",
-            "capabilities": ["fly_to_moon"]
+            "api_version": "1.0.0",
+            "capabilities": ["fly_to_moon"],
+            "artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         }"#;
 
         assert!(PluginManifest::from_json(json).is_err());
@@ -258,5 +289,19 @@ mod tests {
         let loaded = PluginManifest::from_path(&path).expect("load");
         loaded.validate().expect("validate loaded manifest");
         assert_eq!(loaded, manifest);
+    }
+
+    #[test]
+    fn shared_sdk_v1_conformance_fixture_validates() {
+        let json = include_str!("../../../sdk/v1/conformance/valid-plugin.json");
+        let manifest = PluginManifest::parse_and_validate(json).expect("SDK v1 fixture");
+        assert_eq!(manifest.api_version, PLUGIN_API_VERSION);
+        assert_eq!(
+            manifest
+                .to_json_pretty()
+                .and_then(|json| PluginManifest::parse_and_validate(&json))
+                .expect("round trip"),
+            manifest
+        );
     }
 }

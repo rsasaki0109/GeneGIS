@@ -7,6 +7,7 @@ mod equivalence;
 mod error;
 mod external_benchmark;
 mod harness;
+mod managed_cloud;
 mod pipeline;
 mod real_data;
 mod render;
@@ -26,6 +27,10 @@ pub use harness::{
     time_iterations, BenchmarkReport, BenchmarkSample, DEFAULT_ITERATIONS, DEFAULT_VIEWPORT,
     DEFAULT_WARMUP, NORTH_STAR_PROMPT,
 };
+pub use managed_cloud::{
+    collect_managed_cloud_range_receipt, verify_managed_cloud_range_receipt,
+    ManagedCloudRangeReceipt, ManagedCloudRangeRequest,
+};
 pub use pipeline::benchmark_pipeline;
 pub use real_data::{run_real_data_corpus, DomainVerification, RealDataCorpusReport};
 pub use render::benchmark_render_mesh;
@@ -33,10 +38,12 @@ pub use review_tasks::{
     review_median_seconds, review_task_corpus, ReviewTask, ReviewTaskResult, ReviewTimingReport,
 };
 pub use trust_ux::{
-    aggregate_trust_ux_sessions, seal_trust_ux_session, trust_ux_corpus_digest,
-    trust_ux_task_corpus, validate_trust_ux_session, TrustUxAggregateReport, TrustUxAnswerChoice,
-    TrustUxEvidenceCard, TrustUxSessionKind, TrustUxSessionReport, TrustUxTask, TrustUxTaskResult,
-    TRUST_UX_CORPUS_DIGEST, TRUST_UX_CORPUS_VERSION,
+    aggregate_trust_ux_sessions, aggregate_trust_ux_study, seal_trust_ux_session,
+    trust_ux_corpus_digest, trust_ux_evidence_digest, trust_ux_task_corpus,
+    validate_trust_ux_session, validate_trust_ux_study_manifest, verify_trust_ux_study_receipt,
+    TrustUxAggregateReport, TrustUxAnswerChoice, TrustUxEvidenceCard, TrustUxSessionKind,
+    TrustUxSessionReport, TrustUxStudyAggregateReceipt, TrustUxStudyManifest, TrustUxTask,
+    TrustUxTaskResult, TRUST_UX_CORPUS_DIGEST, TRUST_UX_CORPUS_VERSION,
 };
 
 /// Run all north-star benchmarks and return a combined report.

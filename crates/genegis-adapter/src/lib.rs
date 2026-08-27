@@ -12,13 +12,32 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod geocoding;
 mod grass;
+mod live_feed;
+mod ogc;
 mod postgis;
 mod qgis;
 
+pub use geocoding::{
+    geocoding_manifest, GazetteerEntry, GeocodeCandidate, GeocodeMatchKind, GeocodeQueryResult,
+    GeocodingAdapter, GeocodingError, GeocodingMode, GeocodingPrivacyPolicy, GeocodingProvider,
+    GeocodingQuery, GeocodingRatePolicy, GeocodingReceipt, GeocodingRequest, GeocodingResponse,
+    GEOCODING_ADAPTER_BUILD_DIGEST,
+};
 pub use grass::{
     grass_manifest, GrassAdapter, GrassError, GrassOperation, GrassReceipt, SandboxEvidence,
     GRASS_IMAGE_DIGEST, GRASS_IMAGE_REFERENCE,
+};
+pub use live_feed::{
+    live_feed_manifest, FeedDomain, FeedFreshnessPolicy, FeedObservation, FeedObservationSnapshot,
+    LiveFeedAdapter, LiveFeedError, LiveFeedReceipt, LiveFeedRequest, LiveFeedResponse,
+    LIVE_FEED_ADAPTER_BUILD_DIGEST,
+};
+pub use ogc::{
+    ogc_web_service_manifest, OgcAdapterError, OgcOperation, OgcRequest, OgcResponse,
+    OgcServiceAdapter, OgcServiceReceipt, WfsGetFeatureRequest, WmsGetMapRequest,
+    OGC_ADAPTER_BUILD_DIGEST,
 };
 pub use postgis::{
     postgis_manifest, PostgisAdapter, PostgisError, PostgisOperation, PostgisReceipt,
@@ -60,6 +79,12 @@ pub enum BackendFamily {
     Grass,
     /// QGIS Processing provider execution.
     QgisProcessing,
+    /// Native OGC HTTP service client.
+    OgcWebService,
+    /// Provider-neutral local or HTTP geocoding engine.
+    Geocoding,
+    /// Cursor/watermark-based live spatial feed client.
+    LiveFeed,
 }
 
 /// Exact backend implementation used by a manifest or invocation.
@@ -281,6 +306,24 @@ impl CapabilityPolicy {
             .allowed_capabilities
             .extend([Capability::FileRead, Capability::FileWrite]);
         policy
+    }
+
+    /// A conservative policy for allowlisted read-only web-service access.
+    pub fn read_only_network(adapter_id: impl Into<String>) -> Self {
+        Self {
+            accepted_adapters: BTreeSet::from([adapter_id.into()]),
+            allowed_capabilities: BTreeSet::from([Capability::NetworkRead]),
+            required_evidence_hooks: BTreeSet::from([
+                EvidenceHook::InputDigests,
+                EvidenceHook::OutputDigests,
+                EvidenceHook::Parameters,
+                EvidenceHook::ComponentIdentity,
+                EvidenceHook::EnvironmentDigest,
+                EvidenceHook::IoMetrics,
+            ]),
+            reject_opaque: true,
+            reject_unknown_determinism: true,
+        }
     }
 }
 

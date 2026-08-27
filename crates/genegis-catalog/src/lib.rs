@@ -6,6 +6,7 @@ pub mod error;
 pub mod external_stac;
 pub mod federated;
 pub mod lookup;
+pub mod private;
 pub mod registry;
 pub mod stac;
 
@@ -28,6 +29,11 @@ pub use federated::{
     StacAuthentication, StacEndpoint, StacItemCollection, StacSearchRequest,
 };
 pub use lookup::CatalogMatch;
+pub use private::{
+    admit_private_federation, verify_private_federation_admission, AdmittedCatalogEndpoint,
+    CatalogAccessContext, CatalogAccessRule, CatalogVisibility, FederatedCatalogPolicy,
+    PrivateFederationAdmission,
+};
 pub use registry::{
     endpoint_registry_path, EndpointRegistry, ENDPOINT_REGISTRY_ENV, ENDPOINT_REGISTRY_PATH,
 };

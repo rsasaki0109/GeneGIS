@@ -1,0 +1,39 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H4.4",
+  "status": "complete",
+  "profiles": [
+    {"id": "local-first-v1", "persistence": "local_filesystem", "identity": "local", "network": "allow_list"},
+    {"id": "managed-cloud-v1", "persistence": "object_storage", "identity": "oidc", "network": "allow_list"},
+    {"id": "air-gapped-v1", "persistence": "offline_bundle", "identity": "offline_directory", "network": "disabled"}
+  ],
+  "invariants": [
+    "all operations require Command + Workflow Graph",
+    "offline capsule verification enabled",
+    "COG, COPC, GeoParquet, PMTiles, and STAC supported",
+    "deployment build identity is SHA-256",
+    "air-gapped registry snapshot is pinned",
+    "managed cloud uses OIDC, object storage, and explicit origin allowlist"
+  ],
+  "shared_corpus": {
+    "prompt": "名古屋市の人口密度を表示",
+    "runs_per_test": 3,
+    "external_network_used": false,
+    "equivalence_keys": ["workflow_digest", "result_digest", "capsule_result_digest", "verification_graph_digest"],
+    "verification": "each profile seals and independently verifies its own content-addressed capsule"
+  },
+  "verification_commands": [
+    {"command": "cargo test -p genegis-core declared_profiles_validate_and_air_gap_fails_closed --offline", "result": "1 passed; 0 failed"},
+    {"command": "cargo test -p genegis-capsule all_three_profiles_replay_and_verify_the_same_corpus --offline", "result": "1 passed; 0 failed; three profile executions equivalent"}
+  ],
+  "negative_coverage": [
+    "network enabled in air-gapped profile",
+    "missing offline registry snapshot",
+    "managed cloud without OIDC/object storage/allowlist",
+    "missing open format",
+    "disabled offline verification",
+    "invalid build or snapshot digest",
+    "profile semantic replay divergence"
+  ]
+}

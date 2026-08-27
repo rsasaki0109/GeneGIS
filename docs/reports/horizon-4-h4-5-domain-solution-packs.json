@@ -1,0 +1,34 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H4.5",
+  "status": "complete",
+  "packs": [
+    {"domain": "urban", "id": "urban-operations", "templates": 4, "plugins": 1},
+    {"domain": "environment", "id": "environment-monitoring", "templates": 3, "plugins": 1},
+    {"domain": "disaster", "id": "disaster-response", "templates": 3, "plugins": 1},
+    {"domain": "mobility", "id": "mobility-access", "templates": 3, "plugins": 1},
+    {"domain": "infrastructure", "id": "infrastructure-change", "templates": 3, "plugins": 1}
+  ],
+  "composition_contract": {
+    "templates": "IDs must resolve in reviewed_workflow_templates",
+    "plugins": "exact active signed SDK v1 registry releases with declared capabilities",
+    "state": ["genegis-project-json", "workflow-json", "result-capsule"],
+    "core_forks": "not representable by the deny-unknown-fields schema",
+    "admission": "RunWorkflow through CommandBus",
+    "runtime_api": "/api/solution-packs/admit in Workbench and Server"
+  },
+  "verification": [
+    {"command": "cargo test -p genegis-plugin-host solution_pack --offline", "result": "2 passed; 0 failed; all five domains admitted"},
+    {"command": "cargo check -p genegis-workbench -p genegis-server --offline", "result": "passed"}
+  ],
+  "negative_coverage": [
+    "unknown or duplicate workflow template",
+    "missing or revoked plugin release",
+    "plugin missing required capability",
+    "duplicate plugin requirement",
+    "missing portable state format",
+    "pack digest mutation",
+    "unknown manifest field representing a core override"
+  ]
+}

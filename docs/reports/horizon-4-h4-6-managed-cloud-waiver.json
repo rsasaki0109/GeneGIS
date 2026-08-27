@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "recorded_on": "2026-08-27",
+  "gate": "horizon-4-h4.6-managed-cloud-performance-matrix",
+  "status": "waived_by_project_owner",
+  "decision_scope": "36-month GeneGIS product roadmap acceptance",
+  "reason": "The project owner explicitly directed that the remaining managed-cloud execution be skipped.",
+  "managed_cloud_measurement_receipt": null,
+  "claims": {
+    "managed_cloud_hardware_validated": false,
+    "managed_cloud_http_range_validated": false,
+    "managed_cloud_performance_thresholds_passed": false,
+    "local_first_matrix_passed": true,
+    "air_gapped_matrix_passed": true,
+    "managed_cloud_software_profile_and_fail_closed_collector_implemented": true
+  },
+  "preserved_guardrails": [
+    "no local workstation result is represented as managed-cloud evidence",
+    "a missing managed-cloud receipt is never converted into a passing receipt",
+    "the managed-cloud collector, immutable HTTP Range checks, and independent matrix verifier remain available"
+  ],
+  "evidence": {
+    "local_first": "docs/reports/horizon-4-h4-6-local-first-receipt.json",
+    "air_gapped": "docs/reports/horizon-4-h4-6-air-gapped-receipt.json",
+    "execution_packet": "docs/reports/horizon-4-h4-6-managed-cloud-execution-packet.md"
+  },
+  "reopen_condition": "Remove the waiver only after the declared managed-cloud Windows GPU and immutable HTTP Range object produce an independently verified non-regressing receipt."
+}

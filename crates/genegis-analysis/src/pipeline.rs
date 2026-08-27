@@ -1790,6 +1790,16 @@ fn build_ndvi_ask_result_with_origin(
         origin,
         &checks,
     )?;
+    let temporal_playback = crate::build_ndvi_temporal_playback(
+        &analysis,
+        &dataset.crs,
+        coordinate_unit_for_crs(&dataset.crs),
+        execution_receipt.workflow_digest.clone(),
+        execution_receipt.result_digest.clone(),
+        execution_receipt.source_snapshots.clone(),
+    )?;
+    summary["temporal_playback"] = serde_json::to_value(temporal_playback)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
     add_receipt_to_summary(&mut summary, &execution_receipt)?;
 
     Ok(AskPipelineResult {

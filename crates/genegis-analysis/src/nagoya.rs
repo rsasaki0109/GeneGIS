@@ -120,7 +120,7 @@ pub(crate) fn nagoya_source_assurance(source: &SourceMetadata) -> Option<SourceA
         .clone();
     let oracle_digest = digest_bytes(NAGOYA_ORACLE_JSON.as_bytes());
     let population_digest =
-        "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c";
+        "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d";
     let checks = [
         (
             "schema",

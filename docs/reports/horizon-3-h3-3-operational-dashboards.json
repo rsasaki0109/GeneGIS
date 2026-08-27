@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.3",
+  "status": "complete",
+  "versioned_view": {
+    "components": ["map_layers", "dashboard_widgets", "feed_status", "incremental_state", "alert_history"],
+    "shared_identity": "result_digest",
+    "version_chain": "previous_view_digest",
+    "monotone_fields": ["version", "cursor", "watermark", "alert_history"],
+    "view_identity": "canonical SHA-256 over all components"
+  },
+  "workflow_steps": [
+    "ValidateOperationalResultIdentity",
+    "BindOperationalMapLayers",
+    "BindOperationalDashboardWidgets",
+    "BindOperationalCursorWatermarkStatus",
+    "BindOperationalAlertHistory",
+    "SealOperationalViewVersion"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-analysis operational_dashboard --offline",
+      "result": "2 passed; 0 failed"
+    }
+  ],
+  "negative_coverage": [
+    "cursor regression",
+    "watermark regression",
+    "alert history rewrite",
+    "layer cross-result binding",
+    "duplicate widget identity",
+    "unverified feed source",
+    "view digest tampering"
+  ]
+}

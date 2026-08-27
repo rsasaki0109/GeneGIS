@@ -3,18 +3,19 @@
 This protocol measures RFC 0004 Gate E. It does not permit simulated reviewers,
 automated key injection, model answers, or developer self-scoring to count as
 human evidence. The fixed corpus and hidden oracles are bound by digest in
-`/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-preregistration.json`.
+`docs/reports/phase-12-trust-ux-preregistration.json`.
 
 ## Preparation
 
-Build the exact integrated revision before recruiting reviewers:
+Build the exact integrated revision before recruiting reviewers. On the current
+Windows runner, use the pinned preparation wrapper:
 
-```console
-cargo build -p genegis-cli
+```powershell
+.\scripts\prepare-gate-e-study.ps1
 ```
 
 Choose three or more people who have not opened
-`/home/sasaki/workspace/GeneGIS/crates/genegis-testkit/src/trust_ux.rs` or the
+`crates/genegis-testkit/src/trust_ux.rs` or the
 preregistration oracle. Assign each person a pseudonymous code containing only
 letters, digits, `-`, or `_`. Do not use names, email addresses, or employee
 identifiers. Assign a different pseudonymous facilitator code.
@@ -28,12 +29,8 @@ allowed, but its timing is not recorded.
 
 Run once per reviewer, changing only the reviewer code and output path:
 
-```console
-target/debug/genegis bench trust-ux \
-  --human \
-  --reviewer-code HUMAN_01 \
-  --facilitator-code FAC_01 \
-  --output /home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-HUMAN_01.json
+```powershell
+.\scripts\run-gate-e-session.ps1 -ReviewerCode HUMAN_01 -FacilitatorCode FAC_01
 ```
 
 Each task remains hidden and untimed until the reviewer presses Space or Enter.
@@ -58,12 +55,8 @@ new reviewer code and the original aborted report remains in the study bundle.
 After all attempts, include every session file, including automated smoke runs
 and aborts:
 
-```console
-target/debug/genegis bench trust-ux-aggregate \
-  --input /absolute/path/session-01.json \
-  --input /absolute/path/session-02.json \
-  --input /absolute/path/session-03.json \
-  --output /home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-human.json
+```powershell
+.\scripts\aggregate-gate-e-study.ps1
 ```
 
 The aggregator verifies report and corpus digests, fixed task order, embedded
@@ -75,5 +68,5 @@ Gate E passes only with at least three admitted human reviewers and twelve
 completed tasks per reviewer, aggregate correctness at least 90%, median task
 diagnosis at most 120 seconds, and median map-to-decisive-evidence interactions
 at most two. Until a real report meets every threshold,
-`/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-acceptance.json` must remain
+`docs/reports/phase-12-acceptance.json` must remain
 `not_measured` for Gate E.

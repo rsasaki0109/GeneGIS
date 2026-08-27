@@ -1,0 +1,125 @@
+{
+  "command_id": "9cd11b7d-9e70-4b0c-9eba-77ad5be9daf8",
+  "workflow_digest": "sha256:9b28a22caf0cc4cf895dcceb466788b8077ff8a0ace38310076a2fd4d1861c71",
+  "matrix": {
+    "schema_version": "1.0.0",
+    "profile_id": "local-first-nagoya",
+    "profile_digest": "sha256:654c3dab3dd85f4dd8aa79c6fbc8d0c7b170431d970a6a905857a9ac74f86990",
+    "verdict": "pass",
+    "regressions": [],
+    "pending": [],
+    "measurements": [
+      {
+        "metric_id": "cpu.workflow_p95_ms",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 791.2335,
+          "iterations": 5
+        }
+      },
+      {
+        "metric_id": "gpu.first_frame_p95_ms",
+        "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+        "evidence_digest": "sha256:17fd350aeee8791b8bafc3697282037943c2f744ddd6d854cb109bcc55bc5743",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 1435.2979,
+          "iterations": 20
+        }
+      },
+      {
+        "metric_id": "gpu.steady_state_fps",
+        "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+        "evidence_digest": "sha256:17fd350aeee8791b8bafc3697282037943c2f744ddd6d854cb109bcc55bc5743",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 522.7623809735404,
+          "iterations": 20
+        }
+      },
+      {
+        "metric_id": "dataset.selected_bytes",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 2382.0,
+          "iterations": 1
+        }
+      },
+      {
+        "metric_id": "network.range_requests",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 0.0,
+          "iterations": 1
+        }
+      },
+      {
+        "metric_id": "concurrency.workflow_p95_ms",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T18:13:50.377051800+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "local-filesystem-no-http",
+          "logical_concurrency": 4,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 1068.1845,
+          "iterations": 4
+        }
+      }
+    ],
+    "receipt_digest": "sha256:ed123d3a75053bf52971c124e2a4f42290dfb3fcf543e8541a3f801bec287ef1"
+  }
+}

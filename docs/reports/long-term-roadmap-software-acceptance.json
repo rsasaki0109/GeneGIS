@@ -1,0 +1,83 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-27",
+  "roadmap": "36-month GeneGIS product roadmap",
+  "status": "accepted_with_documented_external_waivers",
+  "accepted_horizons": {
+    "horizon_2": ["H2.1", "H2.2", "H2.3", "H2.4", "H2.5", "H2.6"],
+    "horizon_3": ["H3.1", "H3.2", "H3.3", "H3.4", "H3.5", "H3.6"],
+    "horizon_4": ["H4.1", "H4.2", "H4.3", "H4.4", "H4.5", "H4.6"]
+  },
+  "regression": {
+    "software_tests_passed": 206,
+    "software_tests_failed": 0,
+    "suites": [
+      {"package": "genegis-analysis", "passed": 53, "failed": 0},
+      {"package": "genegis-capsule", "passed": 17, "failed": 0},
+      {"package": "genegis-catalog", "passed": 24, "failed": 0},
+      {"package": "genegis-collab", "passed": 9, "failed": 0},
+      {"package": "genegis-core", "passed": 22, "failed": 0},
+      {"package": "genegis-plugin-api", "passed": 8, "failed": 0},
+      {"package": "genegis-plugin-host", "passed": 8, "failed": 0},
+      {"package": "genegis-render", "passed": 9, "failed": 0, "ignored_hardware": 1},
+      {"package": "genegis-pointcloud", "passed": 6, "failed": 0},
+      {"package": "genegis-storage", "passed": 18, "failed": 0},
+      {"package": "genegis-testkit", "passed": 18, "failed": 0, "ignored_hardware": 4},
+      {"package": "genegis-workflow", "passed": 14, "failed": 0}
+    ],
+    "fixture_recovery": "The Nagoya GeoParquet fixture was regenerated with the repository's genegis-vector write_nagoya_geoparquet example before catalog acceptance. The immutable USGS JSON fixture is pinned to LF bytes so its content identity is platform-independent.",
+    "warnings": "No test failure or source-level warning remains in the accepted suites; MSVC import-library linker messages remain informational toolchain output."
+  },
+  "external_gates": [],
+  "waived_gates": [
+    {
+      "id": "phase-12-gate-e-human-review",
+      "status": "waived_by_project_owner",
+      "recorded_on": "2026-08-27",
+      "waiver": "docs/reports/phase-12-gate-e-waiver.json",
+      "human_usability_validated": false,
+      "reason": "The project owner explicitly directed that work requiring human participants be skipped."
+    },
+    {
+      "id": "horizon-4-h4.6-managed-cloud-performance-matrix",
+      "status": "waived_by_project_owner",
+      "recorded_on": "2026-08-27",
+      "waiver": "docs/reports/horizon-4-h4-6-managed-cloud-waiver.json",
+      "managed_cloud_hardware_validated": false,
+      "reason": "The project owner explicitly directed that the remaining managed-cloud execution be skipped."
+    }
+  ],
+  "closed_external_gates": [
+    {
+      "id": "phase-14-m1-gpu",
+      "status": "pass",
+      "receipt": "docs/reports/phase-14-m1-gpu-hardware-receipt.json",
+      "adapter": "NVIDIA GeForce GTX 1660 Ti",
+      "backend": "dx12",
+      "sample_set": "docs/reports/phase-14-m1-gpu-sample-set.json",
+      "sample_set_digest": "sha256:2af4ef03ac292c9dc6b6e01d8754ed41c71a542b786aae2243a08ee22635b99f",
+      "samples": 20,
+      "executable_digest": "sha256:dacfcf3e3eb1b79589e466839eb0ed514fa34bcf049c4bfa88307a68acfd6ea8",
+      "first_frame_nearest_rank_p95_ms": 1118.0932,
+      "steady_state_minimum_fps": 555.301042577707
+    },
+    {
+      "id": "horizon-4-h4.6-local-first",
+      "status": "pass",
+      "receipt": "docs/reports/horizon-4-h4-6-local-first-receipt.json",
+      "receipt_digest": "sha256:0c18635beab6961a0391c76d661ca04395ada910c3cc6afe4b7acb617cad4c74"
+    },
+    {
+      "id": "horizon-4-h4.6-air-gapped",
+      "status": "pass",
+      "receipt": "docs/reports/horizon-4-h4-6-air-gapped-receipt.json",
+      "receipt_digest": "sha256:9f1edad4e09ee66ec52f3692cea893da4feafa3e37a17bf3aef77ff215b1fe06"
+    }
+  ],
+  "integrity": {
+    "command_workflow_required": true,
+    "crs_units_sources_provenance_required": true,
+    "false_hardware_receipts_admitted": 0,
+    "false_human_decisions_admitted": 0
+  }
+}

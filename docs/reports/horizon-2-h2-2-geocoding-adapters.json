@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H2.2",
+  "status": "complete",
+  "scope": {
+    "modes": ["interactive", "batch"],
+    "providers": ["offline_gazetteer", "http_json"],
+    "output_crs": "EPSG:4326",
+    "coordinate_unit": "degrees",
+    "execution_boundary": "Command::RunWorkflow"
+  },
+  "contracts": {
+    "adapter_id": "org.genegis.geocoding",
+    "adapter_build_digest": "sha256:4d5fb41f1b91ed01ae17ffaf4cc05ec4f85d70ce33f057858cb5c91ee1732a58",
+    "privacy": ["local_only", "allow_remote_redacted", "allow_remote_full"],
+    "rate": ["max_batch_size", "max_candidates_per_query", "minimum_interval_ms"],
+    "receipt_fields": [
+      "manifest_digest",
+      "admission",
+      "provider_id",
+      "provider_version",
+      "privacy_policy",
+      "rate_policy",
+      "policy_digest",
+      "query_digests",
+      "raw_queries_retained",
+      "confidence",
+      "match_kind",
+      "source",
+      "output_digest",
+      "io"
+    ]
+  },
+  "live_http_evidence": {
+    "interactive": {
+      "ok": true,
+      "command_id": "68dd4011-c328-43fc-a9b0-3eab448c04bc",
+      "workflow_digest": "sha256:3c618cd00e954eaaea35cec3542ffe5e62afcf9fbedacf14a5b614b75327e4ee",
+      "result_digest": "sha256:c410520371845a33e4687970e6657635d2e6238334aadadb115bacb17737cf04",
+      "provider_id": "org.genegis.nagoya-gazetteer",
+      "source_checksum_status": "verified",
+      "raw_queries_retained": false,
+      "top_confidence": 1.0
+    },
+    "batch": {
+      "ok": true,
+      "query_count": 3,
+      "matched_queries": 2,
+      "unmatched_queries": 1
+    },
+    "privacy_negative": {
+      "http_status": 400,
+      "transport_attempted": false,
+      "failure": "remote full-text transport requires allow_remote_full"
+    }
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-adapter geocoding --offline",
+      "result": "3 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis geocoding --offline",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench --offline",
+      "result": "passed"
+    },
+    {
+      "command": "node --check apps/desktop/ui/app.js",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "privacy policy rejects remote full text before transport",
+    "batch and candidate limits fail admission",
+    "invalid coordinate and confidence fail response validation",
+    "unsupported response media type fails closed",
+    "manifest drift fails adapter admission",
+    "raw query text is absent from receipts"
+  ]
+}

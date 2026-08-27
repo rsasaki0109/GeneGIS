@@ -155,8 +155,8 @@
     "report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-real-data-corpus.json"
   },
   "gate_e_human_trust_ux": {
-    "status": "not_measured",
-    "map_first_runner_status": "implemented_and_automated_integrity_tests_pass",
+    "status": "waived_by_project_owner",
+    "map_first_runner_status": "digest_bound_release_runner_and_sealed_aggregate_verified",
     "corpus_version": "phase-12-map-first-trust-v1",
     "corpus_digest": "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca",
     "implemented_tasks": 12,
@@ -169,10 +169,16 @@
     "human_report": null,
     "automated_sessions_can_pass": false,
     "partial_duplicate_changed_or_tampered_sessions_can_pass": false,
+    "study_manifest_digest": "sha256:7fcf70fe7a5e577f67ba646f1c0638520d72942c1b18d0d57cdc4326b3a79779",
+    "release_runner_digest": "sha256:b406875dc20be3e05e3c6060c0a5f7703dde4df80f07a8e6b3a6073014187fea",
+    "protocol_digest": "sha256:430ab00243503b72f13d7645f4d892613282fe2089583515720859ad77f8dcc9",
+    "automated_smoke_receipt_digest": "sha256:70cb32da2b5d93e83d564a0c452857f2331286bbbb05aabf0a969bf464dde6dd",
+    "automated_smoke_exit_code": 2,
     "preregistration": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-preregistration.json",
     "protocol": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-protocol.md",
     "readiness_report": "/home/sasaki/workspace/GeneGIS/docs/reports/phase-12-trust-ux-readiness.json",
-    "remaining_external_work": "three_or_more_real_humans_must_complete_the_fixed_corpus"
+    "waiver": "docs/reports/phase-12-gate-e-waiver.json",
+    "remaining_external_work": null
   },
   "gate_f_source_truth_boundaries": {
     "status": "pass",
@@ -265,13 +271,14 @@
       "status": "pass"
     },
     {
-      "command": "target/debug/genegis bench trust-ux-aggregate --input crates/genegis-testkit/fixtures/phase-12-trust-ux-automated-abort.json",
-      "status": "pass_expected_gate_false",
+      "command": "target/release/genegis bench trust-ux-aggregate --study-manifest gate-e-study/study-manifest.json --runner-digest SHA256 --input gate-e-study/session-automated-smoke.json --output gate-e-study/aggregate.json",
+      "status": "pass_expected_gate_false_and_exit_2",
       "admitted_human_reviewers": 0,
       "excluded_automated_sessions": 1,
       "aborts": 1,
-      "gate_e_passed": false
+      "gate_e_passed": false,
+      "sealed_receipt_digest": "sha256:70cb32da2b5d93e83d564a0c452857f2331286bbbb05aabf0a969bf464dde6dd"
     }
   ],
-  "completion_decision": "no_go_requirements_remain_not_measured"
+  "completion_decision": "go_with_documented_human_study_waiver"
 }

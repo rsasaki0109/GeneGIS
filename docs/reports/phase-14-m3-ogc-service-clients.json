@@ -1,0 +1,69 @@
+{
+  "schema_version": "0.1.0",
+  "phase": "14",
+  "milestone": "M3",
+  "status": "pass",
+  "verified_at": "2026-08-26",
+  "deliverables": {
+    "adapter": "crates/genegis-adapter/src/ogc.rs",
+    "adapter_manifest_schema": "crates/genegis-adapter/schema/adapter-manifest-v0.schema.json",
+    "workflow_template": "crates/genegis-workflow/src/graph.rs",
+    "command_executor": "crates/genegis-analysis/src/ogc_service.rs",
+    "workbench_api": "apps/workbench/src/main.rs",
+    "shared_io_contract": "crates/genegis-storage/src/io_receipt.rs"
+  },
+  "operations": [
+    "WMS 1.3.0 GetCapabilities",
+    "WMS 1.3.0 GetMap",
+    "WFS 2.0.0 GetCapabilities",
+    "WFS 2.0.0 GetFeature"
+  ],
+  "workflow_steps": [
+    "AdmitOgcAdapter",
+    "ExecuteOgcRequest",
+    "ValidateOgcResponse",
+    "AttachIoReceipt"
+  ],
+  "receipt_binding": [
+    "command_id",
+    "workflow_digest",
+    "manifest_digest",
+    "admission_report",
+    "source_snapshot_and_observed_checksum",
+    "crs_and_coordinate_unit",
+    "output_digest",
+    "io_request_selection_bytes_items_and_timing"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-adapter ogc::tests",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-workflow ogc_template_requires_admission_validation_and_io_evidence",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check --tests -p genegis-analysis",
+      "result": "pass; existing unrelated unused-import warning"
+    },
+    {
+      "command": "cargo check -p genegis-workflow -p genegis-analysis -p genegis-workbench",
+      "result": "pass"
+    }
+  ],
+  "positive_cases": [
+    "WMS capabilities XML",
+    "WMS PNG map with metric CRS",
+    "WFS GeoJSON FeatureCollection",
+    "command and workflow receipt propagation"
+  ],
+  "negative_cases": [
+    "manifest or evidence-hook drift",
+    "unallowlisted remote host",
+    "unexpected response content type",
+    "OGC exception document",
+    "invalid image signature or GeoJSON",
+    "unknown CRS or invalid bbox"
+  ]
+}

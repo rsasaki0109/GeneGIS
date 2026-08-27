@@ -19,7 +19,29 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
+mod bridge;
+mod deployment;
+mod narrative;
+mod publication;
 mod standards;
+
+pub use bridge::{
+    seal_desktop_bridge_capsule, verify_desktop_bridge_capsule, BridgeCapsuleManifest,
+    BridgeCapsuleVerification, DesktopBridgeLayer, DesktopBridgeRequest, DesktopLayerFormat,
+};
+pub use deployment::{
+    run_deployment_conformance, DeploymentConformanceCase, DeploymentConformanceReport,
+};
+pub use narrative::{
+    compose_narrative_project_view, seal_narrative_project_view, verify_narrative_project_view,
+    NarrativeCompositionReceipt, NarrativeDashboardReference, NarrativeError, NarrativeFrame,
+    NarrativeLayerState, NarrativeMapState, NarrativeMediaReference, NarrativeProjectView,
+    NarrativeProjectViewDraft, NARRATIVE_VIEW_SCHEMA_VERSION,
+};
+pub use publication::{
+    export_portable_publication, verify_portable_publication, PortablePublication,
+    PublicationAttribution, PublicationFileEntry, PublicationPolicy, PublicationVerification,
+};
 
 pub use standards::{
     create_dsse_attestation, ed25519_public_key, execute_ogc_verify_request,
@@ -37,9 +59,13 @@ const RECEIPT_PATH: &str = "metadata/receipt.json";
 const POLICY_PATH: &str = "metadata/verification-policy.json";
 const GRAPH_PATH: &str = "metadata/verification-graph.json";
 const ASSURANCE_DIR: &str = "metadata/source-assurance";
+const OPERATIONAL_EVIDENCE_DIR: &str = "evidence/operational";
 const HTML_PATH: &str = "artifacts/map.html";
 const PNG_PATH: &str = "artifacts/map.png";
 const TRUST_REPORT_PATH: &str = "reports/trust.html";
+
+/// Current schema for an operational evidence envelope.
+pub const OPERATIONAL_EVIDENCE_SCHEMA_VERSION: &str = "0.1.0";
 
 /// One content-addressed file in a capsule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +111,142 @@ pub struct CapsuleVerification {
     pub trust: TrustAssessment,
     /// Number of content-addressed files checked.
     pub verified_entries: usize,
+    /// Operational evidence classes validated offline.
+    pub operational_evidence: Vec<OperationalEvidenceKind>,
+}
+
+/// Evidence classes required by an operational verification capsule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationalEvidenceKind {
+    /// External-engine manifest, admission, identity, and execution receipt.
+    Adapter,
+    /// Command-backed edit revision and changed-feature receipt.
+    Edit,
+    /// Bounded cloud read, resource, and optional GPU receipt.
+    Io,
+    /// Preregistered map-first human review aggregate.
+    TrustUx,
+}
+
+impl OperationalEvidenceKind {
+    fn role(self) -> &'static str {
+        match self {
+            Self::Adapter => "adapter-receipt",
+            Self::Edit => "edit-receipt",
+            Self::Io => "io-receipt",
+            Self::TrustUx => "trust-ux-report",
+        }
+    }
+
+    fn required_fields(self) -> &'static [&'static str] {
+        match self {
+            Self::Adapter => &[
+                "/manifest_digest",
+                "/operation_id",
+                "/backend",
+                "/parameters",
+                "/output_digest",
+                "/elapsed_ns",
+            ],
+            Self::Edit => &["/before_revision", "/after_revision", "/changed_features"],
+            Self::Io => &[
+                "/schema_version",
+                "/format",
+                "/object_digest",
+                "/requests",
+                "/transferred_bytes",
+                "/whole_object_fallback",
+                "/peak_rss_bytes",
+            ],
+            Self::TrustUx => &[
+                "/schema_version",
+                "/corpus_version",
+                "/corpus_digest",
+                "/admitted_human_reviewers",
+                "/admitted_tasks",
+                "/correctness",
+                "/median_diagnosis_seconds",
+                "/median_interactions_to_decisive_evidence",
+                "/passed",
+            ],
+        }
+    }
+}
+
+/// Typed envelope that binds one operational receipt into a result capsule.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OperationalEvidence {
+    /// Envelope schema understood by the offline verifier.
+    pub schema_version: String,
+    /// Stable identity unique within one capsule.
+    pub evidence_id: String,
+    /// Semantic evidence class.
+    pub kind: OperationalEvidenceKind,
+    /// Crate, runner, or other implementation that emitted the payload.
+    pub producer: String,
+    /// Digest of the exact compact JSON payload.
+    pub payload_digest: String,
+    /// Native serialized receipt or aggregate report.
+    pub payload: serde_json::Value,
+}
+
+impl OperationalEvidence {
+    /// Wrap a native serializable receipt in a digest-bound evidence envelope.
+    pub fn new<T: Serialize>(
+        evidence_id: impl Into<String>,
+        kind: OperationalEvidenceKind,
+        producer: impl Into<String>,
+        payload: &T,
+    ) -> Result<Self, CapsuleError> {
+        let payload = serde_json::to_value(payload)?;
+        let evidence = Self {
+            schema_version: OPERATIONAL_EVIDENCE_SCHEMA_VERSION.into(),
+            evidence_id: evidence_id.into(),
+            kind,
+            producer: producer.into(),
+            payload_digest: digest(&serde_json::to_vec(&payload)?),
+            payload,
+        };
+        evidence.validate()?;
+        Ok(evidence)
+    }
+
+    fn validate(&self) -> Result<(), CapsuleError> {
+        if self.schema_version != OPERATIONAL_EVIDENCE_SCHEMA_VERSION {
+            return Err(verify_error("unsupported operational evidence schema"));
+        }
+        if self.evidence_id.is_empty()
+            || !self
+                .evidence_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        {
+            return Err(verify_error("unsafe operational evidence identity"));
+        }
+        if self.producer.trim().is_empty() {
+            return Err(verify_error("operational evidence producer is empty"));
+        }
+        if !self.payload.is_object() {
+            return Err(verify_error(
+                "operational evidence payload is not an object",
+            ));
+        }
+        let observed_digest = digest(&serde_json::to_vec(&self.payload)?);
+        if self.payload_digest != observed_digest {
+            return Err(verify_error("operational evidence payload digest mismatch"));
+        }
+        for pointer in self.kind.required_fields() {
+            if self.payload.pointer(pointer).is_none() {
+                return Err(verify_error(format!(
+                    "{} evidence omitted required field {pointer}",
+                    self.kind.role()
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Semantic area affected by a capsule change.
@@ -349,7 +511,28 @@ pub fn seal_nagoya_capsule(
     result: &AskPipelineResult,
     root: impl AsRef<Path>,
 ) -> Result<CapsuleManifest, CapsuleError> {
-    let root = root.as_ref();
+    seal_capsule(result, root.as_ref(), &[])
+}
+
+/// Seal a result with adapter, edit, I/O, and Trust UX evidence.
+///
+/// At least one valid envelope from every operational evidence class is
+/// required. The ordinary result capsule remains available for workflows that
+/// do not cross these operational boundaries.
+pub fn seal_operational_capsule(
+    result: &AskPipelineResult,
+    root: impl AsRef<Path>,
+    evidence: &[OperationalEvidence],
+) -> Result<CapsuleManifest, CapsuleError> {
+    validate_operational_evidence_set(evidence, true)?;
+    seal_capsule(result, root.as_ref(), evidence)
+}
+
+fn seal_capsule(
+    result: &AskPipelineResult,
+    root: &Path,
+    evidence: &[OperationalEvidence],
+) -> Result<CapsuleManifest, CapsuleError> {
     if root.exists() {
         let mut entries = fs::read_dir(root).map_err(|source| io_error(root, source))?;
         if entries
@@ -366,6 +549,10 @@ pub fn seal_nagoya_capsule(
     }
     fs::create_dir_all(root.join("metadata")).map_err(|source| io_error(root, source))?;
     fs::create_dir_all(root.join(ASSURANCE_DIR)).map_err(|source| io_error(root, source))?;
+    if !evidence.is_empty() {
+        fs::create_dir_all(root.join(OPERATIONAL_EVIDENCE_DIR))
+            .map_err(|source| io_error(root, source))?;
+    }
     fs::create_dir_all(root.join("artifacts")).map_err(|source| io_error(root, source))?;
     fs::create_dir_all(root.join("reports")).map_err(|source| io_error(root, source))?;
 
@@ -435,6 +622,23 @@ pub fn seal_nagoya_capsule(
                 )?);
             }
         }
+    }
+    let mut operational_evidence = evidence.to_vec();
+    operational_evidence.sort_by(|left, right| {
+        left.kind
+            .cmp(&right.kind)
+            .then_with(|| left.evidence_id.cmp(&right.evidence_id))
+    });
+    for (index, evidence) in operational_evidence.iter().enumerate() {
+        evidence.validate()?;
+        subjects.push(json_subject(
+            &format!(
+                "{OPERATIONAL_EVIDENCE_DIR}/{index:03}-{}.json",
+                evidence.evidence_id
+            ),
+            evidence.kind.role(),
+            evidence,
+        )?);
     }
     let mut manifest_entries = Vec::with_capacity(subjects.len());
     for subject in subjects {
@@ -513,6 +717,30 @@ pub fn verify_nagoya_capsule(
             )));
         }
     }
+
+    let operational_entries = manifest
+        .entries
+        .iter()
+        .filter(|entry| operational_kind_for_role(&entry.role).is_some())
+        .collect::<Vec<_>>();
+    let mut operational_evidence = Vec::with_capacity(operational_entries.len());
+    for entry in operational_entries {
+        let evidence: OperationalEvidence = read_json(&root.join(&entry.path))?;
+        evidence.validate()?;
+        if operational_kind_for_role(&entry.role) != Some(evidence.kind) {
+            return Err(verify_error(
+                "operational evidence role differs from envelope kind",
+            ));
+        }
+        operational_evidence.push(evidence);
+    }
+    validate_operational_evidence_set(&operational_evidence, false)?;
+    let operational_evidence_kinds = operational_evidence
+        .iter()
+        .map(|evidence| evidence.kind)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
 
     let receipt: ExecutionReceipt = read_json(&root.join(RECEIPT_PATH))?;
     let command: CommandEnvelope = read_json(&root.join(COMMAND_PATH))?;
@@ -693,6 +921,7 @@ pub fn verify_nagoya_capsule(
         verification_graph_digest: graph_digest,
         trust,
         verified_entries: manifest.entries.len(),
+        operational_evidence: operational_evidence_kinds,
     })
 }
 
@@ -1206,6 +1435,49 @@ fn valid_digest(value: &str) -> bool {
         .is_some_and(|hex| hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
+fn operational_kind_for_role(role: &str) -> Option<OperationalEvidenceKind> {
+    match role {
+        "adapter-receipt" => Some(OperationalEvidenceKind::Adapter),
+        "edit-receipt" => Some(OperationalEvidenceKind::Edit),
+        "io-receipt" => Some(OperationalEvidenceKind::Io),
+        "trust-ux-report" => Some(OperationalEvidenceKind::TrustUx),
+        _ => None,
+    }
+}
+
+fn validate_operational_evidence_set(
+    evidence: &[OperationalEvidence],
+    require_complete: bool,
+) -> Result<(), CapsuleError> {
+    if evidence.is_empty() {
+        if require_complete {
+            return Err(verify_error("operational evidence set is empty"));
+        }
+        return Ok(());
+    }
+    let mut identities = BTreeSet::new();
+    let mut kinds = BTreeSet::new();
+    for item in evidence {
+        item.validate()?;
+        if !identities.insert(item.evidence_id.as_str()) {
+            return Err(verify_error("duplicate operational evidence identity"));
+        }
+        kinds.insert(item.kind);
+    }
+    let required = BTreeSet::from([
+        OperationalEvidenceKind::Adapter,
+        OperationalEvidenceKind::Edit,
+        OperationalEvidenceKind::Io,
+        OperationalEvidenceKind::TrustUx,
+    ]);
+    if kinds != required {
+        return Err(verify_error(
+            "operational evidence set does not contain every required class",
+        ));
+    }
+    Ok(())
+}
+
 fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
@@ -1360,6 +1632,8 @@ fn category_for(role: &str, path: &str) -> SemanticCategory {
         "source-assurance" => SemanticCategory::Source,
         "map-artifact" => SemanticCategory::Artifact,
         "trust-report" => SemanticCategory::Verification,
+        "adapter-receipt" | "edit-receipt" | "io-receipt" => SemanticCategory::Workflow,
+        "trust-ux-report" => SemanticCategory::Verification,
         "command" | "workflow" if path.contains("contract") => SemanticCategory::Contract,
         "command" | "workflow" => SemanticCategory::Workflow,
         "analysis-result" if path.contains("source") || path.contains("citation") => {
@@ -1385,6 +1659,69 @@ fn category_for(role: &str, path: &str) -> SemanticCategory {
 mod tests {
     use super::*;
     use genegis_analysis::run_ask_pipeline;
+
+    fn operational_evidence() -> Vec<OperationalEvidence> {
+        vec![
+            OperationalEvidence::new(
+                "adapter-postgis-area",
+                OperationalEvidenceKind::Adapter,
+                "genegis-adapter",
+                &serde_json::json!({
+                    "manifest_digest": digest(b"adapter manifest"),
+                    "operation_id": "postgis.area.projected",
+                    "backend": {"family": "postgis", "version": "18-3.6"},
+                    "parameters": {"srid": 6677},
+                    "transaction_read_only": true,
+                    "output_digest": digest(b"adapter output"),
+                    "elapsed_ns": 1200
+                }),
+            )
+            .expect("adapter evidence"),
+            OperationalEvidence::new(
+                "edit-boundary-001",
+                OperationalEvidenceKind::Edit,
+                "genegis-core",
+                &serde_json::json!({
+                    "before_revision": 41,
+                    "after_revision": 42,
+                    "changed_features": ["ward-23101"]
+                }),
+            )
+            .expect("edit evidence"),
+            OperationalEvidence::new(
+                "io-cog-window",
+                OperationalEvidenceKind::Io,
+                "genegis-storage",
+                &serde_json::json!({
+                    "schema_version": "0.1.0",
+                    "format": "cog",
+                    "object_digest": digest(b"cog object"),
+                    "requests": [{"start": 0, "end": 1023, "response_bytes": 1024}],
+                    "transferred_bytes": 1024,
+                    "whole_object_fallback": false,
+                    "peak_rss_bytes": 1048576
+                }),
+            )
+            .expect("I/O evidence"),
+            OperationalEvidence::new(
+                "trust-ux-aggregate",
+                OperationalEvidenceKind::TrustUx,
+                "genegis-testkit",
+                &serde_json::json!({
+                    "schema_version": "0.1.0",
+                    "corpus_version": "phase-12-map-first-trust-v1",
+                    "corpus_digest": digest(b"fixed corpus"),
+                    "admitted_human_reviewers": 3,
+                    "admitted_tasks": 36,
+                    "correctness": 1.0,
+                    "median_diagnosis_seconds": 45.0,
+                    "median_interactions_to_decisive_evidence": 2.0,
+                    "passed": true
+                }),
+            )
+            .expect("Trust UX evidence"),
+        ]
+    }
 
     #[test]
     fn seals_and_verifies_nagoya_offline() {
@@ -1433,6 +1770,64 @@ mod tests {
             result.execution_receipt.result_digest
         );
         assert_eq!(verified.verified_entries, 10);
+        assert!(verified.operational_evidence.is_empty());
+    }
+
+    #[test]
+    fn seals_and_verifies_complete_operational_evidence() {
+        let result = run_ask_pipeline("名古屋市の人口密度を表示").expect("north-star run");
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let root = temporary.path().join("operational-capsule");
+        let evidence = operational_evidence();
+
+        let manifest =
+            seal_operational_capsule(&result, &root, &evidence).expect("seal operational capsule");
+        assert_eq!(manifest.entries.len(), 14);
+        for role in [
+            "adapter-receipt",
+            "edit-receipt",
+            "io-receipt",
+            "trust-ux-report",
+        ] {
+            assert!(manifest.entries.iter().any(|entry| entry.role == role));
+        }
+
+        let verified = verify_nagoya_capsule(&root, None).expect("offline verification");
+        assert_eq!(
+            verified.operational_evidence,
+            vec![
+                OperationalEvidenceKind::Adapter,
+                OperationalEvidenceKind::Edit,
+                OperationalEvidenceKind::Io,
+                OperationalEvidenceKind::TrustUx,
+            ]
+        );
+
+        let tampered_path = manifest
+            .entries
+            .iter()
+            .find(|entry| entry.role == "io-receipt")
+            .expect("I/O subject")
+            .path
+            .clone();
+        mutate_json_subject(
+            &root,
+            &tampered_path,
+            "/payload/whole_object_fallback",
+            serde_json::json!(true),
+        );
+        assert!(verify_nagoya_capsule(&root, None).is_err());
+    }
+
+    #[test]
+    fn rejects_incomplete_operational_evidence_set() {
+        let result = run_ask_pipeline("名古屋市の人口密度を表示").expect("north-star run");
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let root = temporary.path().join("incomplete-operational-capsule");
+        let mut evidence = operational_evidence();
+        evidence.pop();
+
+        assert!(seal_operational_capsule(&result, &root, &evidence).is_err());
     }
 
     #[test]

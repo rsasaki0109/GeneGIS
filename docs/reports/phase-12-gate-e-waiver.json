@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "recorded_on": "2026-08-27",
+  "gate": "phase-12-gate-e-human-trust-ux",
+  "status": "waived_by_project_owner",
+  "decision_scope": "36-month GeneGIS product roadmap acceptance",
+  "reason": "The project owner explicitly directed that work requiring human participants be skipped.",
+  "human_sessions_observed": 0,
+  "claims": {
+    "human_usability_validated": false,
+    "gate_e_thresholds_passed": false,
+    "software_runner_and_fail_closed_aggregation_verified": true
+  },
+  "preserved_guardrails": [
+    "automated and synthetic sessions never count as human evidence",
+    "the human-study runner, protocol, and sealed aggregation path remain available",
+    "the waiver must not be presented as a successful human usability result"
+  ],
+  "reopen_condition": "Remove the waiver only after at least three real reviewers complete the preregistered protocol and the sealed aggregate passes."
+}

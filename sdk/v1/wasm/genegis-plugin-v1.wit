@@ -1,0 +1,12 @@
+package genegis:plugin@1.0.0;
+
+interface host {
+  emit-command: func(command-json: string) -> result<string, string>;
+  read-input: func(input-id: string) -> result<list<u8>, string>;
+}
+
+world plugin {
+  import host;
+  export plugin-info: func() -> string;
+  export plan-workflow-node: func(request-json: string) -> result<string, string>;
+}

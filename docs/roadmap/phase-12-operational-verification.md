@@ -30,9 +30,9 @@ The authoritative requirements and exit gates are in
 | `P4-1` | Five-domain source corpus | Boundaries, population, raster, point cloud, temporal change with licenses and immutable snapshots | Complete 2026-08-23; three positive sources plus two real fail-closed sources with explicit limitations |
 | `P4-2` | Oracles and mutation harness | At least 100 mutations, score at least 95%, false verified/attested = 0 | Complete 2026-08-23; 112/112 caught, score 100%, false verified/attested 0 |
 | `P5-1` | Map-first Trust UX | Map-to-evidence navigation for all preregistered failure categories | Complete 2026-08-23; fixed 12-task map-first TUI, interaction timing, abort preservation, digest binding |
-| `P5-2` | Human UX study | At least 3 human reviewers, 12 tasks, correctness/time/interaction report | Runner/protocol preregistered; real human execution pending per user instruction to skip human work |
-| `P6-1` | Capsule/standards integration | Source Assurance, adapter, edit, I/O, UX evidence bound into offline-verifiable capsule | Pending |
-| `P6-2` | Final acceptance and release audit | RFC row-by-row evidence, full tests, no LLM/server verification, main-ready worktree | Pending |
+| `P5-2` | Human UX study | At least 3 human reviewers, 12 tasks, correctness/time/interaction report | Waived by project owner 2026-08-27; no human-usability pass is claimed; runner and protocol remain available |
+| `P6-1` | Capsule/standards integration | Source Assurance, adapter, edit, I/O, UX evidence bound into offline-verifiable capsule | Complete 2026-08-26; four typed evidence classes, fail-closed completeness/tamper checks, five standards projections |
+| `P6-2` | Final acceptance and release audit | RFC row-by-row evidence, full tests, no LLM/server verification, main-ready worktree | Complete 2026-08-27 with documented Gate E human-study waiver; software acceptance remains fail-closed |
 
 ## First implementation slice
 
@@ -43,6 +43,12 @@ The authoritative requirements and exit gates are in
 4. Establish pinned container fixtures and execute the smallest read-only
    positive and dangerous-operation negative case for each backend.
 5. Expand only after the real boundary is proven; mocks do not satisfy `P1`.
+
+P6-1 evidence: [`docs/reports/phase-12-operational-capsule-integration.json`](../reports/phase-12-operational-capsule-integration.json).
+
+Gate E execution packet: [`docs/reports/phase-12-gate-e-execution-packet.md`](../reports/phase-12-gate-e-execution-packet.md).
+
+Gate E waiver: [`docs/reports/phase-12-gate-e-waiver.json`](../reports/phase-12-gate-e-waiver.json).
 
 ## Environment baseline
 

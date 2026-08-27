@@ -29,11 +29,99 @@
           </button>
           <span id="status" class="status">Ready</span>
         </div>
+        <details class="scene-launcher">
+          <summary>Open verified COPC + LOD1 scene</summary>
+          <div class="scene-fields">
+            <label for="scene-copc-path">COPC path</label>
+            <input id="scene-copc-path" type="text" placeholder="C:\data\district.copc.laz" />
+            <label for="scene-buildings-path">LOD1 + POI JSON path</label>
+            <input id="scene-buildings-path" type="text" placeholder="C:\data\district-buildings.json" />
+            <label for="scene-crs">Projected CRS</label>
+            <input id="scene-crs" type="text" value="EPSG:6675" />
+            <button id="scene-open-btn" type="button" class="secondary">Open 3D + Dashboard</button>
+          </div>
+        </details>
+        <details id="composer-panel" class="scene-launcher">
+          <summary>No-code Workflow Composer</summary>
+          <div class="composer-toolbar">
+            <label for="composer-template">Reviewed template</label>
+            <select id="composer-template"></select>
+            <button id="composer-create-btn" type="button" class="secondary">Create draft</button>
+            <button id="composer-undo-btn" type="button" class="secondary" disabled>Undo</button>
+            <button id="composer-redo-btn" type="button" class="secondary" disabled>Redo</button>
+            <button id="composer-run-btn" type="button" disabled>Run reviewed graph</button>
+          </div>
+          <div class="composer-edit-grid">
+            <label for="composer-goal">Goal</label>
+            <input id="composer-goal" type="text" />
+            <button id="composer-goal-btn" type="button" class="secondary" disabled>Apply goal</button>
+            <label for="composer-source-node">Source</label>
+            <select id="composer-source-node"></select>
+            <label for="composer-target-node">Target</label>
+            <select id="composer-target-node"></select>
+            <button id="composer-connect-btn" type="button" class="secondary" disabled>Connect</button>
+            <button id="composer-disconnect-btn" type="button" class="secondary" disabled>Disconnect</button>
+            <label for="composer-new-node-id">Clone selected source as</label>
+            <input id="composer-new-node-id" type="text" placeholder="custom-node" />
+            <button id="composer-add-node-btn" type="button" class="secondary" disabled>Add reviewed node</button>
+          </div>
+          <div id="composer-status" class="temporal-meta">Load templates to begin.</div>
+          <div id="composer-graph" class="composer-graph"></div>
+        </details>
+        <details id="geocoding-panel" class="scene-launcher">
+          <summary>Governed Geocoding</summary>
+          <div class="geocoding-fields">
+            <label for="geocoding-mode">Mode</label>
+            <select id="geocoding-mode"><option value="interactive">Interactive</option><option value="batch">Batch</option></select>
+            <label for="geocoding-provider">Provider</label>
+            <select id="geocoding-provider"><option value="offline_nagoya">Offline Nagoya</option><option value="http_json">HTTP JSON</option></select>
+            <label for="geocoding-endpoint">HTTP endpoint</label>
+            <input id="geocoding-endpoint" type="url" placeholder="https://provider.example/geocode" />
+            <label for="geocoding-queries">Queries (one per line)</label>
+            <textarea id="geocoding-queries" rows="3">名古屋駅</textarea>
+            <label for="geocoding-privacy">Privacy</label>
+            <select id="geocoding-privacy"><option value="local_only">Local only</option><option value="allow_remote_full">Allow remote full text</option></select>
+            <button id="geocoding-run-btn" type="button" class="secondary">Geocode through Workflow</button>
+          </div>
+          <pre id="geocoding-result" class="mono">Ready · output EPSG:4326</pre>
+        </details>
+        <details id="narrative-panel" class="scene-launcher">
+          <summary>Narrative Map Composer</summary>
+          <div class="geocoding-fields">
+            <label for="narrative-title">View title</label>
+            <input id="narrative-title" type="text" value="名古屋の検証可能な物語地図" />
+            <label for="narrative-frame-title">Frame title</label>
+            <input id="narrative-frame-title" type="text" value="全市の分布" />
+            <label for="narrative-text">Narrative text</label>
+            <textarea id="narrative-text" rows="3">検証済み結果の地図状態を説明します。</textarea>
+            <label for="narrative-center">Center lon,lat</label>
+            <input id="narrative-center" type="text" value="136.9066,35.1815" />
+            <label for="narrative-zoom">Zoom</label>
+            <input id="narrative-zoom" type="number" min="0" max="24" step="0.1" value="10.5" />
+            <label for="narrative-media-uri">Media reference</label>
+            <input id="narrative-media-uri" type="text" placeholder="media/method.svg or https://…" />
+            <label for="narrative-media-digest">Media SHA-256</label>
+            <input id="narrative-media-digest" type="text" placeholder="sha256:…" />
+            <label for="narrative-media-alt">Media alt text</label>
+            <input id="narrative-media-alt" type="text" placeholder="Accessible description" />
+            <button id="narrative-compose-btn" type="button" class="secondary" disabled>Compose from verified result</button>
+          </div>
+          <pre id="narrative-result" class="mono">Run a verified Ask workflow first.</pre>
+        </details>
       </section>
 
       <section class="panel map-panel">
         <h2>Map</h2>
         <iframe id="map-frame" title="Choropleth map"></iframe>
+        <section id="temporal-playback" class="temporal-playback" hidden>
+          <div class="temporal-heading">
+            <strong>Verified temporal layers</strong>
+            <button id="temporal-play-btn" type="button" class="secondary">Play</button>
+          </div>
+          <input id="temporal-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Temporal epoch" />
+          <div id="temporal-meta" class="temporal-meta"></div>
+          <div id="temporal-values" class="temporal-values"></div>
+        </section>
       </section>
 
       <aside class="sidebar">
@@ -127,6 +215,12 @@
         <section class="panel">
           <h2>Dataset</h2>
           <pre id="dataset" class="mono">—</pre>
+        </section>
+        <section class="panel">
+          <h2>Live dashboard</h2>
+          <div id="dashboard" class="dashboard-grid">
+            <p class="dashboard-empty">Run a digest-bound dashboard workflow to populate widgets.</p>
+          </div>
         </section>
         <section class="panel">
           <h2>Summary</h2>

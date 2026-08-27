@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "id": "air-gapped-v1",
+  "class": "air_gapped",
+  "network": {"mode": "disabled"},
+  "persistence": "offline_bundle",
+  "identity": "offline_directory",
+  "maximum_concurrent_workflows": 4,
+  "command_workflow_required": true,
+  "offline_capsule_verification": true,
+  "allowed_open_formats": ["cog", "copc", "geoparquet", "pmtiles", "stac"],
+  "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+  "registry_snapshot_digest": "sha256:1168358e568f1af2e2b5b6ad904bc87c07f9b6a542b066781a5fa3fb45ab037e"
+}

@@ -9,16 +9,19 @@ rust-version.workspace = true
 
 [dependencies]
 genegis-contract = { path = "../genegis-contract" }
+genegis-adapter = { path = "../genegis-adapter" }
 genegis-core = { path = "../genegis-core" }
 genegis-crs = { path = "../genegis-crs" }
 genegis-geometry = { path = "../genegis-geometry" }
 genegis-ai = { path = "../genegis-ai" }
 genegis-catalog = { path = "../genegis-catalog" }
+genegis-collab = { path = "../genegis-collab" }
 genegis-query = { path = "../genegis-query" }
 genegis-render = { path = "../genegis-render" }
 genegis-network = { path = "../genegis-network" }
 genegis-pointcloud = { path = "../genegis-pointcloud" }
 genegis-style = { path = "../genegis-style" }
+genegis-storage = { path = "../genegis-storage" }
 genegis-tile = { path = "../genegis-tile" }
 genegis-vector = { path = "../genegis-vector" }
 genegis-raster = { path = "../genegis-raster" }

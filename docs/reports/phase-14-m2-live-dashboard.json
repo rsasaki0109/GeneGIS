@@ -1,0 +1,46 @@
+{
+  "schema_version": "0.1.0",
+  "phase": "14",
+  "milestone": "M2",
+  "status": "pass",
+  "verified_at": "2026-08-26",
+  "deliverables": {
+    "widget_contract": "crates/genegis-analysis/src/live_dashboard.rs",
+    "scene_contract": "crates/genegis-render/src/scene3d.rs",
+    "workbench_api": "apps/workbench/src/main.rs",
+    "workbench_ui": "apps/desktop/ui/app.js"
+  },
+  "binding": [
+    "workflow_digest",
+    "result_digest",
+    "source_snapshots",
+    "dashboard_digest"
+  ],
+  "widgets": [
+    "building_count_kpi",
+    "maximum_building_height_kpi",
+    "poi_count_kpi",
+    "building_height_histogram",
+    "poi_category_breakdown"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-analysis live_dashboard::tests",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-analysis -p genegis-workbench",
+      "result": "pass"
+    },
+    {
+      "command": "node --check apps/desktop/ui/app.js",
+      "result": "pass"
+    }
+  ],
+  "negative_cases": [
+    "result_digest_mismatch",
+    "source_snapshot_tamper",
+    "widget_value_or_shape_tamper",
+    "dashboard_digest_tamper"
+  ]
+}

@@ -25,7 +25,7 @@ pub use io_receipt::{
     CloudFormat, GpuFrameMetrics, IoBudget, IoBudgetFailure, IoReceipt, IoRequestEvidence,
     IoSelection,
 };
-pub use policy::{RemoteAccessPolicy, REMOTE_ALLOWED_HOSTS_ENV};
+pub use policy::{remote_url_host, RemoteAccessPolicy, REMOTE_ALLOWED_HOSTS_ENV};
 pub use range::ByteRange;
 
 #[cfg(test)]
@@ -234,9 +234,11 @@ mod tests {
     fn global_timeout_is_enforced() {
         let response =
             b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".to_vec();
-        let url = spawn_raw_http_fixture(response, 100);
+        // Keep a wide margin so a heavily loaded Windows runner cannot resume
+        // only after both the timeout and the fixture response are ready.
+        let url = spawn_raw_http_fixture(response, 2_000);
         let policy = RemoteAccessPolicy {
-            timeout_ms: 10,
+            timeout_ms: 100,
             ..RemoteAccessPolicy::from_env()
         };
         let error = fetch_http_bytes_with_policy(&url, &policy).expect_err("timeout");

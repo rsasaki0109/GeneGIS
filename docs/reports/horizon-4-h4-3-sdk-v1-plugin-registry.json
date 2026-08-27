@@ -1,0 +1,43 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H4.3",
+  "status": "complete",
+  "sdk_contracts": {
+    "api_version": "1.0.0",
+    "rust": "genegis-plugin-api reference implementation",
+    "typescript": "sdk/v1/typescript/index.ts",
+    "python": "sdk/v1/python/genegis_sdk_v1.py",
+    "wasm": "sdk/v1/wasm/genegis-plugin-v1.wit",
+    "schema": "sdk/v1/schema/plugin-manifest.schema.json",
+    "conformance_fixture": "sdk/v1/conformance/valid-plugin.json"
+  },
+  "registry_contract": {
+    "capabilities": "manifest-declared and host-policy intersected before load",
+    "release_signature": "detached Ed25519 over canonical SDK v1 manifest",
+    "artifact_identity": "required SHA-256 verified before WASM compilation",
+    "immutability": "plugin ID and version cannot be republished",
+    "revocation": "signed exact-release revocation prevents subsequent resolution",
+    "operation_boundary": "publish/revoke through CommandBus RunWorkflow",
+    "runtime_api": "/api/plugins/registry/execute in Workbench and Server"
+  },
+  "verification": [
+    {"command": "cargo test -p genegis-plugin-api --offline", "result": "8 passed; 0 failed"},
+    {"command": "cargo test -p genegis-plugin-host --offline", "result": "5 passed; 0 failed"},
+    {"command": "cargo test -p genegis-plugin-host publication_is_command_and_workflow_bound --offline", "result": "1 passed; 0 failed"},
+    {"command": "python -m unittest discover -s sdk/v1/python -p test_*.py", "result": "2 passed; 0 failed"},
+    {"command": "cargo check -p genegis-workbench -p genegis-server --offline", "result": "passed"}
+  ],
+  "negative_coverage": [
+    "unknown manifest field or capability",
+    "incompatible API major",
+    "capability denied by host",
+    "untrusted signing key",
+    "manifest mutation after signature",
+    "artifact digest mismatch",
+    "duplicate immutable release",
+    "invalid or duplicate revocation",
+    "resolution after revocation"
+  ],
+  "environment_note": "genegis-cli check remains dependent on a host GDAL import library; SDK v1 crates and Workbench/Server surfaces pass independently"
+}

@@ -14,7 +14,7 @@ pub struct CapabilityPolicy {
 }
 
 impl CapabilityPolicy {
-    /// Create a policy that grants every Phase 4 alpha capability.
+    /// Create a policy that grants every SDK v1 capability.
     pub fn permissive() -> Self {
         Self {
             allow: PluginCapability::all().to_vec(),

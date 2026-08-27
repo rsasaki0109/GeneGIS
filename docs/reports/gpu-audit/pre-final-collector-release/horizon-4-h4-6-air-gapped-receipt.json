@@ -1,0 +1,125 @@
+{
+  "command_id": "e2e22fce-9079-4d90-b911-59736e5a96a0",
+  "workflow_digest": "sha256:61d5ad7a527915b07488de4972cf94079b8c931d0cc2a482934f44b2f4faafd8",
+  "matrix": {
+    "schema_version": "1.0.0",
+    "profile_id": "air-gapped-nagoya",
+    "profile_digest": "sha256:9089812342e6e6dbf8ac425fc32a3a6dbcd24c212756fc64737fe17692d5b8e5",
+    "verdict": "pass",
+    "regressions": [],
+    "pending": [],
+    "measurements": [
+      {
+        "metric_id": "cpu.workflow_p95_ms",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 507.3549,
+          "iterations": 5
+        }
+      },
+      {
+        "metric_id": "gpu.first_frame_p95_ms",
+        "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+        "evidence_digest": "sha256:2af4ef03ac292c9dc6b6e01d8754ed41c71a542b786aae2243a08ee22635b99f",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 1118.0932,
+          "iterations": 20
+        }
+      },
+      {
+        "metric_id": "gpu.steady_state_fps",
+        "fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+        "evidence_digest": "sha256:2af4ef03ac292c9dc6b6e01d8754ed41c71a542b786aae2243a08ee22635b99f",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 555.3010425777074,
+          "iterations": 20
+        }
+      },
+      {
+        "metric_id": "dataset.selected_bytes",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 2382.0,
+          "iterations": 1
+        }
+      },
+      {
+        "metric_id": "network.external_requests",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 1,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 0.0,
+          "iterations": 1
+        }
+      },
+      {
+        "metric_id": "concurrency.workflow_p95_ms",
+        "fixture_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+        "observed_at": "2026-08-26T23:20:11.896261300+00:00",
+        "environment": {
+          "os": "windows-x86_64",
+          "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+          "gpu": "NVIDIA GeForce GTX 1660 Ti (dx12)",
+          "network_profile": "air-gapped-network-disabled",
+          "logical_concurrency": 4,
+          "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915"
+        },
+        "status": {
+          "status": "measured",
+          "value": 786.7914,
+          "iterations": 4
+        }
+      }
+    ],
+    "receipt_digest": "sha256:3bcb5007e0597559b5d798f423c807be40d2eb0184635334c91aa80a4f9b1c07"
+  }
+}

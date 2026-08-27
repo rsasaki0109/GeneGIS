@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0.0",
+  "minimum_samples": 20,
+  "aggregation": {
+    "first_frame": "nearest_rank_p95",
+    "steady_state_fps": "minimum"
+  },
+  "receipts": [
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-001.json",
+      "receipt_digest": "sha256:172d9952b478788079b59ffaef364eef368c7b7fb47de7ae0e9dbfbcee4c6d8b"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-002.json",
+      "receipt_digest": "sha256:328e2af34a50a22fccdfd2e096d97ead46a799a7209735c5ec659b711a6067a6"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-003.json",
+      "receipt_digest": "sha256:60381274b21eddffc4a0b84915612e2cdaa0f7d801af799a812ff21c0c96df22"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-004.json",
+      "receipt_digest": "sha256:71cba1e0086910367e06448a69e4487fa2b0738e5adf390ae4244241af852fe8"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-005.json",
+      "receipt_digest": "sha256:8b794a18e46ed98a7297a19eec6bb062e7d93e801b6181fcf72becb3c31bd428"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-006.json",
+      "receipt_digest": "sha256:0637775e03f27957392a33c78abfacdea0b850a7ab804560efa2689301eabd47"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-007.json",
+      "receipt_digest": "sha256:d2ba1ce58b023e57556c211b00598d48688705be277ce38397ee0954e5f5a08c"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-008.json",
+      "receipt_digest": "sha256:aebf3430c3540bab3db36d4b65b7e6ef7b9bac71be4890921f120694c789b7f8"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-009.json",
+      "receipt_digest": "sha256:11804f6face000f0ff16ec670abfbb57e97ceefe4c4df9d25500ec9b8fb67486"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-010.json",
+      "receipt_digest": "sha256:0b136198237d8579956161ac404b7f641edd0c559afa52e262511feee75ab808"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-011.json",
+      "receipt_digest": "sha256:5f19ef9513c81e9636ae04606931269aceff55a7c00e3a1520faa575c2c29aee"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-012.json",
+      "receipt_digest": "sha256:1177a255de982a3fbb8764a079106b2a0d2ab0854333e7b469b710ea5ca52a2c"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-013.json",
+      "receipt_digest": "sha256:a8cc95aa2866f5dec5f462520fde7b19f879263dfb9d180b4955fff4e1e314b6"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-014.json",
+      "receipt_digest": "sha256:dda1e5ddf5c3f83cf5b5eefddc6530e904f42d1d3c7c7641ddeddf056a285d7f"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-015.json",
+      "receipt_digest": "sha256:8998b2188bdd46625530f390adfae9875b379c46a7a5ec04497e1ed3033d7134"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-016.json",
+      "receipt_digest": "sha256:65e7ab6e9cb1e286e2821706ddca5abf36c50d3232d2ac57e097209b58ffa32b"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-017.json",
+      "receipt_digest": "sha256:e325da2383777b838102d327acf21b3d1ae257b5ddaa8c12e59c328b97ce2c00"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-018.json",
+      "receipt_digest": "sha256:addf9b8cf76babee4fc7aeacb2e1b3fa307bf3227f23cc77fbc15aa422dac8aa"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-019.json",
+      "receipt_digest": "sha256:a61e586873a98a16277c80ea367471b1185c2a5591e58fdc34eb189a397630c2"
+    },
+    {
+      "path": "docs/reports/phase-14-m1-gpu-samples/receipt-020.json",
+      "receipt_digest": "sha256:61a612bbb87cdd562eaa1c054c4b1676cda4125de99e7278dfc4bd11c401c4a4"
+    }
+  ]
+}

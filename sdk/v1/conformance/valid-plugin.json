@@ -1,0 +1,11 @@
+{
+  "id": "conformance-filter",
+  "name": "Conformance Filter",
+  "version": "1.2.3",
+  "api_version": "1.0.0",
+  "description": "Shared SDK v1 conformance fixture",
+  "author": "GeneGIS",
+  "capabilities": ["read_catalog", "analysis_step"],
+  "artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "wasm": {"entry": "conformance_filter.wasm"}
+}

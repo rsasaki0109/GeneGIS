@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "id": "disaster-response",
+  "version": "1.0.0",
+  "domain": "disaster",
+  "title": "Disaster Response",
+  "license": "Apache-2.0 OR MIT",
+  "template_ids": [
+    "flood-exposure",
+    "evacuation",
+    "dashboard-export"
+  ],
+  "plugin_requirements": [
+    {
+      "plugin_id": "genegis-disaster-tools",
+      "version": "1.0.0",
+      "capabilities": [
+        "read_catalog",
+        "analysis_step",
+        "export_artifact"
+      ]
+    }
+  ],
+  "open_state_formats": [
+    "genegis-project-json",
+    "workflow-json",
+    "result-capsule"
+  ]
+}
