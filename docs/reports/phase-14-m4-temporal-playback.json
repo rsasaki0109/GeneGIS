@@ -1,0 +1,57 @@
+{
+  "schema_version": "0.1.0",
+  "phase": "14",
+  "milestone": "M4",
+  "status": "pass",
+  "verified_at": "2026-08-26",
+  "deliverables": {
+    "playback_contract_and_encoder": "crates/genegis-analysis/src/temporal_playback.rs",
+    "ndvi_pipeline_binding": "crates/genegis-analysis/src/pipeline.rs",
+    "workbench_widget": "apps/desktop/ui/app.js",
+    "workbench_markup": "apps/desktop/ui/index.html"
+  },
+  "binding": [
+    "workflow_digest",
+    "result_digest",
+    "source_snapshots",
+    "crs_and_coordinate_unit",
+    "ordered_epoch_datetimes",
+    "tile_set_digest",
+    "playback_digest"
+  ],
+  "encoding_budget": {
+    "zoom": 10,
+    "maximum_tile_bytes": 524288,
+    "maximum_layer_bytes": 8388608,
+    "maximum_encode_ns": 2000000000
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-analysis temporal_playback::tests::encodes_ordered_ndvi_epochs_with_per_layer_budgets",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-analysis -p genegis-workbench",
+      "result": "pass"
+    },
+    {
+      "command": "node --check apps/desktop/ui/app.js",
+      "result": "pass"
+    }
+  ],
+  "positive_cases": [
+    "two strictly ordered epochs",
+    "all ward values reconcile per epoch",
+    "non-empty MVT tile payloads",
+    "per-layer tile byte and encoding-time budgets pass",
+    "manual scrub and automatic playback use the same verified epoch array"
+  ],
+  "negative_cases": [
+    "fewer than two epochs",
+    "unordered or duplicate datetime",
+    "empty tile set",
+    "tile or layer byte budget exceeded",
+    "encoding time budget exceeded",
+    "ward value or playback digest tamper"
+  ]
+}

@@ -3,8 +3,11 @@
 //! UI, AI, and CLI all emit [`Command`]s. The core stays independent of UX and AI.
 
 pub mod command;
+pub mod deployment;
 pub mod edit;
+pub mod incremental;
 pub mod layer;
+pub mod performance;
 pub mod project;
 pub mod provenance;
 pub mod source;
@@ -16,12 +19,27 @@ pub use command::{
     CommandOrigin, InputSnapshot, WorkflowDigest, WorkflowExecution, WorkflowExecutionContext,
     WorkflowExecutionError, WorkflowExecutionEvent, WorkflowExecutionRecord, WorkflowExecutor,
 };
+pub use deployment::{
+    DeploymentClass, DeploymentIdentity, DeploymentNetwork, DeploymentPersistence,
+    DeploymentProfile, DeploymentProfileError,
+};
 pub use edit::{
     AttributeField, AttributeType, AttributeValue, EditError, EditReceipt, EditableFeature,
     EditableGeometryKind, EditableLayer, FeatureDraft, FeatureEdit, FeatureGeometry, FeatureSchema,
     MutationWorkflowBinding,
 };
+pub use incremental::{
+    IncrementalChange, IncrementalChangeKind, IncrementalDecision, IncrementalError,
+    IncrementalEvent, IncrementalInputWindow, IncrementalRunReceipt, IncrementalScheduler,
+    PartitionKey, INCREMENTAL_RECEIPT_SCHEMA_VERSION,
+};
 pub use layer::{Layer, LayerId, LayerKind, LayerStatistics};
+pub use performance::{
+    evaluate_performance_matrix, MetricComparator, PerformanceDimension, PerformanceEnvironment,
+    PerformanceMatrixError, PerformanceMatrixProfile, PerformanceMatrixReceipt,
+    PerformanceMatrixVerdict, PerformanceMeasurement, PerformanceMeasurementStatus,
+    PerformanceMetricBudget,
+};
 pub use project::{Project, ProjectManifest};
 pub use provenance::{ProvenanceEntry, ProvenanceStore};
 pub use source::{DataSource, SourceKind};

@@ -2,11 +2,53 @@ const promptEl = document.getElementById("prompt");
 const runBtn = document.getElementById("run-btn");
 const downloadPngBtn = document.getElementById("download-png-btn");
 const gpuPreviewBtn = document.getElementById("gpu-preview-btn");
+const sceneOpenBtn = document.getElementById("scene-open-btn");
+const sceneCopcPathEl = document.getElementById("scene-copc-path");
+const sceneBuildingsPathEl = document.getElementById("scene-buildings-path");
+const sceneCrsEl = document.getElementById("scene-crs");
 const statusEl = document.getElementById("status");
 const mapFrame = document.getElementById("map-frame");
+const temporalPlaybackEl = document.getElementById("temporal-playback");
+const temporalPlayBtn = document.getElementById("temporal-play-btn");
+const temporalSliderEl = document.getElementById("temporal-slider");
+const temporalMetaEl = document.getElementById("temporal-meta");
+const temporalValuesEl = document.getElementById("temporal-values");
+const composerTemplateEl = document.getElementById("composer-template");
+const composerCreateBtn = document.getElementById("composer-create-btn");
+const composerUndoBtn = document.getElementById("composer-undo-btn");
+const composerRedoBtn = document.getElementById("composer-redo-btn");
+const composerRunBtn = document.getElementById("composer-run-btn");
+const composerGoalEl = document.getElementById("composer-goal");
+const composerGoalBtn = document.getElementById("composer-goal-btn");
+const composerSourceNodeEl = document.getElementById("composer-source-node");
+const composerTargetNodeEl = document.getElementById("composer-target-node");
+const composerConnectBtn = document.getElementById("composer-connect-btn");
+const composerDisconnectBtn = document.getElementById("composer-disconnect-btn");
+const composerNewNodeIdEl = document.getElementById("composer-new-node-id");
+const composerAddNodeBtn = document.getElementById("composer-add-node-btn");
+const composerStatusEl = document.getElementById("composer-status");
+const composerGraphEl = document.getElementById("composer-graph");
+const geocodingModeEl = document.getElementById("geocoding-mode");
+const geocodingProviderEl = document.getElementById("geocoding-provider");
+const geocodingEndpointEl = document.getElementById("geocoding-endpoint");
+const geocodingQueriesEl = document.getElementById("geocoding-queries");
+const geocodingPrivacyEl = document.getElementById("geocoding-privacy");
+const geocodingRunBtn = document.getElementById("geocoding-run-btn");
+const geocodingResultEl = document.getElementById("geocoding-result");
+const narrativeTitleEl = document.getElementById("narrative-title");
+const narrativeFrameTitleEl = document.getElementById("narrative-frame-title");
+const narrativeTextEl = document.getElementById("narrative-text");
+const narrativeCenterEl = document.getElementById("narrative-center");
+const narrativeZoomEl = document.getElementById("narrative-zoom");
+const narrativeMediaUriEl = document.getElementById("narrative-media-uri");
+const narrativeMediaDigestEl = document.getElementById("narrative-media-digest");
+const narrativeMediaAltEl = document.getElementById("narrative-media-alt");
+const narrativeComposeBtn = document.getElementById("narrative-compose-btn");
+const narrativeResultEl = document.getElementById("narrative-result");
 const resolutionEl = document.getElementById("resolution");
 const summaryEl = document.getElementById("summary");
 const datasetEl = document.getElementById("dataset");
+const dashboardEl = document.getElementById("dashboard");
 const stacCollectionEl = document.getElementById("stac-collection");
 const stacItemsEl = document.getElementById("stac-items");
 const stacUrlEl = document.getElementById("stac-url");
@@ -42,6 +84,229 @@ const notesEl = document.getElementById("notes");
 
 let lastPngBase64 = null;
 let lastWorkflowId = "nagoya-density";
+let temporalPlayback = null;
+let temporalTimer = null;
+let composerSessionId = null;
+let composerTemplateId = null;
+let composerDocument = null;
+let narrativeResultDigest = null;
+let lastVerifiedDashboard = null;
+
+async function sha256Text(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function composerRequest(path, body) {
+  const response = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || `Composer request failed (${response.status})`);
+  return payload;
+}
+
+function composerOption(value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
+function renderComposer(payload) {
+  composerSessionId = payload.session_id;
+  composerTemplateId = payload.template_id;
+  composerDocument = payload.composer;
+  const workflow = composerDocument.workflow;
+  composerGoalEl.value = workflow.goal;
+  composerSourceNodeEl.replaceChildren();
+  composerTargetNodeEl.replaceChildren();
+  composerGraphEl.replaceChildren();
+
+  for (const step of workflow.steps) {
+    const label = `${step.stable_id} · ${step.operation}`;
+    composerSourceNodeEl.append(composerOption(step.stable_id, label));
+    composerTargetNodeEl.append(composerOption(step.stable_id, label));
+    const node = document.createElement("article");
+    node.className = "composer-node";
+    const title = document.createElement("strong");
+    title.textContent = step.operation;
+    const id = document.createElement("code");
+    id.textContent = step.stable_id;
+    const edges = document.createElement("span");
+    edges.textContent = step.depends_on?.length
+      ? `← ${step.depends_on.map((item) => item).join(", ")}`
+      : "graph input";
+    const ports = document.createElement("small");
+    ports.textContent = `out: ${(step.outputs || []).map((item) => item.port).join(", ") || "—"}`;
+    node.append(title, id, edges, ports);
+    composerGraphEl.append(node);
+  }
+  const lastEvent = composerDocument.events.at(-1);
+  const executable = !lastEvent || Boolean(lastEvent.executable_digest);
+  composerStatusEl.textContent = `${workflow.steps.length} nodes · ${workflow.input_contracts.length} typed inputs · ${executable ? "execution contracts valid" : "draft has validation errors"}`;
+  for (const button of [composerGoalBtn, composerConnectBtn, composerDisconnectBtn, composerAddNodeBtn]) {
+    button.disabled = false;
+  }
+  composerUndoBtn.disabled = composerDocument.events.length === 0;
+  composerRedoBtn.disabled = false;
+  composerRunBtn.disabled = !executable;
+}
+
+async function loadComposerTemplates() {
+  if (!composerTemplateEl || window.__TAURI__?.core?.invoke) return;
+  try {
+    const payload = await composerRequest("/api/composer/templates");
+    composerTemplateEl.replaceChildren(...payload.templates.map((template) =>
+      composerOption(template.id, `${template.title} (${template.node_count})`)));
+    composerStatusEl.textContent = `${payload.templates.length} reviewed templates available.`;
+  } catch (error) {
+    composerStatusEl.textContent = `Composer unavailable: ${error.message || error}`;
+  }
+}
+
+async function createComposer() {
+  const payload = await composerRequest("/api/composer/sessions", {
+    template_id: composerTemplateEl.value,
+  });
+  renderComposer(payload);
+}
+
+async function editComposer(command) {
+  if (!composerSessionId) throw new Error("Create a composer draft first");
+  const payload = await composerRequest(`/api/composer/sessions/${composerSessionId}/edit`, { command });
+  renderComposer(payload);
+}
+
+function selectedComposerPort() {
+  const source = composerDocument?.workflow.steps.find((step) => step.stable_id === composerSourceNodeEl.value);
+  return source?.outputs?.[0]?.port || "result";
+}
+
+function stopTemporalPlayback() {
+  if (temporalTimer !== null) {
+    window.clearInterval(temporalTimer);
+    temporalTimer = null;
+  }
+  temporalPlayBtn.textContent = "Play";
+}
+
+function renderTemporalEpoch(index) {
+  if (!temporalPlayback) return;
+  const epoch = temporalPlayback.epochs[index];
+  if (!epoch) return;
+  temporalSliderEl.value = String(index);
+  const receipt = epoch.encoding;
+  temporalMetaEl.textContent = `${epoch.datetime} · ${epoch.id} · ${receipt.tile_count} MVT tiles · ${receipt.encoded_bytes} bytes · budget ${receipt.budget_passed ? "PASS" : "FAIL"}`;
+  temporalValuesEl.replaceChildren();
+  const maximum = Math.max(...epoch.values.map((item) => Math.abs(item.value)), 0.0001);
+  for (const item of [...epoch.values].sort((left, right) => right.value - left.value)) {
+    const row = document.createElement("div");
+    row.className = "temporal-value";
+    const label = document.createElement("span");
+    label.textContent = item.label;
+    const bar = document.createElement("span");
+    bar.className = "temporal-value-bar";
+    bar.style.setProperty("--value-width", `${Math.max(2, (Math.abs(item.value) / maximum) * 100)}%`);
+    const value = document.createElement("strong");
+    value.textContent = `${item.value.toFixed(3)} ${epoch.value_unit}`;
+    row.append(label, bar, value);
+    temporalValuesEl.append(row);
+  }
+}
+
+function renderTemporalPlayback(playback) {
+  stopTemporalPlayback();
+  const valid = playback?.schema_version === "0.1.0"
+    && playback.epochs?.length >= 2
+    && playback.epochs.every((epoch) => epoch.encoding?.budget_passed === true);
+  if (!valid) {
+    temporalPlayback = null;
+    temporalPlaybackEl.hidden = true;
+    return;
+  }
+  temporalPlayback = playback;
+  temporalPlaybackEl.hidden = false;
+  temporalSliderEl.max = String(playback.epochs.length - 1);
+  renderTemporalEpoch(0);
+}
+
+temporalSliderEl.addEventListener("input", () => {
+  stopTemporalPlayback();
+  renderTemporalEpoch(Number(temporalSliderEl.value));
+});
+
+temporalPlayBtn.addEventListener("click", () => {
+  if (!temporalPlayback) return;
+  if (temporalTimer !== null) {
+    stopTemporalPlayback();
+    return;
+  }
+  temporalPlayBtn.textContent = "Pause";
+  temporalTimer = window.setInterval(() => {
+    const next = (Number(temporalSliderEl.value) + 1) % temporalPlayback.epochs.length;
+    renderTemporalEpoch(next);
+  }, 1200);
+});
+
+function appendDashboardBar(container, label, value, maximum) {
+  const row = document.createElement("div");
+  row.className = "dashboard-bar-row";
+  const text = document.createElement("span");
+  text.textContent = `${label} · ${value}`;
+  const track = document.createElement("div");
+  track.className = "dashboard-bar-track";
+  const fill = document.createElement("div");
+  fill.className = "dashboard-bar-fill";
+  fill.style.width = `${maximum > 0 ? (value / maximum) * 100 : 0}%`;
+  track.appendChild(fill);
+  row.append(text, track);
+  container.appendChild(row);
+}
+
+function renderDashboard(dashboard) {
+  if (!dashboardEl) return;
+  dashboardEl.replaceChildren();
+  if (!dashboard?.widgets?.length) {
+    lastVerifiedDashboard = null;
+    const empty = document.createElement("p");
+    empty.className = "dashboard-empty";
+    empty.textContent = "No verified dashboard widgets.";
+    dashboardEl.appendChild(empty);
+    return;
+  }
+  lastVerifiedDashboard = dashboard;
+
+  const binding = document.createElement("div");
+  binding.className = "dashboard-binding";
+  binding.textContent = `verified ${dashboard.dashboard_digest.slice(0, 18)}… · result ${dashboard.result_digest.slice(0, 18)}…`;
+  dashboardEl.appendChild(binding);
+
+  for (const widget of dashboard.widgets) {
+    const card = document.createElement("article");
+    card.className = `dashboard-widget dashboard-${widget.kind}`;
+    const title = document.createElement("h3");
+    title.textContent = widget.label;
+    card.appendChild(title);
+    if (widget.kind === "kpi") {
+      const value = document.createElement("strong");
+      value.textContent = `${Number(widget.value).toLocaleString()} ${widget.unit}`;
+      card.appendChild(value);
+    } else {
+      const entries = widget.kind === "histogram"
+        ? widget.bins.map((bin) => [bin.label, bin.count])
+        : widget.categories.map((category) => [category.category, category.count]);
+      const maximum = Math.max(0, ...entries.map(([, value]) => value));
+      for (const [label, value] of entries) {
+        appendDashboardBar(card, label, value, maximum);
+      }
+    }
+    dashboardEl.appendChild(card);
+  }
+}
 
 function verificationProfile(workflowId) {
   if (workflowId === "remote-cog-demo" || workflowId === "local-cog-demo") {
@@ -897,9 +1162,10 @@ async function invokeAsk(prompt) {
 
 async function invokeGpuPreview() {
   if (window.__TAURI__?.core?.invoke) {
-    return window.__TAURI__.core.invoke("launch_gpu_preview", {
+    const message = await window.__TAURI__.core.invoke("launch_gpu_preview", {
       workflowId: lastWorkflowId,
     });
+    return { message, dashboard: null };
   }
 
   const response = await fetch("/api/gpu-preview", {
@@ -911,18 +1177,88 @@ async function invokeGpuPreview() {
   if (!payload.ok) {
     throw new Error(payload.error || "GPU preview failed");
   }
-  return payload.message || "GPU preview launched";
+  return payload;
 }
 
 async function openGpuPreview() {
   setStatus("Launching GPU map…", true);
   try {
-    const message = await invokeGpuPreview();
-    setStatus(message);
+    const payload = await invokeGpuPreview();
+    if (payload.dashboard) renderDashboard(payload.dashboard);
+    setStatus(payload.message || "GPU preview launched");
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message || err}`);
   }
+}
+
+async function openScene3d() {
+  const copcPath = sceneCopcPathEl?.value.trim();
+  const buildingsPath = sceneBuildingsPathEl?.value.trim();
+  const crs = sceneCrsEl?.value.trim();
+  if (!copcPath || !buildingsPath || !crs) {
+    setStatus("COPC path, LOD1 path, and projected CRS are required");
+    return;
+  }
+  if (window.__TAURI__?.core?.invoke) {
+    setStatus("Use the local web workbench for path-backed 3D scenes");
+    return;
+  }
+  setStatus("Validating and launching 3D scene…", true);
+  try {
+    const response = await fetch("/api/gpu-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workflow_id: "scene3d-copc-lod1",
+        copc_path: copcPath,
+        buildings_path: buildingsPath,
+        crs,
+      }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || "3D scene failed");
+    renderDashboard(payload.dashboard);
+    setStatus(payload.message || "3D scene launched");
+  } catch (err) {
+    console.error(err);
+    setStatus(`Error: ${err.message || err}`);
+  }
+}
+
+function renderAskResult(result) {
+  lastWorkflowId = result.workflow_id;
+  resolutionEl.textContent = [
+    `workflow: ${result.workflow_id}`,
+    `confidence: ${(result.confidence * 100).toFixed(0)}%`,
+    `steps: ${result.workflow_steps}`,
+    verificationLine(result.workflow_id, result.duckdb_verified),
+  ].join("\n");
+  datasetEl.textContent = result.dataset
+    ? [
+        `id: ${result.dataset.id}`,
+        `title: ${result.dataset.title}`,
+        `format: ${result.dataset.format?.kind ?? "—"}`,
+        `crs: ${result.dataset.crs}`,
+        `uri: ${result.dataset.uri}`,
+        `license: ${result.dataset.license}`,
+        result.stac_item ? `stac: ${result.stac_item.id}` : "",
+      ].filter(Boolean).join("\n")
+    : "—";
+  summaryEl.textContent = JSON.stringify(result.summary, null, 2);
+  renderTemporalPlayback(result.summary?.temporal_playback);
+  renderVerification(result.verification.checks);
+  renderNotes(result.ambiguities);
+  mapFrame.srcdoc = result.html;
+  setPngExport(result.png_base64);
+  setPipelineReady(true);
+  narrativeResultDigest = result.execution_receipt?.verification_passed
+    ? result.execution_receipt.result_digest
+    : null;
+  narrativeComposeBtn.disabled = !narrativeResultDigest;
+  narrativeResultEl.textContent = narrativeResultDigest
+    ? `Ready · verified result ${narrativeResultDigest}`
+    : "Result is not verified for narrative composition.";
 }
 
 async function runAsk() {
@@ -937,35 +1273,7 @@ async function runAsk() {
   setPipelineReady(false);
   try {
     const result = await invokeAsk(prompt);
-    lastWorkflowId = result.workflow_id;
-
-    resolutionEl.textContent = [
-      `workflow: ${result.workflow_id}`,
-      `confidence: ${(result.confidence * 100).toFixed(0)}%`,
-      `steps: ${result.workflow_steps}`,
-      verificationLine(result.workflow_id, result.duckdb_verified),
-    ].join("\n");
-
-    datasetEl.textContent = result.dataset
-      ? [
-          `id: ${result.dataset.id}`,
-          `title: ${result.dataset.title}`,
-          `format: ${result.dataset.format?.kind ?? "—"}`,
-          `crs: ${result.dataset.crs}`,
-          `uri: ${result.dataset.uri}`,
-          `license: ${result.dataset.license}`,
-          result.stac_item ? `stac: ${result.stac_item.id}` : "",
-        ]
-            .filter(Boolean)
-            .join("\n")
-      : "—";
-
-    summaryEl.textContent = JSON.stringify(result.summary, null, 2);
-    renderVerification(result.verification.checks);
-    renderNotes(result.ambiguities);
-    mapFrame.srcdoc = result.html;
-    setPngExport(result.png_base64);
-    setPipelineReady(true);
+    renderAskResult(result);
     setStatus("Done");
     loadAgentTrace();
   } catch (err) {
@@ -974,9 +1282,199 @@ async function runAsk() {
   }
 }
 
+composerCreateBtn?.addEventListener("click", async () => {
+  try {
+    composerStatusEl.textContent = "Creating typed workflow draft…";
+    await createComposer();
+  } catch (error) {
+    composerStatusEl.textContent = `Create failed: ${error.message || error}`;
+  }
+});
+composerGoalBtn?.addEventListener("click", async () => {
+  try {
+    await editComposer({ kind: "set_goal", goal: composerGoalEl.value });
+  } catch (error) {
+    composerStatusEl.textContent = `Edit failed: ${error.message || error}`;
+  }
+});
+composerUndoBtn?.addEventListener("click", async () => {
+  try { await editComposer({ kind: "undo" }); }
+  catch (error) { composerStatusEl.textContent = `Undo failed: ${error.message || error}`; }
+});
+composerRedoBtn?.addEventListener("click", async () => {
+  try { await editComposer({ kind: "redo" }); }
+  catch (error) { composerStatusEl.textContent = `Redo failed: ${error.message || error}`; }
+});
+composerConnectBtn?.addEventListener("click", async () => {
+  try {
+    await editComposer({
+      kind: "connect",
+      source_node_id: composerSourceNodeEl.value,
+      source_port: selectedComposerPort(),
+      target_node_id: composerTargetNodeEl.value,
+    });
+  } catch (error) {
+    composerStatusEl.textContent = `Connect failed: ${error.message || error}`;
+  }
+});
+composerDisconnectBtn?.addEventListener("click", async () => {
+  try {
+    await editComposer({
+      kind: "disconnect",
+      source_node_id: composerSourceNodeEl.value,
+      target_node_id: composerTargetNodeEl.value,
+    });
+  } catch (error) {
+    composerStatusEl.textContent = `Disconnect failed: ${error.message || error}`;
+  }
+});
+composerAddNodeBtn?.addEventListener("click", async () => {
+  try {
+    await editComposer({
+      kind: "add_reviewed_node",
+      template_id: composerTemplateId,
+      source_node_id: composerSourceNodeEl.value,
+      new_node_id: composerNewNodeIdEl.value.trim(),
+    });
+  } catch (error) {
+    composerStatusEl.textContent = `Add node failed: ${error.message || error}`;
+  }
+});
+composerRunBtn?.addEventListener("click", async () => {
+  if (!composerSessionId) return;
+  composerRunBtn.disabled = true;
+  composerStatusEl.textContent = "Dispatching reviewed RunWorkflow…";
+  try {
+    const payload = await composerRequest(`/api/composer/sessions/${composerSessionId}/run`, {});
+    renderAskResult(payload.result);
+    composerStatusEl.textContent = `Executed command ${payload.command.id} · workflow digest matched`;
+    setStatus("Composer workflow verified");
+  } catch (error) {
+    composerStatusEl.textContent = `Run blocked: ${error.message || error}`;
+  } finally {
+    composerRunBtn.disabled = false;
+  }
+});
+
+geocodingRunBtn?.addEventListener("click", async () => {
+  const texts = geocodingQueriesEl.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+  if (geocodingModeEl.value === "interactive" && texts.length !== 1) {
+    geocodingResultEl.textContent = "Interactive mode requires exactly one query.";
+    return;
+  }
+  const isHttp = geocodingProviderEl.value === "http_json";
+  const provider = isHttp
+    ? { kind: "http_json", provider_id: "workbench.http", version: "1", endpoint: geocodingEndpointEl.value.trim() }
+    : { kind: "offline_nagoya" };
+  geocodingRunBtn.disabled = true;
+  geocodingResultEl.textContent = "Running admitted Command + Workflow…";
+  try {
+    const response = await fetch("/api/geocode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: geocodingModeEl.value,
+        queries: texts.map((text, index) => ({ id: `q${index + 1}`, text })),
+        language: "ja",
+        max_candidates: 3,
+        provider,
+        privacy: geocodingPrivacyEl.value,
+      }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || `Geocoding failed (${response.status})`);
+    const result = payload.result;
+    geocodingResultEl.textContent = JSON.stringify({
+      command_id: result.command_id,
+      workflow_digest: result.workflow_digest,
+      result_digest: result.result_digest,
+      crs: result.receipt.crs,
+      provider: result.receipt.provider_id,
+      policy_digest: result.receipt.policy_digest,
+      results: result.results,
+    }, null, 2);
+  } catch (error) {
+    geocodingResultEl.textContent = `Blocked: ${error.message || error}`;
+  } finally {
+    geocodingRunBtn.disabled = false;
+  }
+});
+
+narrativeComposeBtn?.addEventListener("click", async () => {
+  if (!narrativeResultDigest) return;
+  const center = narrativeCenterEl.value.split(",").map(Number);
+  if (center.length !== 2 || center.some((value) => !Number.isFinite(value))) {
+    narrativeResultEl.textContent = "Center must be lon,lat.";
+    return;
+  }
+  const styleDigest = await sha256Text(JSON.stringify({
+    layer: "verified-result",
+    portrayal: "current-workbench-map",
+  }));
+  const media = [];
+  if (narrativeMediaUriEl.value.trim()) {
+    media.push({
+      uri: narrativeMediaUriEl.value.trim(),
+      content_digest: narrativeMediaDigestEl.value.trim(),
+      media_type: "image/*",
+      alt_text: narrativeMediaAltEl.value.trim(),
+    });
+  }
+  const dashboard = lastVerifiedDashboard?.result_digest === narrativeResultDigest
+    ? { dashboard_digest: lastVerifiedDashboard.dashboard_digest, result_digest: narrativeResultDigest }
+    : null;
+  narrativeComposeBtn.disabled = true;
+  narrativeResultEl.textContent = "Sealing narrative through Command + Workflow…";
+  try {
+    const response = await fetch("/api/narratives/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: narrativeTitleEl.value.trim(),
+        result_digest: narrativeResultDigest,
+        frames: [{
+          id: "frame-1",
+          title: narrativeFrameTitleEl.value.trim(),
+          text: narrativeTextEl.value.trim(),
+          map: {
+            center,
+            zoom: Number(narrativeZoomEl.value),
+            bearing: 0,
+            pitch: 0,
+            temporal_cursor: null,
+            layers: [{
+              layer_id: "verified-result",
+              visible: true,
+              opacity: 1,
+              result_digest: narrativeResultDigest,
+              style_digest: styleDigest,
+            }],
+          },
+          media,
+          dashboard,
+        }],
+      }),
+    });
+    const payload = await response.json();
+    if (!payload.ok) throw new Error(payload.error || `Narrative failed (${response.status})`);
+    narrativeResultEl.textContent = JSON.stringify({
+      command_id: payload.receipt.command_id,
+      workflow_digest: payload.receipt.workflow_digest,
+      view_digest: payload.receipt.view.view_digest,
+      frame_count: payload.receipt.view.frames.length,
+      screenshot_copies: 0,
+    }, null, 2);
+  } catch (error) {
+    narrativeResultEl.textContent = `Blocked: ${error.message || error}`;
+  } finally {
+    narrativeComposeBtn.disabled = !narrativeResultDigest;
+  }
+});
+
 runBtn.addEventListener("click", runAsk);
 downloadPngBtn.addEventListener("click", downloadPng);
 gpuPreviewBtn.addEventListener("click", openGpuPreview);
+sceneOpenBtn?.addEventListener("click", openScene3d);
 commentFormEl.addEventListener("submit", submitComment);
 commentSyncBtn.addEventListener("click", syncComments);
 
@@ -1052,6 +1550,7 @@ loadPlugins();
 loadStacCollection();
 loadStacOverlay();
 loadStacEndpoints();
+loadComposerTemplates();
 stacFetchBtn?.addEventListener("click", fetchExternalStac);
 stacImportBtn?.addEventListener("click", importExternalStac);
 endpointFormEl?.addEventListener("submit", addStacEndpoint);

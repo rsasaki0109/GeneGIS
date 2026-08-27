@@ -1,0 +1,10 @@
+{
+  "schema_version": "0.1.0",
+  "id": "org.genegis.desktop-bridge",
+  "name": "GeneGIS Desktop Bridge",
+  "version": "0.1.0",
+  "protocol": "genegis.desktop-bridge/0.1.0",
+  "endpoint": "/api/bridge/capsule",
+  "capabilities": ["read_explicitly_selected_layers", "create_bridge_capsule"],
+  "forbidden": ["read_host_project", "read_credentials", "execute_expressions", "install_binaries"]
+}

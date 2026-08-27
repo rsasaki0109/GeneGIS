@@ -1,0 +1,87 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-27",
+  "milestone": "H4.6",
+  "status": "accepted_local_first_and_air_gapped_pass_managed_cloud_waived",
+  "profiles": [
+    "benchmarks/profiles/local-first-nagoya.json",
+    "benchmarks/profiles/managed-cloud-nagoya.json",
+    "benchmarks/profiles/air-gapped-nagoya.json"
+  ],
+  "dimensions": ["cpu", "gpu", "dataset", "network", "concurrency"],
+  "identity_contract": {
+    "dataset_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
+    "gpu_fixture_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+    "build_lock_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+    "metric_fixture_policy": "each metric uses its declared fixture_digest or falls back to the profile dataset_digest",
+    "environment": ["OS", "CPU", "GPU adapter when present", "network profile", "logical concurrency"],
+    "measurement": ["observed_at", "iterations", "fixture digest", "evidence digest when aggregated", "unit-bearing value or explicit not-measured reason"]
+  },
+  "gate_semantics": {
+    "pass": "every required metric is measured and within its comparator budget",
+    "fail": "one or more measured metrics regress",
+    "pending": "a required metric is not measured",
+    "missing_gpu_policy": "never treated as pass",
+    "operation": "RunWorkflow through CommandBus",
+    "runtime_api": "/api/performance-matrix/evaluate in Workbench and Server"
+  },
+  "verification": [
+    {"command": "cargo test -p genegis-core performance --offline", "result": "2 passed; 0 failed"},
+    {"command": "cargo test -p genegis-analysis pending_hardware_receipt_is_command_and_workflow_bound --offline", "result": "1 passed; 0 failed; verdict pending"},
+    {"command": "pdal pipeline tools/pdal/nagoya-scene-copc.pipeline.json (twice from tools/pdal)", "result": "both runs produced sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2; 40,949 COPC 1.0 points; EPSG:6675; PDRF 6"},
+    {"command": "cargo test -p genegis-pointcloud copc::tests::reads_nagoya_acceptance_copc_with_exact_crs --offline", "result": "1 passed; exact EPSG:6675, count, bounds, and hierarchy admitted"},
+    {"command": "cargo test -p genegis-analysis gpu_acceptance::tests::seals_pass_and_fail_without_accepting_regression --offline", "result": "1 passed; first-frame and FPS regressions fail closed through Command + Workflow"},
+    {"command": "$env:WGPU_BACKEND='dx12'; scripts/collect-gpu-scene-sample-set.ps1 -SampleCount 20 -Frames 120 -TimeoutSeconds 60", "result": "20/20 persisted schema 1.2 receipts independently verified; NVIDIA GeForce GTX 1660 Ti, DX12, nearest-rank p95 first frame 1118.0932 ms, minimum 555.301042577707 FPS, 120 frames per run, zero regressions"},
+    {"command": "performance_matrix_acceptance local-first-nagoya.json phase-14-m1-gpu-sample-set.json horizon-4-h4-6-local-first-receipt.json", "result": "pass; all six required CPU, GPU, dataset, network, and concurrency metrics measured without regression"},
+    {"command": "performance_matrix_acceptance air-gapped-nagoya.json phase-14-m1-gpu-sample-set.json horizon-4-h4-6-air-gapped-receipt.json", "result": "pass; all six required metrics measured, including zero external network requests"},
+    {"command": "cargo test --lib -p genegis-storage", "result": "18 passed; 0 failed; credential-free URL parsing and fail-closed host policy included"},
+    {"command": "cargo test --lib -p genegis-testkit", "result": "18 passed; 0 failed; 4 hardware tests ignored; sealed Gate E study binding and managed HTTP Range receipt mutation rejection included"},
+    {"command": "verify_performance_matrix_receipt PROFILE RECEIPT", "result": "local-first and air-gapped receipts independently recomputed and matched their workflow and matrix digests"},
+    {"command": "cargo check -p genegis-testkit --bin managed_cloud_range_acceptance --bin performance_matrix_acceptance --bin verify_performance_matrix_receipt", "result": "passed; managed receipt is mandatory for managed-cloud matrix admission and persisted matrices have an independent verifier"},
+    {"command": "cargo check -p genegis-workbench -p genegis-server --offline", "result": "passed"}
+  ],
+  "hardware_receipts": {
+    "accepted_m1_release": "docs/reports/phase-14-m1-gpu-hardware-receipt.json",
+    "receipt_digest": "sha256:172d9952b478788079b59ffaef364eef368c7b7fb47de7ae0e9dbfbcee4c6d8b",
+    "sample_set": "docs/reports/phase-14-m1-gpu-sample-set.json",
+    "sample_set_digest": "sha256:2af4ef03ac292c9dc6b6e01d8754ed41c71a542b786aae2243a08ee22635b99f",
+    "sample_count": 20,
+    "executable_digest": "sha256:dacfcf3e3eb1b79589e466839eb0ed514fa34bcf049c4bfa88307a68acfd6ea8",
+    "cold_failure_audit": "docs/reports/phase-14-m1-gpu-hardware-receipt-cold-fail.json"
+  },
+  "deployment_receipts": {
+    "local_first": {
+      "status": "pass",
+      "path": "docs/reports/horizon-4-h4-6-local-first-receipt.json",
+      "receipt_digest": "sha256:0c18635beab6961a0391c76d661ca04395ada910c3cc6afe4b7acb617cad4c74"
+    },
+    "managed_cloud": {
+      "status": "waived_by_project_owner",
+      "waiver": "docs/reports/horizon-4-h4-6-managed-cloud-waiver.json",
+      "hardware_validated": false,
+      "reason": "remaining managed-cloud execution was explicitly skipped; no managed-cloud performance pass is claimed"
+    },
+    "air_gapped": {
+      "status": "pass",
+      "path": "docs/reports/horizon-4-h4-6-air-gapped-receipt.json",
+      "receipt_digest": "sha256:9f1edad4e09ee66ec52f3692cea893da4feafa3e37a17bf3aef77ff215b1fe06"
+    }
+  },
+  "negative_coverage": [
+    "missing required dimension",
+    "duplicate or unknown metric",
+    "fixture or build identity mismatch",
+    "invalid environment identity",
+    "non-finite value or zero iterations",
+    "regression beyond budget",
+    "required GPU metric not measured",
+    "per-metric fixture identity mismatch",
+    "GPU process timeout without receipt",
+    "GPU backend enumeration crash without receipt",
+    "non-passing hardware receipt retained but never admitted as pass",
+    "managed-cloud profile without a sealed range receipt is rejected",
+    "HTTP 200 whole-object fallback, malformed Content-Range, identity drift, and receipt mutation are rejected",
+    "persisted performance matrix mutation is rejected by independent recomputation"
+  ],
+  "pending_exit_evidence": []
+}

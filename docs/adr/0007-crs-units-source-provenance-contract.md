@@ -55,7 +55,7 @@ asset.
    The canonical boundary fixture digest is
    `sha256:d0f8958813fe28e9428169ca7c638a0ea3b3ed7ae526750156d3f94e1308d30e`;
    the population asset digest is
-   `sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c`.
+   `sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d`.
 
 ## Consequences
 

@@ -1413,6 +1413,847 @@ pub fn nagoya_geoparquet_template() -> GeoWorkflow {
     workflow
 }
 
+/// COPC and measured-height LOD1 scene executed through the shared workflow boundary.
+pub fn scene3d_copc_lod1_template(
+    copc_source: SourceSnapshot,
+    building_source: SourceSnapshot,
+    crs: Crs,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("COPC点群と実高さLOD1建物を3D表示");
+    workflow.input_contracts = vec![
+        WorkflowInputContract::new("copc")
+            .with_crs(crs.clone())
+            .with_value_unit("metres")
+            .with_source_snapshot(copc_source),
+        WorkflowInputContract::new("buildings")
+            .with_crs(crs.clone())
+            .with_value_unit("metres")
+            .with_source_snapshot(building_source),
+    ];
+    let mut load_copc = dag_step(
+        "load-copc",
+        "LoadCopcPoints",
+        serde_json::json!({"coordinate_unit": "metres", "vertical_unit": "metres"}),
+        &[],
+    );
+    load_copc.inputs.push(WorkflowDataRef::input("copc"));
+    let mut load_buildings = dag_step(
+        "load-buildings",
+        "LoadMeasuredLod1Buildings",
+        serde_json::json!({"height_field": "height_m", "height_unit": "metres"}),
+        &[],
+    );
+    load_buildings
+        .inputs
+        .push(WorkflowDataRef::input("buildings"));
+    workflow.steps = vec![
+        load_copc,
+        load_buildings,
+        dag_step(
+            "compose-scene",
+            "ComposeScene3d",
+            serde_json::json!({"crs": crs.identifier(), "camera": "orbit"}),
+            &["load-copc", "load-buildings"],
+        ),
+        dag_step(
+            "render-webgpu",
+            "RenderScene3dWebGpu",
+            serde_json::json!({"depth_test": true, "point_primitive": "point_list"}),
+            &["compose-scene"],
+        ),
+        dag_step(
+            "record-performance",
+            "RecordScene3dPerformance",
+            serde_json::json!({"metrics": ["first_frame_ns", "steady_state_fps", "upload_bytes"]}),
+            &["render-webgpu"],
+        ),
+    ];
+    finish_dag(&mut workflow, "record-performance");
+    workflow
+}
+
+/// Manifest-admitted WMS/WFS read through the shared Command + Workflow boundary.
+pub fn ogc_service_read_template(
+    service: &str,
+    operation: &str,
+    source: SourceSnapshot,
+    crs: Option<Crs>,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("{service} {operation} を検証して取得"));
+    let mut input = WorkflowInputContract::new("service")
+        .with_value_unit("response_bytes")
+        .with_source_snapshot(source);
+    if let Some(crs) = crs {
+        input = input.with_crs(crs);
+    }
+    workflow.input_contracts = vec![input];
+    let mut admit_adapter = dag_step(
+        "admit-ogc-adapter",
+        "AdmitOgcAdapter",
+        serde_json::json!({
+            "adapter_id": "org.genegis.ogc-web-service",
+            "service": service,
+            "operation": operation,
+            "capability": "network_read"
+        }),
+        &[],
+    );
+    admit_adapter.inputs.push(WorkflowDataRef::input("service"));
+    workflow.steps = vec![
+        admit_adapter,
+        dag_step(
+            "execute-ogc-request",
+            "ExecuteOgcRequest",
+            serde_json::json!({"service": service, "operation": operation}),
+            &["admit-ogc-adapter"],
+        ),
+        dag_step(
+            "validate-ogc-response",
+            "ValidateOgcResponse",
+            serde_json::json!({"reject_exception_documents": true}),
+            &["execute-ogc-request"],
+        ),
+        dag_step(
+            "attach-io-receipt",
+            "AttachIoReceipt",
+            serde_json::json!({"schema_version": "0.1.0"}),
+            &["validate-ogc-response"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-io-receipt");
+    workflow
+}
+
+/// Governed provider-neutral interactive or batch geocoding workflow.
+pub fn geocoding_template(
+    mode: &str,
+    provider_id: &str,
+    provider_source: SourceSnapshot,
+    query_count: u32,
+    max_candidates: u32,
+    privacy_policy: &str,
+    minimum_interval_ms: u64,
+) -> GeoWorkflow {
+    let mut workflow =
+        GeoWorkflow::new(format!("{query_count}件を{provider_id}でジオコーディング"));
+    workflow.input_contracts = vec![WorkflowInputContract::new("queries")
+        .with_value_unit("address_queries")
+        .with_source_snapshot(provider_source)];
+    let mut admit = dag_step(
+        "admit-geocoding-provider",
+        "AdmitGeocodingProvider",
+        serde_json::json!({
+            "adapter_id": "org.genegis.geocoding",
+            "provider_id": provider_id,
+            "mode": mode,
+            "query_count": query_count
+        }),
+        &[],
+    );
+    admit.inputs.push(WorkflowDataRef::input("queries"));
+    workflow.steps = vec![
+        admit,
+        dag_step(
+            "apply-geocoding-policy",
+            "ApplyGeocodingPrivacyAndRatePolicy",
+            serde_json::json!({
+                "privacy_policy": privacy_policy,
+                "minimum_interval_ms": minimum_interval_ms,
+                "max_candidates": max_candidates
+            }),
+            &["admit-geocoding-provider"],
+        ),
+        dag_step(
+            "execute-geocoding-queries",
+            "ExecuteGeocodingQueries",
+            serde_json::json!({"output_crs": "EPSG:4326", "coordinate_unit": "degrees"}),
+            &["apply-geocoding-policy"],
+        ),
+        dag_step(
+            "validate-geocoding-candidates",
+            "ValidateGeocodingCandidates",
+            serde_json::json!({
+                "require": ["confidence", "provider_id", "source_receipt"],
+                "confidence_range": [0.0, 1.0]
+            }),
+            &["execute-geocoding-queries"],
+        ),
+        dag_step(
+            "attach-geocoding-receipts",
+            "AttachGeocodingReceipts",
+            serde_json::json!({"retain_raw_queries": false, "schema_version": "0.1.0"}),
+            &["validate-geocoding-candidates"],
+        ),
+    ];
+    finish_dag(&mut workflow, "attach-geocoding-receipts");
+    workflow
+}
+
+/// Digest-bound narrative project view composition workflow.
+pub fn narrative_project_view_template(
+    result_source: SourceSnapshot,
+    result_digest: &str,
+    frame_count: u32,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("{frame_count}場面の検証可能な物語地図を構成"));
+    workflow.input_contracts = vec![WorkflowInputContract::new("verified-result")
+        .with_value_unit("digest_bound_project_view")
+        .with_source_snapshot(result_source)];
+    let mut validate = dag_step(
+        "validate-narrative-result",
+        "ValidateNarrativeResultIdentity",
+        serde_json::json!({"result_digest": result_digest}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("verified-result"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "compose-narrative-frames",
+            "ComposeNarrativeFrames",
+            serde_json::json!({"frame_count": frame_count, "ordered": true}),
+            &["validate-narrative-result"],
+        ),
+        dag_step(
+            "validate-narrative-media",
+            "ValidateNarrativeMediaReferences",
+            serde_json::json!({"require_content_digest": true, "reject_local_paths": true}),
+            &["compose-narrative-frames"],
+        ),
+        dag_step(
+            "bind-narrative-dashboards",
+            "BindNarrativeDashboardDigests",
+            serde_json::json!({"require_result_identity": true}),
+            &["validate-narrative-media"],
+        ),
+        dag_step(
+            "seal-narrative-view",
+            "SealNarrativeProjectView",
+            serde_json::json!({"digest": "sha256", "copy_screenshots": false}),
+            &["bind-narrative-dashboards"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-narrative-view");
+    workflow
+}
+
+/// Cursor/watermark-bounded live spatial feed ingestion workflow.
+pub fn live_feed_ingest_template(
+    domain: &str,
+    provider_id: &str,
+    source: SourceSnapshot,
+    after_cursor: u64,
+    watermark: &str,
+    limit: u32,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("{provider_id}の{domain}更新を取り込む"));
+    workflow.input_contracts = vec![WorkflowInputContract::new("live-feed")
+        .with_value_unit("immutable_observation_snapshots")
+        .with_source_snapshot(source)];
+    let mut admit = dag_step(
+        "admit-live-feed",
+        "AdmitLiveFeedAdapter",
+        serde_json::json!({
+            "adapter_id": "org.genegis.live-feed",
+            "provider_id": provider_id,
+            "domain": domain,
+            "capability": "network_read"
+        }),
+        &[],
+    );
+    admit.inputs.push(WorkflowDataRef::input("live-feed"));
+    workflow.steps = vec![
+        admit,
+        dag_step(
+            "read-live-feed-window",
+            "ReadLiveFeedCursorWindow",
+            serde_json::json!({
+                "after_cursor": after_cursor,
+                "watermark": watermark,
+                "limit": limit
+            }),
+            &["admit-live-feed"],
+        ),
+        dag_step(
+            "validate-live-feed-window",
+            "ValidateLiveFeedCursorWatermarkFreshness",
+            serde_json::json!({
+                "reject_cursor_regression": true,
+                "reject_watermark_regression": true,
+                "require_crs_units_source": true
+            }),
+            &["read-live-feed-window"],
+        ),
+        dag_step(
+            "seal-observation-snapshots",
+            "SealImmutableObservationSnapshots",
+            serde_json::json!({"digest": "sha256", "retain_raw_response_receipt": true}),
+            &["validate-live-feed-window"],
+        ),
+        dag_step(
+            "commit-live-feed-cursor",
+            "CommitLiveFeedCursorWatermark",
+            serde_json::json!({"commit_after_snapshot_seal": true}),
+            &["seal-observation-snapshots"],
+        ),
+    ];
+    finish_dag(&mut workflow, "commit-live-feed-cursor");
+    workflow
+}
+
+/// Versioned operational map/dashboard view workflow.
+pub fn operational_dashboard_view_template(
+    source: SourceSnapshot,
+    result_digest: &str,
+    view_version: u64,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("運用ダッシュボード view v{view_version} を更新"));
+    workflow.input_contracts = vec![WorkflowInputContract::new("operational-result")
+        .with_value_unit("versioned_operational_view")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-operational-result",
+        "ValidateOperationalResultIdentity",
+        serde_json::json!({"result_digest": result_digest, "view_version": view_version}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("operational-result"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "bind-operational-map",
+            "BindOperationalMapLayers",
+            serde_json::json!({"require_same_result": true}),
+            &["validate-operational-result"],
+        ),
+        dag_step(
+            "bind-operational-widgets",
+            "BindOperationalDashboardWidgets",
+            serde_json::json!({"require_unique_widget_ids": true}),
+            &["bind-operational-map"],
+        ),
+        dag_step(
+            "bind-operational-status",
+            "BindOperationalCursorWatermarkStatus",
+            serde_json::json!({"require_incremental_state_digest": true}),
+            &["bind-operational-widgets"],
+        ),
+        dag_step(
+            "bind-operational-alert-history",
+            "BindOperationalAlertHistory",
+            serde_json::json!({"append_only": true}),
+            &["bind-operational-status"],
+        ),
+        dag_step(
+            "seal-operational-view",
+            "SealOperationalViewVersion",
+            serde_json::json!({"digest": "sha256", "require_previous_version": view_version > 1}),
+            &["bind-operational-alert-history"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-operational-view");
+    workflow
+}
+
+/// Deterministic threshold/anomaly alert evaluation workflow.
+pub fn verified_alert_evaluation_template(
+    source: SourceSnapshot,
+    policy_digest: &str,
+    result_digest: &str,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("決定論的な空間アラート条件を検証");
+    workflow.input_contracts = vec![WorkflowInputContract::new("alert-window")
+        .with_value_unit("observation_window")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-alert-window",
+        "ValidateAlertTriggeringWindow",
+        serde_json::json!({"result_digest": result_digest}),
+        &[],
+    );
+    validate.inputs.push(WorkflowDataRef::input("alert-window"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "admit-alert-policy",
+            "AdmitDeterministicAlertPolicy",
+            serde_json::json!({"policy_digest": policy_digest, "llm_judgement": false}),
+            &["validate-alert-window"],
+        ),
+        dag_step(
+            "evaluate-alert-rule",
+            "EvaluateThresholdOrAnomalyRule",
+            serde_json::json!({"numeric_only": true}),
+            &["admit-alert-policy"],
+        ),
+        dag_step(
+            "verify-alert-evaluation",
+            "VerifyAlertEvaluation",
+            serde_json::json!({"require_checks": true}),
+            &["evaluate-alert-rule"],
+        ),
+        dag_step(
+            "seal-alert-record",
+            "SealVerifiedAlertRecord",
+            serde_json::json!({"digest": "sha256", "acknowledgements": "append_only"}),
+            &["verify-alert-evaluation"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-alert-record");
+    workflow
+}
+
+/// Append-only alert acknowledgement workflow.
+pub fn alert_acknowledgement_template(
+    source: SourceSnapshot,
+    alert_digest: &str,
+    acknowledgement_count: u32,
+) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("検証済みアラートを確認済みにする");
+    workflow.input_contracts = vec![WorkflowInputContract::new("verified-alert")
+        .with_value_unit("alert_record")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-alert-chain",
+        "ValidateAlertAcknowledgementChain",
+        serde_json::json!({"alert_digest": alert_digest}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("verified-alert"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "append-alert-acknowledgement",
+            "AppendAlertAcknowledgement",
+            serde_json::json!({"acknowledgement_count": acknowledgement_count}),
+            &["validate-alert-chain"],
+        ),
+        dag_step(
+            "seal-alert-acknowledgement",
+            "SealAcknowledgedAlertRecord",
+            serde_json::json!({"digest": "sha256", "preserve_trigger": true}),
+            &["append-alert-acknowledgement"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-alert-acknowledgement");
+    workflow
+}
+
+/// Scenario branch creation workflow.
+pub fn scenario_branch_template(source: SourceSnapshot, branch_id: &str) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new(format!("scenario {branch_id} を分岐"));
+    workflow.input_contracts = vec![WorkflowInputContract::new("scenario-base")
+        .with_value_unit("project_state")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-scenario-base",
+        "ValidateScenarioBaseIdentity",
+        serde_json::json!({"branch_id": branch_id}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("scenario-base"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "bind-scenario-assumptions",
+            "BindTypedScenarioAssumptions",
+            serde_json::json!({"require_units": true}),
+            &["validate-scenario-base"],
+        ),
+        dag_step(
+            "bind-scenario-outcomes",
+            "BindSpatialScenarioOutcomes",
+            serde_json::json!({"require_result_digest": true}),
+            &["bind-scenario-assumptions"],
+        ),
+        dag_step(
+            "seal-scenario-branch",
+            "SealScenarioBranch",
+            serde_json::json!({"digest": "sha256"}),
+            &["bind-scenario-outcomes"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-scenario-branch");
+    workflow
+}
+
+/// Semantic scenario comparison workflow.
+pub fn scenario_comparison_template(source: SourceSnapshot) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("scenario の仮定と空間結果を比較");
+    workflow.input_contracts = vec![WorkflowInputContract::new("scenario-comparison")
+        .with_value_unit("semantic_diff")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-scenario-branches",
+        "ValidateScenarioBranchIdentities",
+        serde_json::json!({"same_base_required": true}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("scenario-comparison"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "diff-scenario-assumptions",
+            "DiffScenarioAssumptions",
+            serde_json::json!({"semantic": true}),
+            &["validate-scenario-branches"],
+        ),
+        dag_step(
+            "diff-scenario-outcomes",
+            "DiffSpatialScenarioOutcomes",
+            serde_json::json!({"preserve_units": true}),
+            &["diff-scenario-assumptions"],
+        ),
+        dag_step(
+            "seal-scenario-diff",
+            "SealScenarioSemanticDiff",
+            serde_json::json!({"digest": "sha256"}),
+            &["diff-scenario-outcomes"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-scenario-diff");
+    workflow
+}
+
+/// Reviewed scenario merge workflow.
+pub fn scenario_merge_template(source: SourceSnapshot, diff_digest: &str) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("承認済み scenario diff を merge");
+    workflow.input_contracts = vec![WorkflowInputContract::new("scenario-merge")
+        .with_value_unit("reviewed_semantic_diff")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-scenario-approval",
+        "ValidateScenarioDiffApproval",
+        serde_json::json!({"diff_digest": diff_digest}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("scenario-merge"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "apply-scenario-merge",
+            "ApplyReviewedScenarioMerge",
+            serde_json::json!({"reject_stale_approval": true}),
+            &["validate-scenario-approval"],
+        ),
+        dag_step(
+            "seal-scenario-merge",
+            "SealScenarioMergeCommit",
+            serde_json::json!({"digest": "sha256"}),
+            &["apply-scenario-merge"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-scenario-merge");
+    workflow
+}
+
+/// Budgeted city-scale 2D/3D stream planning workflow.
+pub fn city_scene_stream_template(source: SourceSnapshot) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("都市スケールの2D/3D stream frame を計画");
+    workflow.input_contracts = vec![WorkflowInputContract::new("city-scene")
+        .with_value_unit("open_city_stream_manifest")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-city-scene",
+        "ValidateCitySceneOpenFormatsAndSources",
+        serde_json::json!({"formats": ["3dtiles-1.1", "copc-1.0", "cog", "pmtiles"]}),
+        &[],
+    );
+    validate.inputs.push(WorkflowDataRef::input("city-scene"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "bind-shared-spatial-view",
+            "BindShared2d3dCameraSelectionTemporalState",
+            serde_json::json!({"require": ["crs", "camera", "selection", "temporal_cursor"]}),
+            &["validate-city-scene"],
+        ),
+        dag_step(
+            "select-city-stream-frontier",
+            "SelectCityStreamScreenSpaceErrorFrontier",
+            serde_json::json!({"hierarchical_refinement": true}),
+            &["bind-shared-spatial-view"],
+        ),
+        dag_step(
+            "apply-city-stream-budget",
+            "ApplyCityStreamTileByteBudget",
+            serde_json::json!({"hard_limit": true}),
+            &["select-city-stream-frontier"],
+        ),
+        dag_step(
+            "seal-city-frame-plan",
+            "SealCitySceneFramePlan",
+            serde_json::json!({"digest": "sha256", "retain_provenance": true}),
+            &["apply-city-stream-budget"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-city-frame-plan");
+    workflow
+}
+
+/// Policy-governed organization operation with immutable audit evidence.
+pub fn organization_governance_template(source: SourceSnapshot, operation: &str) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("組織ポリシーに従って操作を判定し監査証拠を封印");
+    workflow.input_contracts = vec![WorkflowInputContract::new("organization-governance")
+        .with_value_unit("policy_governed_state")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-governance-policy",
+        "ValidateOrganizationPolicyAndRoleBinding",
+        serde_json::json!({"operation": operation, "fail_closed": true}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("organization-governance"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "evaluate-governance-operation",
+            "EvaluateRoleApprovalRetentionPolicy",
+            serde_json::json!({"operation": operation}),
+            &["validate-governance-policy"],
+        ),
+        dag_step(
+            "append-governance-audit",
+            "AppendHashChainedGovernanceAudit",
+            serde_json::json!({"digest": "sha256"}),
+            &["evaluate-governance-operation"],
+        ),
+        dag_step(
+            "seal-governance-receipt",
+            "SealGovernanceOperationReceipt",
+            serde_json::json!({"portable": true}),
+            &["append-governance-audit"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-governance-receipt");
+    workflow
+}
+
+/// Admit local/private/public catalog federation without crossing access boundaries.
+pub fn private_federated_catalog_template(source: SourceSnapshot) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("private catalog federation のアクセス境界を検証");
+    workflow.input_contracts = vec![WorkflowInputContract::new("catalog-policy")
+        .with_value_unit("federated_catalog_access_policy")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-private-catalog-policy",
+        "ValidatePrivateCatalogPolicyCoverage",
+        serde_json::json!({"fail_closed": true}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("catalog-policy"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "filter-private-catalogs",
+            "FilterCatalogEndpointsBySubjectBoundary",
+            serde_json::json!({"do_not_disclose_denied_identity": true}),
+            &["validate-private-catalog-policy"],
+        ),
+        dag_step(
+            "seal-private-catalog-admission",
+            "SealPrivateCatalogAdmission",
+            serde_json::json!({"retain_endpoint_source_identity": true, "digest": "sha256"}),
+            &["filter-private-catalogs"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-private-catalog-admission");
+    workflow
+}
+
+/// Signed SDK v1 plugin registry publication or revocation workflow.
+pub fn plugin_registry_operation_template(source: SourceSnapshot, operation: &str) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("署名付き SDK v1 plugin registry を更新");
+    workflow.input_contracts = vec![WorkflowInputContract::new("plugin-registry")
+        .with_value_unit("signed_plugin_registry_state")
+        .with_source_snapshot(source)];
+    let mut verify = dag_step(
+        "verify-plugin-registry-operation",
+        "VerifyPluginSignatureCapabilityAndRevocation",
+        serde_json::json!({"operation": operation, "signature": "ed25519", "fail_closed": true}),
+        &[],
+    );
+    verify
+        .inputs
+        .push(WorkflowDataRef::input("plugin-registry"));
+    workflow.steps = vec![
+        verify,
+        dag_step(
+            "apply-plugin-registry-operation",
+            "ApplyImmutablePluginRegistryOperation",
+            serde_json::json!({"operation": operation}),
+            &["verify-plugin-registry-operation"],
+        ),
+        dag_step(
+            "seal-plugin-registry",
+            "SealPluginRegistryReceipt",
+            serde_json::json!({"digest": "sha256"}),
+            &["apply-plugin-registry-operation"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-plugin-registry");
+    workflow
+}
+
+/// Admit a domain solution pack composed only from reviewed templates and SDK plugins.
+pub fn solution_pack_admission_template(source: SourceSnapshot) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("domain solution pack の template/plugin 構成を検証");
+    workflow.input_contracts = vec![WorkflowInputContract::new("solution-pack")
+        .with_value_unit("portable_solution_pack_manifest")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-solution-pack",
+        "ValidateSolutionPackOpenStateAndIdentity",
+        serde_json::json!({"core_forks": false}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("solution-pack"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "resolve-solution-pack-templates",
+            "ResolveReviewedWorkflowTemplates",
+            serde_json::json!({"reviewed_only": true}),
+            &["validate-solution-pack"],
+        ),
+        dag_step(
+            "resolve-solution-pack-plugins",
+            "ResolveSignedActiveSdkV1Plugins",
+            serde_json::json!({"reject_revoked": true}),
+            &["validate-solution-pack"],
+        ),
+        dag_step(
+            "seal-solution-pack-admission",
+            "SealSolutionPackAdmission",
+            serde_json::json!({"digest": "sha256"}),
+            &[
+                "resolve-solution-pack-templates",
+                "resolve-solution-pack-plugins",
+            ],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-solution-pack-admission");
+    workflow
+}
+
+/// Evaluate a reproducible CPU/GPU/dataset/network/concurrency regression matrix.
+pub fn performance_matrix_evaluation_template(source: SourceSnapshot) -> GeoWorkflow {
+    let mut workflow = GeoWorkflow::new("deployment performance matrix の regression gate を評価");
+    workflow.input_contracts = vec![WorkflowInputContract::new("performance-matrix")
+        .with_value_unit("reproducible_performance_measurements")
+        .with_source_snapshot(source)];
+    let mut validate = dag_step(
+        "validate-performance-matrix",
+        "ValidatePerformanceFixtureBuildAndEnvironment",
+        serde_json::json!({"dimensions": ["cpu", "gpu", "dataset", "network", "concurrency"]}),
+        &[],
+    );
+    validate
+        .inputs
+        .push(WorkflowDataRef::input("performance-matrix"));
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "evaluate-performance-budgets",
+            "EvaluatePerformanceRegressionBudgets",
+            serde_json::json!({"missing_required": "pending", "regression": "fail"}),
+            &["validate-performance-matrix"],
+        ),
+        dag_step(
+            "seal-performance-matrix",
+            "SealPerformanceMatrixReceipt",
+            serde_json::json!({"digest": "sha256"}),
+            &["evaluate-performance-budgets"],
+        ),
+    ];
+    finish_dag(&mut workflow, "seal-performance-matrix");
+    workflow
+}
+
+/// One declared desktop layer entering a portable bridge capsule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DesktopLayerBridgeInput {
+    /// Stable layer identity used as the workflow input name.
+    pub layer_id: String,
+    /// Open transfer format such as `geojson` or `geoparquet`.
+    pub format: String,
+    /// Known coordinate reference system for the exact asset bytes.
+    pub crs: Crs,
+    /// Immutable desktop-export source snapshot.
+    pub source: SourceSnapshot,
+}
+
+/// Build the reviewed desktop-layer to project-capsule import proposal graph.
+pub fn desktop_layer_bridge_template(layers: &[DesktopLayerBridgeInput]) -> GeoWorkflow {
+    let mut workflow =
+        GeoWorkflow::new("選択したデスクトップGISレイヤーをプロジェクトカプセルへ転送");
+    workflow.input_contracts = layers
+        .iter()
+        .map(|layer| {
+            WorkflowInputContract::new(layer.layer_id.clone())
+                .with_crs(layer.crs.clone())
+                .with_value_unit("source_bytes")
+                .with_source_snapshot(layer.source.clone())
+        })
+        .collect();
+    let mut validate = dag_step(
+        "validate-layer-declarations",
+        "ValidateDesktopLayerDeclarations",
+        serde_json::json!({
+            "formats": layers.iter().map(|layer| layer.format.as_str()).collect::<Vec<_>>(),
+            "require": ["crs", "coordinate_unit", "license", "source_checksum"]
+        }),
+        &[],
+    );
+    validate.inputs.extend(
+        layers
+            .iter()
+            .map(|layer| WorkflowDataRef::input(layer.layer_id.clone())),
+    );
+    workflow.steps = vec![
+        validate,
+        dag_step(
+            "copy-content-addressed-assets",
+            "CopyContentAddressedLayerAssets",
+            serde_json::json!({"reject_path_escape": true}),
+            &["validate-layer-declarations"],
+        ),
+        dag_step(
+            "build-project-capsule",
+            "BuildDesktopBridgeProjectCapsule",
+            serde_json::json!({"schema_version": "0.1.0"}),
+            &["copy-content-addressed-assets"],
+        ),
+        dag_step(
+            "verify-bridge-inventory",
+            "VerifyDesktopBridgeInventory",
+            serde_json::json!({"require_byte_exact_assets": true}),
+            &["build-project-capsule"],
+        ),
+    ];
+    finish_dag(&mut workflow, "verify-bridge-inventory");
+    workflow
+}
+
 /// Nagoya GeoParquet population density choropleth workflow (Phase 9 beta).
 pub fn nagoya_geoparquet_density_template() -> GeoWorkflow {
     let mut workflow = GeoWorkflow::new("名古屋 GeoParquet 人口密度を表示");
@@ -2145,5 +2986,49 @@ mod tests {
             two_nodes(first, second).validate(),
             Err(WorkflowValidationError::UnknownInputPort { .. })
         ));
+    }
+
+    #[test]
+    fn scene3d_template_binds_both_metric_sources_to_webgpu_output() {
+        let workflow = scene3d_copc_lod1_template(
+            SourceSnapshot::new("file:///district.copc.laz"),
+            SourceSnapshot::new("file:///buildings.json"),
+            Crs::nagoya_projected(),
+        );
+        workflow.validate().expect("valid 3D workflow");
+        assert_eq!(workflow.input_contracts.len(), 2);
+        assert_eq!(workflow.steps.len(), 5);
+        assert_eq!(workflow.steps[3].operation, "RenderScene3dWebGpu");
+        assert!(workflow
+            .stable_digest()
+            .expect("digest")
+            .starts_with("sha256:"));
+    }
+
+    #[test]
+    fn ogc_template_requires_admission_validation_and_io_evidence() {
+        let workflow = ogc_service_read_template(
+            "WFS",
+            "GetFeature",
+            SourceSnapshot::new("https://services.example.test/wfs"),
+            Some(Crs::wgs84()),
+        );
+        workflow.validate().expect("valid OGC workflow");
+        assert_eq!(workflow.input_contracts.len(), 1);
+        assert_eq!(workflow.steps.len(), 4);
+        assert_eq!(workflow.steps[0].operation, "AdmitOgcAdapter");
+        assert_eq!(workflow.steps[2].operation, "ValidateOgcResponse");
+        assert_eq!(workflow.steps[3].operation, "AttachIoReceipt");
+        assert_eq!(
+            workflow.input_contracts[0]
+                .crs
+                .as_ref()
+                .map(Crs::identifier),
+            Some("EPSG:4326".into())
+        );
+        assert!(workflow
+            .stable_digest()
+            .expect("digest")
+            .starts_with("sha256:"));
     }
 }

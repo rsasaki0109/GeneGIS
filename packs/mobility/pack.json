@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "id": "mobility-access",
+  "version": "1.0.0",
+  "domain": "mobility",
+  "title": "Mobility Access",
+  "license": "Apache-2.0 OR MIT",
+  "template_ids": [
+    "xmin-city",
+    "evacuation",
+    "geocoding"
+  ],
+  "plugin_requirements": [
+    {
+      "plugin_id": "genegis-mobility-tools",
+      "version": "1.0.0",
+      "capabilities": [
+        "read_catalog",
+        "analysis_step"
+      ]
+    }
+  ],
+  "open_state_formats": [
+    "genegis-project-json",
+    "workflow-json",
+    "result-capsule"
+  ]
+}

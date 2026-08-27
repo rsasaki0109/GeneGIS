@@ -517,9 +517,7 @@ fn ward_centroid(rings: &[PolygonRing]) -> Option<(f64, f64)> {
 mod tests {
     use super::*;
     use crate::nagoya::default_nagoya_data_path;
-    use genegis_catalog::{
-        nagoya_shelters_path, nagoya_walk_network_path, nagoya_wards_geojson_path,
-    };
+    use genegis_catalog::{nagoya_shelters_path, nagoya_walk_network_path};
 
     fn zones_path() -> &'static str {
         genegis_catalog::nagoya_flood_zones_path()

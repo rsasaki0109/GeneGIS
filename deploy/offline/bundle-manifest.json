@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0.0",
+  "plugin_api_version": "1.0.0",
+  "plugins": [
+    {
+      "id": "demo-filter",
+      "version": "0.1.0",
+      "artifact_digest": "sha256:93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "nagoya-population-2020",
+      "digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d"
+    }
+  ],
+  "solution_packs": [
+    "urban-operations@1.0.0",
+    "environment-monitoring@1.0.0",
+    "disaster-response@1.0.0",
+    "mobility-access@1.0.0",
+    "infrastructure-change@1.0.0"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.1.0",
+  "fixture_id": "nagoya-scene-3d-acceptance-v1",
+  "fixture_kind": "deterministic_synthetic_acceptance_fixture",
+  "license": "Apache-2.0 OR MIT",
+  "crs": {
+    "identifier": "EPSG:6675",
+    "name": "JGD2011 / Japan Plane Rectangular CS VII",
+    "kind": "projected",
+    "coordinate_unit": "metres",
+    "vertical_unit": "metres"
+  },
+  "provenance": {
+    "source_generator": "crates/genegis-pointcloud/examples/write_change_fixture.rs",
+    "source_epoch": {
+      "path": "examples/nagoya-population-density/data/nagoya-change-epoch-b.las",
+      "bytes": 819207,
+      "sha256": "sha256:2fe63c33aae4831abc512e45e6bb91fb7c0fe33d2aba0971e67206263bf7e2f9"
+    },
+    "translation_metres": [-23686.13, -90773.70, 0.0],
+    "copc_pipeline": {
+      "path": "tools/pdal/nagoya-scene-copc.pipeline.json",
+      "sha256": "sha256:491b2b2c50b45b5a3c90ba55157ddd8277106fa691a5c0c177ad7d2eca23c45a"
+    },
+    "toolchain": {
+      "pdal_version": "2.9.3",
+      "pixi_manifest": "tools/pdal/pixi.toml",
+      "pixi_lock_sha256": "sha256:3888b8be89f91ed8e460abb16fa42a666ba8eaecfbbd0ae6f88396a75679393a"
+    },
+    "determinism_check": "two consecutive pipeline runs produced the declared COPC digest"
+  },
+  "copc": {
+    "path": "examples/nagoya-population-density/data/nagoya-scene.copc.laz",
+    "format": "copc-1.0",
+    "las_version": "1.4",
+    "point_data_record_format": 6,
+    "point_count": 40949,
+    "bounds": {
+      "min_x": -23686.13,
+      "min_y": -90773.70,
+      "min_z": -3.99,
+      "max_x": -23086.13,
+      "max_y": -90373.70,
+      "max_z": 14.008
+    },
+    "bytes": 202154,
+    "sha256": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2"
+  },
+  "lod1": {
+    "path": "examples/nagoya-population-density/data/nagoya-scene-lod1.json",
+    "building_count": 3,
+    "bytes": 1130,
+    "sha256": "sha256:1683864d6b1af1e1613153b1242b800004ff665636714d15b555f3445ccf7848"
+  },
+  "acceptance_contract": {
+    "first_frame_seconds_maximum": 2.0,
+    "steady_state_fps_minimum": 30.0,
+    "required_receipt_fields": [
+      "fixture digest",
+      "LOD1 digest",
+      "build lock digest",
+      "executable digest",
+      "build profile",
+      "GPU adapter",
+      "backend",
+      "OS",
+      "first frame",
+      "steady-state FPS",
+      "frame count",
+      "observation time"
+    ]
+  }
+}

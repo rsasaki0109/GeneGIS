@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H3.5",
+  "status": "complete",
+  "operations": [
+    "CreateScenarioBranch",
+    "CompareScenarioAssumptionsAndSpatialOutcomes",
+    "ApplyReviewedScenarioMerge"
+  ],
+  "semantic_contract": {
+    "assumptions": "JSON values with explicit units",
+    "spatial_outcomes": "numeric values by stable area identity with explicit units",
+    "comparison": "deterministically ordered semantic paths and before/after values",
+    "approval_binding": ["reviewer", "approved_at", "diff_digest", "scenario_branch_digest"],
+    "identity_chain": ["branch_digest", "diff_digest", "merged_project_digest", "merge_digest"]
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-analysis scenario --offline",
+      "result": "2 passed; 0 failed"
+    }
+  ],
+  "negative_coverage": [
+    "cross-base comparison",
+    "branch outcome tampering",
+    "stale diff approval",
+    "wrong target branch approval",
+    "missing units or non-finite spatial outcome"
+  ]
+}

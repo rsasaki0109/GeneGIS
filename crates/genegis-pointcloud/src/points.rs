@@ -95,7 +95,7 @@ mod tests {
         .expect("writer");
         for i in 0..8_i64 {
             writer
-                .write(las::Point {
+                .write_point(las::Point {
                     x: i as f64,
                     y: (i % 3) as f64,
                     z: i as f64 * 0.5,

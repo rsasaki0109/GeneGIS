@@ -2,7 +2,9 @@
 
 use crate::{ChoroplethGpu, ChoroplethMap, ChoroplethMesh};
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
+use std::{sync::mpsc, time::Duration, time::Instant};
+
+const GPU_COMPLETION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Measured headless GPU adapter, upload, and render timings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,7 +43,7 @@ pub fn benchmark_headless_gpu(
     if mesh.is_empty() {
         return Err("GPU benchmark mesh is empty".into());
     }
-    let instance = wgpu::Instance::default();
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
         compatible_surface: None,
@@ -78,11 +80,11 @@ pub fn benchmark_headless_gpu(
     let upload_started = Instant::now();
     let gpu = ChoroplethGpu::new(&device, format, &mesh);
     let upload_ns = nanos(upload_started.elapsed());
-    render_once(&device, &queue, &view, &gpu);
+    render_once(&device, &queue, &view, &gpu)?;
     let first_frame_ns = nanos(started.elapsed());
     let frames_started = Instant::now();
     for _ in 0..measured_frames {
-        render_once(&device, &queue, &view, &gpu);
+        render_once(&device, &queue, &view, &gpu)?;
     }
     let seconds = frames_started.elapsed().as_secs_f64();
     Ok(HeadlessGpuBenchmark {
@@ -102,7 +104,7 @@ fn render_once(
     queue: &wgpu::Queue,
     view: &wgpu::TextureView,
     gpu: &ChoroplethGpu,
-) {
+) -> Result<(), String> {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("genegis-headless-frame"),
     });
@@ -123,8 +125,33 @@ fn render_once(
         });
         gpu.draw(&mut pass);
     }
-    let submission = queue.submit(Some(encoder.finish()));
-    device.poll(wgpu::Maintain::wait_for(submission));
+    queue.submit(Some(encoder.finish()));
+    wait_for_queue(device, queue)
+}
+
+fn wait_for_queue(device: &wgpu::Device, queue: &wgpu::Queue) -> Result<(), String> {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    queue.on_submitted_work_done(move || {
+        let _ = sender.send(());
+    });
+    let deadline = std::time::Instant::now() + GPU_COMPLETION_TIMEOUT;
+    loop {
+        let _ = device.poll(wgpu::Maintain::Poll);
+        match receiver.try_recv() {
+            Ok(()) => return Ok(()),
+            Err(mpsc::TryRecvError::Disconnected) => {
+                return Err("GPU completion callback disconnected".into());
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(format!(
+                "GPU queue did not complete within {} seconds",
+                GPU_COMPLETION_TIMEOUT.as_secs()
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
 }
 
 fn nanos(duration: std::time::Duration) -> u64 {
@@ -138,6 +165,7 @@ mod tests {
     use genegis_style::ColorRgba;
 
     #[test]
+    #[ignore = "hardware acceptance: run on a GPU runner with an outer process timeout"]
     fn measures_real_wgpu_adapter_when_runner_has_one() {
         let mut map = ChoroplethMap::default();
         map.push_feature(

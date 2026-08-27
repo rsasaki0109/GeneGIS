@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "horizon": "2",
+  "milestone": "H2.1",
+  "status": "pass",
+  "verified_at": "2026-08-26",
+  "deliverables": {
+    "typed_composer": "crates/genegis-workflow/src/composer.rs",
+    "workbench_sessions_and_run_admission": "apps/workbench/src/main.rs",
+    "graph_ui": "apps/desktop/ui/index.html",
+    "ui_controller": "apps/desktop/ui/app.js"
+  },
+  "reviewed_template_count": 11,
+  "supported_actions": [
+    "create_draft",
+    "inspect_inputs_nodes_ports_and_edges",
+    "clone_reviewed_node",
+    "connect",
+    "disconnect",
+    "set_goal",
+    "undo",
+    "redo",
+    "run_reviewed_digest"
+  ],
+  "execution_evidence": {
+    "template_id": "nagoya-density",
+    "command_id": "73a40d1d-b0dc-4385-9c30-c0fea880f7c7",
+    "workflow_digest": "sha256:91dd42bb09d476fa494ee94d648f36c5e7f082286d4a14657e132c0f155f084c",
+    "result_digest": "sha256:8d55da3a68f314e8a2c1ffc479cc1b9d58326949164b78aadc710ea0b413515f",
+    "command_receipt_digest_match": true,
+    "verification_passed": true
+  },
+  "verification": [
+    {
+      "command": "cargo test -p genegis-workflow composer::tests",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench",
+      "result": "pass"
+    },
+    {
+      "command": "node --check apps/desktop/ui/app.js",
+      "result": "pass"
+    },
+    {
+      "command": "Workbench HTTP: templates -> session -> run North Star",
+      "result": "11 templates; HTTP 200; command/receipt workflow digest equal; verification passed"
+    },
+    {
+      "command": "Workbench HTTP: set_goal -> run -> undo -> run",
+      "result": "valid unreviewed digest rejected HTTP 409; undo restored verified execution"
+    }
+  ],
+  "negative_cases": [
+    "unknown reviewed template or node",
+    "unsafe or duplicate node id",
+    "unknown output schema port",
+    "self edge or dependency cycle",
+    "CRS and coordinate-unit disagreement",
+    "non-object node parameters",
+    "empty undo or redo history",
+    "valid but unreviewed workflow digest"
+  ]
+}

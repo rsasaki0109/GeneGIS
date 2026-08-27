@@ -1,0 +1,69 @@
+{
+  "schema_version": "0.1.0",
+  "phase": "14",
+  "milestone": "M5",
+  "status": "pass",
+  "verified_at": "2026-08-26",
+  "deliverables": {
+    "architecture_decision": "docs/adr/0017-no-code-composition-portable-publishing-and-desktop-bridge.md",
+    "portable_publication": "crates/genegis-capsule/src/publication.rs",
+    "desktop_bridge_capsule": "crates/genegis-capsule/src/bridge.rs",
+    "bridge_workflow": "crates/genegis-workflow/src/graph.rs",
+    "workbench_api": "apps/workbench/src/main.rs",
+    "desktop_plugin_core": "integrations/desktop-gis/genegis_bridge_plugin.py"
+  },
+  "publication_binding": [
+    "result_digest",
+    "workflow_digest",
+    "verification_graph_digest",
+    "verification_policy_digest",
+    "capsule_digest",
+    "attribution_and_licenses",
+    "limitations",
+    "crs_and_coordinate_unit",
+    "redaction_policy",
+    "publication_digest"
+  ],
+  "bridge_binding": [
+    "desktop_host_without_user_identity",
+    "explicit_layer_declarations",
+    "known_crs_and_derived_unit",
+    "license",
+    "observed_source_checksum",
+    "byte_exact_asset_inventory",
+    "input_snapshots",
+    "run_workflow_command",
+    "stable_workflow_digest",
+    "project_digest"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-capsule publication::tests::exports_and_verifies_allowlisted_share_and_embed_views",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-capsule bridge::tests",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "python integrations/desktop-gis/test_bridge_plugin.py",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench",
+      "result": "pass"
+    }
+  ],
+  "negative_cases": [
+    "public HTML or metadata local-path leak",
+    "public file or capsule tamper",
+    "publication/result/capsule digest mismatch",
+    "missing attribution, limitation, CRS, unit, or verification state",
+    "unknown CRS or CRS/unit mismatch",
+    "missing license",
+    "checksum mismatch or changed bridge asset",
+    "declared format and payload-signature mismatch",
+    "invalid extent or temporal interval",
+    "path escape, duplicate layer id, empty layer, or undeclared plugin field"
+  ]
+}

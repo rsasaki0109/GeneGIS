@@ -1,0 +1,100 @@
+{
+  "report_schema_version": "0.1.0",
+  "phase": "12-13",
+  "milestone": "P6-1",
+  "status": "pass",
+  "measured_at": "2026-08-26",
+  "implementation": {
+    "source": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-capsule\\src\\lib.rs",
+    "standards_projection": "C:\\Users\\rsasa\\Workspace\\GeneGIS\\crates\\genegis-capsule\\src\\standards.rs",
+    "ordinary_capsule_compatibility": "pass",
+    "operational_capsule_requires_complete_evidence_set": true
+  },
+  "evidence_classes": [
+    {
+      "kind": "adapter",
+      "manifest_role": "adapter-receipt",
+      "minimum_contract": [
+        "manifest_digest",
+        "operation_id",
+        "backend",
+        "parameters",
+        "output_digest",
+        "elapsed_ns"
+      ]
+    },
+    {
+      "kind": "edit",
+      "manifest_role": "edit-receipt",
+      "minimum_contract": [
+        "before_revision",
+        "after_revision",
+        "changed_features"
+      ]
+    },
+    {
+      "kind": "io",
+      "manifest_role": "io-receipt",
+      "minimum_contract": [
+        "schema_version",
+        "format",
+        "object_digest",
+        "requests",
+        "transferred_bytes",
+        "whole_object_fallback",
+        "peak_rss_bytes"
+      ]
+    },
+    {
+      "kind": "trust_ux",
+      "manifest_role": "trust-ux-report",
+      "minimum_contract": [
+        "schema_version",
+        "corpus_version",
+        "corpus_digest",
+        "admitted_human_reviewers",
+        "admitted_tasks",
+        "correctness",
+        "median_diagnosis_seconds",
+        "median_interactions_to_decisive_evidence",
+        "passed"
+      ]
+    }
+  ],
+  "offline_verification": {
+    "manifest_file_digest_and_size": "pass",
+    "envelope_schema": "pass",
+    "safe_unique_evidence_identity": "pass",
+    "producer_identity": "pass",
+    "payload_digest": "pass",
+    "required_class_completeness": "pass",
+    "manifest_role_matches_envelope_kind": "pass",
+    "missing_or_tampered_evidence_fails_closed": true
+  },
+  "standard_views": {
+    "prov_json": "all evidence subjects represented as entities",
+    "workflow_run_ro_crate": "all evidence files copied and indexed",
+    "openlineage": "all evidence subjects represented as output datasets",
+    "in_toto_dsse": "all evidence subjects included in signed statement subjects",
+    "ogc_api_processes": "offline capsule verifier returns validated evidence classes"
+  },
+  "test_evidence": {
+    "command": "cargo test -p genegis-capsule",
+    "passed": 11,
+    "failed": 0,
+    "ignored": 0,
+    "coverage": [
+      "ordinary capsule compatibility",
+      "complete operational evidence sealing",
+      "incomplete evidence rejection",
+      "payload tamper rejection after manifest refresh",
+      "standard projection preservation",
+      "DSSE subject verification"
+    ]
+  },
+  "release_boundary": {
+    "gate_e_human_measurement": "not_measured",
+    "statement": "The integration can bind and verify a real Trust UX aggregate, but fixture evidence does not satisfy the RFC human measurement gate.",
+    "p6_2_status": "pending"
+  }
+}

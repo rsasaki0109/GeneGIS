@@ -273,7 +273,7 @@ pub fn validate_openlineage(
     let artifact_count = manifest
         .entries
         .iter()
-        .filter(|entry| entry.role == "map-artifact")
+        .filter(|entry| is_standard_output_role(&entry.role))
         .count();
     if outputs.len() != artifact_count {
         return Err(verify_error("OpenLineage output dataset count mismatch"));
@@ -304,7 +304,7 @@ pub fn validate_openlineage(
         let expected = manifest
             .entries
             .iter()
-            .find(|entry| entry.role == "map-artifact" && entry.path == name)
+            .find(|entry| is_standard_output_role(&entry.role) && entry.path == name)
             .map(|entry| entry.sha256.as_str());
         if output
             .pointer("/facets/genegis_artifact/sha256")
@@ -496,7 +496,7 @@ fn ro_crate_json(
             "name": workflow.goal,
             "programmingLanguage": {"@id": "https://genegis.org/runtime/command-workflow-graph/0.1"},
             "input": receipt.source_snapshots.iter().enumerate().map(|(index, _)| json!({"@id": format!("#input-{index}")})).collect::<Vec<_>>(),
-            "output": manifest.entries.iter().filter(|entry| entry.role == "map-artifact" || entry.role == "analysis-result").enumerate().map(|(index, _)| json!({"@id": format!("#output-{index}")})).collect::<Vec<_>>(),
+            "output": manifest.entries.iter().filter(|entry| is_standard_output_role(&entry.role)).enumerate().map(|(index, _)| json!({"@id": format!("#output-{index}")})).collect::<Vec<_>>(),
             "sha256": manifest.entries.iter().find(|entry| entry.path == WORKFLOW_PATH).and_then(|entry| entry.sha256.strip_prefix("sha256:"))
         }),
         json!({
@@ -512,7 +512,7 @@ fn ro_crate_json(
             "instrument": {"@id": WORKFLOW_PATH},
             "agent": {"@id": "#engine"},
             "object": receipt.source_snapshots.iter().enumerate().map(|(index, _)| json!({"@id": format!("#source-{index}")})).collect::<Vec<_>>(),
-            "result": manifest.entries.iter().filter(|entry| entry.role == "map-artifact" || entry.role == "analysis-result").map(|entry| json!({"@id": entry.path})).collect::<Vec<_>>(),
+            "result": manifest.entries.iter().filter(|entry| is_standard_output_role(&entry.role)).map(|entry| json!({"@id": entry.path})).collect::<Vec<_>>(),
             "startTime": receipt.command_timestamp.to_rfc3339(),
             "endTime": receipt.command_timestamp.to_rfc3339(),
             "actionStatus": {"@id": "http://schema.org/CompletedActionStatus"},
@@ -568,7 +568,7 @@ fn ro_crate_json(
     for (index, entry) in manifest
         .entries
         .iter()
-        .filter(|entry| entry.role == "map-artifact" || entry.role == "analysis-result")
+        .filter(|entry| is_standard_output_role(&entry.role))
         .enumerate()
     {
         graph.push(json!({
@@ -608,12 +608,12 @@ fn openlineage_json(
     let outputs = manifest
         .entries
         .iter()
-        .filter(|entry| entry.role == "map-artifact")
+        .filter(|entry| is_standard_output_role(&entry.role))
         .map(|entry| {
             json!({
                 "namespace": "genegis:capsule",
                 "name": entry.path,
-                "facets": {"genegis_artifact": custom_facet(json!({"sha256": entry.sha256, "mediaType": entry.media_type, "bytes": entry.bytes}))}
+                "facets": {"genegis_artifact": custom_facet(json!({"sha256": entry.sha256, "mediaType": entry.media_type, "bytes": entry.bytes, "role": entry.role}))}
             })
         })
         .collect::<Vec<_>>();
@@ -642,11 +642,17 @@ fn custom_facet(fields: Value) -> Value {
     Value::Object(object)
 }
 
+fn is_standard_output_role(role: &str) -> bool {
+    role == "map-artifact"
+        || role == "analysis-result"
+        || super::operational_kind_for_role(role).is_some()
+}
+
 fn intoto_statement(manifest: &CapsuleManifest, receipt: &ExecutionReceipt) -> Value {
     let subjects = manifest
         .entries
         .iter()
-        .filter(|entry| entry.role == "map-artifact" || entry.role == "analysis-result")
+        .filter(|entry| is_standard_output_role(&entry.role))
         .map(|entry| {
             json!({"name": entry.path, "digest": {"sha256": entry.sha256.strip_prefix("sha256:")}})
         })
@@ -680,6 +686,14 @@ fn validate_intoto_statement(
         .get("subject")
         .and_then(Value::as_array)
         .ok_or_else(|| verify_error("in-toto subjects are missing"))?;
+    let expected_subjects = manifest
+        .entries
+        .iter()
+        .filter(|entry| is_standard_output_role(&entry.role))
+        .count();
+    if subjects.len() != expected_subjects {
+        return Err(verify_error("in-toto subject count mismatch"));
+    }
     for subject in subjects {
         let name = subject
             .get("name")
@@ -772,7 +786,9 @@ fn dsse_pae(payload_type: &str, payload: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::seal_nagoya_capsule;
+    use crate::{
+        seal_nagoya_capsule, seal_operational_capsule, OperationalEvidence, OperationalEvidenceKind,
+    };
     use genegis_analysis::run_ask_pipeline;
     use genegis_contract::TrustLevel;
     use std::path::PathBuf;
@@ -782,6 +798,43 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let root = temporary.path().join("capsule");
         seal_nagoya_capsule(&result, &root).expect("capsule");
+        (temporary, root)
+    }
+
+    fn operational_capsule() -> (tempfile::TempDir, PathBuf) {
+        let result = run_ask_pipeline("名古屋市の人口密度を表示").expect("north-star run");
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let root = temporary.path().join("operational-capsule");
+        let fixtures = [
+            (
+                "adapter",
+                OperationalEvidenceKind::Adapter,
+                json!({"manifest_digest": digest(b"manifest"), "operation_id": "typed.operation", "backend": {"family": "fixture"}, "parameters": {}, "output_digest": digest(b"output"), "elapsed_ns": 100}),
+            ),
+            (
+                "edit",
+                OperationalEvidenceKind::Edit,
+                json!({"before_revision": 1, "after_revision": 2, "changed_features": ["feature-1"]}),
+            ),
+            (
+                "io",
+                OperationalEvidenceKind::Io,
+                json!({"schema_version": "0.1.0", "format": "cog", "object_digest": digest(b"object"), "requests": [], "transferred_bytes": 0, "whole_object_fallback": false, "peak_rss_bytes": 1024}),
+            ),
+            (
+                "trust-ux",
+                OperationalEvidenceKind::TrustUx,
+                json!({"schema_version": "0.1.0", "corpus_version": "phase-12-map-first-trust-v1", "corpus_digest": digest(b"corpus"), "admitted_human_reviewers": 3, "admitted_tasks": 36, "correctness": 1.0, "median_diagnosis_seconds": 30.0, "median_interactions_to_decisive_evidence": 2.0, "passed": true}),
+            ),
+        ];
+        let evidence = fixtures
+            .into_iter()
+            .map(|(id, kind, payload)| {
+                OperationalEvidence::new(id, kind, "standards-test", &payload)
+                    .expect("operational evidence")
+            })
+            .collect::<Vec<_>>();
+        seal_operational_capsule(&result, &root, &evidence).expect("operational capsule");
         (temporary, root)
     }
 
@@ -811,6 +864,46 @@ mod tests {
         let request: Value = read_json(&output.join(OGC_REQUEST_PATH)).unwrap();
         let result = execute_ogc_verify_request(&request).expect("local OGC process execution");
         assert_eq!(result["verification"]["trust"]["level"], "verified");
+    }
+
+    #[test]
+    fn operational_evidence_survives_all_standard_projections() {
+        let (temporary, root) = operational_capsule();
+        let output = temporary.path().join("operational-standards");
+        export_standard_bundle(&root, &output).expect("standards export");
+
+        let manifest: CapsuleManifest = read_json(&root.join("capsule.json")).unwrap();
+        let operational_paths = manifest
+            .entries
+            .iter()
+            .filter(|entry| super::super::operational_kind_for_role(&entry.role).is_some())
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(operational_paths.len(), 4);
+        assert!(operational_paths
+            .iter()
+            .all(|path| output.join(path).is_file()));
+
+        let ro_crate: Value = read_json(&output.join(RO_CRATE_PATH)).unwrap();
+        let lineage: Value = read_json(&output.join(OPENLINEAGE_PATH)).unwrap();
+        let statement: Value = read_json(&output.join(INTOTO_PATH)).unwrap();
+        for path in operational_paths {
+            assert!(ro_crate["@graph"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|entity| entity["@id"] == path));
+            assert!(lineage["outputs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|output| output["name"] == path));
+            assert!(statement["subject"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|subject| subject["name"] == path));
+        }
     }
 
     #[test]

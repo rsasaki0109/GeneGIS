@@ -28,7 +28,7 @@
       "source_url": "https://www.city.nagoya.jp/shisei/toukei/1003703/1003773/1003809/1034253/1003818.html",
       "license": "Nagoya City Open Data Terms (Government of Japan Standard Terms 2.0)",
       "snapshot": "/home/sasaki/workspace/GeneGIS/examples/nagoya-population-density/data/nagoya-population-2020.json",
-      "snapshot_digest": "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c",
+      "snapshot_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
       "geocontract": "count(person), sum, reference date 2020-10-01, 16 unique ward keys",
       "oracle": "independent ward-key and integer-sum implementation checked against the Nagoya City published total; no independent-publisher corroboration is claimed for this domain",
       "oracle_observations": {"wards": 16, "unique_ward_codes": 16, "population_total_person": 2332176},

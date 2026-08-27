@@ -1,12 +1,267 @@
 use genegis_catalog::{
     alpha_catalog, LOCAL_COG_DEMO_ID, NAGOYA_WARDS_GEOPARQUET_ID, REMOTE_COG_DEMO_ID,
 };
+use genegis_core::{
+    Command, CommandBus, CommandEnvelope, CommandOrigin, InputSnapshot, Project, WorkflowExecution,
+    WorkflowExecutionContext, WorkflowExecutionError, WorkflowExecutionEvent, WorkflowExecutor,
+};
+use genegis_crs::{CoordinateUnit, Crs, SourceSnapshot};
 use genegis_geometry::PolygonRing;
-use genegis_render::{run_choropleth_window, ChoroplethMap};
+use genegis_render::{
+    run_choropleth_window, run_scene3d_window, BuildingLod1, ChoroplethMap, OrbitCamera, Scene3d,
+    ScenePoi, SceneSource,
+};
+use genegis_storage::{GpuFrameMetrics, IoReceipt};
 use genegis_style::ColorRgba;
+use genegis_workflow::{scene3d_copc_lod1_template, GeoWorkflow};
+use serde::{Deserialize, Serialize};
 
 use crate::error::AnalysisError;
+use crate::live_dashboard::{
+    build_scene3d_dashboard, canonical_scene_result_digest, LiveDashboard,
+};
 use crate::nagoya::run_nagoya_population_density_from_catalog;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Lod1BuildingDataset {
+    schema_version: String,
+    crs: Crs,
+    vertical_unit: String,
+    buildings: Vec<BuildingLod1>,
+    #[serde(default)]
+    pois: Vec<ScenePoi>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Scene3dLaunchReceipt {
+    pub command_id: String,
+    pub workflow_digest: String,
+    pub result_digest: String,
+    pub point_count: usize,
+    pub building_count: usize,
+    pub poi_count: usize,
+    pub dashboard: LiveDashboard,
+}
+
+pub fn attach_scene3d_gpu_evidence(
+    mut receipt: IoReceipt,
+    benchmark: &genegis_render::Scene3dBenchmark,
+) -> IoReceipt {
+    receipt.gpu = Some(GpuFrameMetrics {
+        adapter: benchmark.adapter.clone(),
+        backend: benchmark.backend.clone(),
+        upload_bytes: benchmark.upload_bytes,
+        upload_ns: benchmark.upload_ns,
+        first_frame_ns: benchmark.first_frame_ns,
+        steady_state_fps: benchmark.steady_state_fps,
+    });
+    receipt
+}
+
+struct Scene3dPreviewExecutor {
+    scene: Scene3d,
+}
+
+impl WorkflowExecutor for Scene3dPreviewExecutor {
+    fn execute(
+        &self,
+        _workflow: &GeoWorkflow,
+        context: &WorkflowExecutionContext,
+    ) -> Result<WorkflowExecution, WorkflowExecutionError> {
+        self.scene
+            .validate()
+            .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
+        let result_digest = canonical_scene_result_digest(&self.scene)
+            .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
+        let scene = self.scene.clone();
+        std::thread::Builder::new()
+            .name("genegis-scene3d-preview".into())
+            .spawn(move || {
+                if let Err(error) = run_scene3d_window(scene) {
+                    eprintln!("3D GPU preview failed: {error}");
+                }
+            })
+            .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
+        Ok(WorkflowExecution {
+            result_digest,
+            output: serde_json::json!({
+                "kind": "scene3d_webgpu",
+                "point_count": self.scene.points.len(),
+                "building_count": self.scene.buildings.len(),
+                "poi_count": self.scene.pois.len(),
+                "crs": self.scene.crs.identifier(),
+                "coordinate_unit": self.scene.coordinate_unit,
+                "vertical_unit": self.scene.vertical_unit,
+            }),
+            evidence: serde_json::json!({
+                "command_id": context.command_id,
+                "workflow_digest": context.workflow_digest,
+                "sources": self.scene.sources,
+            }),
+            events: self
+                .scene
+                .sources
+                .iter()
+                .map(|source| WorkflowExecutionEvent {
+                    kind: "source_read".into(),
+                    source_uri: Some(source.snapshot.uri.clone()),
+                    observed_at: context.command_timestamp,
+                    details: serde_json::json!({"role": source.role}),
+                })
+                .collect(),
+        })
+    }
+}
+
+pub fn launch_scene3d_preview(
+    copc_path: &str,
+    buildings_path: &str,
+    crs: Crs,
+) -> Result<Scene3dLaunchReceipt, AnalysisError> {
+    if !copc_path.to_ascii_lowercase().ends_with(".copc.laz") {
+        return Err(AnalysisError::Message(
+            "3D scene point source must be a .copc.laz file".into(),
+        ));
+    }
+    if crs.coordinate_unit() != CoordinateUnit::Metres {
+        return Err(AnalysisError::Message(
+            "3D scene CRS must use metre axes".into(),
+        ));
+    }
+    let cloud = genegis_pointcloud::read_point_cloud_path(copc_path)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let building_bytes = std::fs::read(buildings_path)
+        .map_err(|error| AnalysisError::Message(format!("read LOD1 buildings: {error}")))?;
+    let building_data: Lod1BuildingDataset = serde_json::from_slice(&building_bytes)
+        .map_err(|error| AnalysisError::Message(format!("parse LOD1 buildings: {error}")))?;
+    if building_data.schema_version != "0.1.0"
+        || building_data.crs != crs
+        || building_data.vertical_unit != "metres"
+    {
+        return Err(AnalysisError::Message(
+            "LOD1 building CRS, schema version, or vertical unit does not match the scene".into(),
+        ));
+    }
+    let bounds = cloud
+        .bounds()
+        .ok_or_else(|| AnalysisError::Message("COPC point source is empty".into()))?;
+    let target = [
+        (bounds[0] + bounds[3]) * 0.5,
+        (bounds[1] + bounds[4]) * 0.5,
+        (bounds[2] + bounds[5]) * 0.5,
+    ];
+    let radius = (bounds[3] - bounds[0])
+        .max(bounds[4] - bounds[1])
+        .max(bounds[5] - bounds[2])
+        .max(1.0)
+        * 1.8;
+    let copc_source = SourceSnapshot::new(path_source_uri(copc_path)?);
+    let building_source = SourceSnapshot::new(path_source_uri(buildings_path)?);
+    let scene = Scene3d {
+        schema_version: "0.1.0".into(),
+        crs: crs.clone(),
+        coordinate_unit: CoordinateUnit::Metres,
+        vertical_unit: "metres".into(),
+        sources: vec![
+            SceneSource {
+                id: "copc".into(),
+                role: "point_cloud".into(),
+                snapshot: copc_source.clone(),
+            },
+            SceneSource {
+                id: "lod1-buildings".into(),
+                role: "measured_building_height".into(),
+                snapshot: building_source.clone(),
+            },
+        ],
+        point_source_id: "copc".into(),
+        points: cloud.points,
+        buildings: building_data
+            .buildings
+            .into_iter()
+            .map(|mut building| {
+                building.height_source_id = "lod1-buildings".into();
+                building
+            })
+            .collect(),
+        pois: building_data
+            .pois
+            .into_iter()
+            .map(|mut poi| {
+                poi.source_id = "lod1-buildings".into();
+                poi
+            })
+            .collect(),
+        camera: OrbitCamera {
+            target,
+            yaw_degrees: 30.0,
+            pitch_degrees: 35.0,
+            radius,
+        },
+    };
+    scene
+        .validate()
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let workflow =
+        scene3d_copc_lod1_template(copc_source.clone(), building_source.clone(), crs.clone());
+    let workflow_digest = workflow
+        .stable_digest()
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let envelope = CommandEnvelope::new(
+        CommandOrigin::Ui,
+        Command::RunWorkflow {
+            workflow_id: workflow.id,
+        },
+    )
+    .with_workflow_digest(workflow_digest.clone())
+    .with_source_snapshot(copc_source.clone())
+    .with_source_snapshot(building_source.clone())
+    .with_input_snapshot(InputSnapshot::new("copc", copc_source).with_crs(crs.clone()))
+    .with_input_snapshot(InputSnapshot::new("buildings", building_source).with_crs(crs));
+    let command_id = envelope.id;
+    let point_count = scene.points.len();
+    let building_count = scene.buildings.len();
+    let poi_count = scene.pois.len();
+    let executor = Scene3dPreviewExecutor { scene };
+    let mut project = Project::new("3D preview");
+    let mut bus = CommandBus::new(project.clone());
+    bus.register_workflow(workflow)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let result = bus
+        .apply_with_executor(&mut project, envelope, &executor)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let result_digest = result
+        .result_digest
+        .ok_or_else(|| AnalysisError::Message("3D workflow returned no digest".into()))?;
+    let dashboard = build_scene3d_dashboard(
+        &executor.scene,
+        genegis_core::WorkflowDigest::new(workflow_digest.clone()),
+        result_digest.clone(),
+    )
+    .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    dashboard
+        .verify(&executor.scene)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    Ok(Scene3dLaunchReceipt {
+        command_id: command_id.to_string(),
+        workflow_digest,
+        result_digest,
+        point_count,
+        building_count,
+        poi_count,
+        dashboard,
+    })
+}
+
+fn path_source_uri(path: &str) -> Result<String, AnalysisError> {
+    let path = std::fs::canonicalize(path)
+        .map_err(|error| AnalysisError::Message(format!("resolve source path: {error}")))?;
+    Ok(format!(
+        "file:///{}",
+        path.to_string_lossy().replace('\\', "/")
+    ))
+}
 
 /// Build the Nagoya choropleth map for GPU rendering.
 pub fn nagoya_choropleth_map() -> Result<ChoroplethMap, AnalysisError> {

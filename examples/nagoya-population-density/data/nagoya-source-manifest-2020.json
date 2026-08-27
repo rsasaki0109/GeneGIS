@@ -6,7 +6,7 @@
   "census_year": 2020,
   "population": {
     "asset": "nagoya-population-2020.json",
-    "sha256": "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c",
+    "sha256": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
     "official_page_url": "https://www.city.nagoya.jp/shisei/toukei/1003703/1003773/1003809/1034253/1003818.html",
     "official_data_url": "https://www.city.nagoya.jp/_res/projects/default_project/_page_/001/003/818/toukeihyo.xlsx",
     "license": "名古屋市オープンデータ利用規約（政府標準利用規約2.0準拠）",

@@ -11,6 +11,44 @@ pub const TRUST_UX_CORPUS_VERSION: &str = "phase-12-map-first-trust-v1";
 pub const TRUST_UX_CORPUS_DIGEST: &str =
     "sha256:cde790805a1e6dc4f1200d92b5aa95804e94e7604667ab7219af32e5133f88ca";
 
+/// Pinned execution context prepared before any human reviewer is recruited.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrustUxStudyManifest {
+    /// Manifest schema version.
+    pub schema_version: String,
+    /// UTC preparation timestamp.
+    pub prepared_at: String,
+    /// Must remain `prepared_human_sessions_pending` until aggregation.
+    pub status: String,
+    /// Fixed corpus version.
+    pub corpus_version: String,
+    /// Fixed corpus digest.
+    pub corpus_digest: String,
+    /// Cargo.lock digest used to build the runner.
+    pub build_lock_digest: String,
+    /// Exact CLI executable digest.
+    pub runner_digest: String,
+    /// Exact preregistered protocol digest.
+    pub protocol_digest: String,
+    /// Study host operating-system identity.
+    pub os: String,
+    /// Study host architecture.
+    pub architecture: String,
+    /// Pinned terminal width.
+    pub terminal_columns: u32,
+    /// Pinned terminal height.
+    pub terminal_rows: u32,
+    /// Repository-relative protocol path.
+    pub protocol: String,
+    /// Minimum unique human reviewers.
+    pub minimum_unique_human_reviewers: usize,
+    /// Required tasks for every admitted reviewer.
+    pub task_count_per_reviewer: usize,
+    /// Raw sessions must remain outside version control.
+    pub raw_sessions_git_ignored: bool,
+}
+
 /// Whether a timing session was performed by a person or automation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -101,6 +139,9 @@ pub struct TrustUxSessionReport {
     pub facilitator_id: Option<String>,
     /// Runner binary/build identity.
     pub runner_identity: String,
+    /// Digest of the exact prepared study manifest; mandatory for human sessions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub study_manifest_digest: Option<String>,
     /// Fixed corpus version.
     pub corpus_version: String,
     /// Digest of the complete fixed corpus including hidden oracles.
@@ -157,6 +198,28 @@ pub struct TrustUxAggregateReport {
     pub interaction_gate: bool,
     /// True only when every Gate E requirement passes.
     pub passed: bool,
+}
+
+/// Manifest-bound, sealed Gate E acceptance receipt.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrustUxStudyAggregateReceipt {
+    /// Receipt schema version.
+    pub schema_version: String,
+    /// Digest of the exact study manifest bytes.
+    pub study_manifest_digest: String,
+    /// Build identity copied from the validated manifest.
+    pub build_lock_digest: String,
+    /// Runner identity copied from the validated manifest.
+    pub runner_digest: String,
+    /// Protocol identity copied from the validated manifest.
+    pub protocol_digest: String,
+    /// Sorted sealed session identities, including excluded automation and rejected sessions.
+    pub session_report_digests: Vec<String>,
+    /// Recomputed threshold result.
+    pub aggregate: TrustUxAggregateReport,
+    /// Digest over every preceding receipt field.
+    pub receipt_digest: String,
 }
 
 /// Return the fixed twelve-task Phase 12 corpus.
@@ -307,6 +370,13 @@ pub fn validate_trust_ux_session(report: &TrustUxSessionReport) -> Result<(), St
         if facilitator == report.reviewer_id {
             return Err("reviewer and facilitator pseudonyms must differ".into());
         }
+        if !report
+            .study_manifest_digest
+            .as_deref()
+            .is_some_and(valid_digest)
+        {
+            return Err("human session requires a valid study manifest digest".into());
+        }
     }
     if report.runner_identity.trim().is_empty()
         || report.started_at.trim().is_empty()
@@ -373,6 +443,13 @@ pub fn validate_trust_ux_session(report: &TrustUxSessionReport) -> Result<(), St
 
 /// Aggregate sessions using the exact RFC 0004 Gate E thresholds.
 pub fn aggregate_trust_ux_sessions(sessions: &[TrustUxSessionReport]) -> TrustUxAggregateReport {
+    aggregate_trust_ux_sessions_bound(sessions, None)
+}
+
+fn aggregate_trust_ux_sessions_bound(
+    sessions: &[TrustUxSessionReport],
+    expected_study_manifest_digest: Option<&str>,
+) -> TrustUxAggregateReport {
     let corpus_digest = trust_ux_corpus_digest();
     let tasks = trust_ux_task_corpus();
     let mut reviewer_ids = BTreeSet::new();
@@ -390,6 +467,8 @@ pub fn aggregate_trust_ux_sessions(sessions: &[TrustUxSessionReport]) -> TrustUx
             continue;
         }
         let complete = validate_trust_ux_session(session).is_ok()
+            && expected_study_manifest_digest
+                .is_none_or(|expected| session.study_manifest_digest.as_deref() == Some(expected))
             && session.results.len() == tasks.len()
             && session.results.iter().all(|result| {
                 !result.aborted
@@ -447,6 +526,97 @@ pub fn aggregate_trust_ux_sessions(sessions: &[TrustUxSessionReport]) -> TrustUx
         interaction_gate,
         passed: reviewers_gate && task_gate && correctness_gate && time_gate && interaction_gate,
     }
+}
+
+/// Validate the immutable study context before a human session or aggregation.
+pub fn validate_trust_ux_study_manifest(manifest: &TrustUxStudyManifest) -> Result<(), String> {
+    if manifest.schema_version != "0.1.0"
+        || manifest.status != "prepared_human_sessions_pending"
+        || manifest.corpus_version != TRUST_UX_CORPUS_VERSION
+        || manifest.corpus_digest != TRUST_UX_CORPUS_DIGEST
+        || !valid_digest(&manifest.build_lock_digest)
+        || !valid_digest(&manifest.runner_digest)
+        || !valid_digest(&manifest.protocol_digest)
+        || manifest.prepared_at.trim().is_empty()
+        || manifest.os.trim().is_empty()
+        || manifest.architecture.trim().is_empty()
+        || manifest.terminal_columns == 0
+        || manifest.terminal_rows == 0
+        || manifest.protocol != "docs/reports/phase-12-trust-ux-protocol.md"
+        || manifest.minimum_unique_human_reviewers != 3
+        || manifest.task_count_per_reviewer != trust_ux_task_corpus().len()
+        || !manifest.raw_sessions_git_ignored
+    {
+        return Err("Trust UX study manifest identity or preregistration drifted".into());
+    }
+    Ok(())
+}
+
+/// Compute a SHA-256 identity for exact evidence bytes.
+pub fn trust_ux_evidence_digest(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+/// Aggregate sessions against one exact study manifest and seal the result.
+pub fn aggregate_trust_ux_study(
+    manifest: &TrustUxStudyManifest,
+    manifest_bytes: &[u8],
+    sessions: &[TrustUxSessionReport],
+) -> Result<TrustUxStudyAggregateReceipt, String> {
+    validate_trust_ux_study_manifest(manifest)?;
+    let study_manifest_digest = trust_ux_evidence_digest(manifest_bytes);
+    let aggregate = aggregate_trust_ux_sessions_bound(sessions, Some(&study_manifest_digest));
+    let mut session_report_digests = sessions
+        .iter()
+        .map(|session| session.report_digest.clone())
+        .collect::<Vec<_>>();
+    if session_report_digests
+        .iter()
+        .any(|digest| !valid_digest(digest))
+    {
+        return Err("study contains an invalid session report digest".into());
+    }
+    session_report_digests.sort();
+    let mut receipt = TrustUxStudyAggregateReceipt {
+        schema_version: "1.0.0".into(),
+        study_manifest_digest,
+        build_lock_digest: manifest.build_lock_digest.clone(),
+        runner_digest: manifest.runner_digest.clone(),
+        protocol_digest: manifest.protocol_digest.clone(),
+        session_report_digests,
+        aggregate,
+        receipt_digest: String::new(),
+    };
+    receipt.receipt_digest = study_receipt_digest(&receipt)?;
+    Ok(receipt)
+}
+
+/// Recompute a persisted Gate E receipt from its exact manifest and sessions.
+pub fn verify_trust_ux_study_receipt(
+    manifest: &TrustUxStudyManifest,
+    manifest_bytes: &[u8],
+    sessions: &[TrustUxSessionReport],
+    receipt: &TrustUxStudyAggregateReceipt,
+) -> Result<(), String> {
+    let expected = aggregate_trust_ux_study(manifest, manifest_bytes, sessions)?;
+    if &expected != receipt {
+        return Err("Gate E study receipt does not match manifest or sessions".into());
+    }
+    Ok(())
+}
+
+fn study_receipt_digest(receipt: &TrustUxStudyAggregateReceipt) -> Result<String, String> {
+    let mut semantic = receipt.clone();
+    semantic.receipt_digest.clear();
+    serde_json::to_vec(&semantic)
+        .map(|bytes| trust_ux_evidence_digest(&bytes))
+        .map_err(|error| error.to_string())
+}
+
+fn valid_digest(value: &str) -> bool {
+    value
+        .strip_prefix("sha256:")
+        .is_some_and(|hex| hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
 fn validate_pseudonym(label: &str, value: &str) -> Result<(), String> {
@@ -513,6 +683,8 @@ mod tests {
             reviewer_id: reviewer.into(),
             facilitator_id: (kind == TrustUxSessionKind::Human).then(|| "fac-01".into()),
             runner_identity: "test-runner".into(),
+            study_manifest_digest: (kind == TrustUxSessionKind::Human)
+                .then(|| format!("sha256:{}", "d".repeat(64))),
             corpus_version: TRUST_UX_CORPUS_VERSION.into(),
             corpus_digest: trust_ux_corpus_digest(),
             started_at: "2026-08-23T00:00:00Z".into(),
@@ -583,6 +755,57 @@ mod tests {
         let encoded = serde_json::to_vec(&aggregate).unwrap();
         let decoded: TrustUxAggregateReport = serde_json::from_slice(&encoded).unwrap();
         assert_eq!(decoded, aggregate);
+    }
+
+    #[test]
+    fn study_receipt_binds_manifest_runner_protocol_and_sessions() {
+        let manifest = TrustUxStudyManifest {
+            schema_version: "0.1.0".into(),
+            prepared_at: "2026-08-27T00:00:00Z".into(),
+            status: "prepared_human_sessions_pending".into(),
+            corpus_version: TRUST_UX_CORPUS_VERSION.into(),
+            corpus_digest: TRUST_UX_CORPUS_DIGEST.into(),
+            build_lock_digest: format!("sha256:{}", "a".repeat(64)),
+            runner_digest: format!("sha256:{}", "b".repeat(64)),
+            protocol_digest: format!("sha256:{}", "c".repeat(64)),
+            os: "test-os".into(),
+            architecture: "x86_64".into(),
+            terminal_columns: 120,
+            terminal_rows: 30,
+            protocol: "docs/reports/phase-12-trust-ux-protocol.md".into(),
+            minimum_unique_human_reviewers: 3,
+            task_count_per_reviewer: 12,
+            raw_sessions_git_ignored: true,
+        };
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest).expect("manifest");
+        let manifest_digest = trust_ux_evidence_digest(&manifest_bytes);
+        let mut sessions = ["human-01", "human-02", "human-03"]
+            .map(|reviewer| complete_session(reviewer, TrustUxSessionKind::Human));
+        for session in &mut sessions {
+            session.study_manifest_digest = Some(manifest_digest.clone());
+            *session = seal_trust_ux_session(session.clone());
+        }
+        let receipt =
+            aggregate_trust_ux_study(&manifest, &manifest_bytes, &sessions).expect("study receipt");
+        assert!(receipt.aggregate.passed);
+        let encoded = serde_json::to_vec(&receipt).expect("receipt JSON");
+        let roundtrip: TrustUxStudyAggregateReceipt =
+            serde_json::from_slice(&encoded).expect("receipt roundtrip");
+        verify_trust_ux_study_receipt(&manifest, &manifest_bytes, &sessions, &roundtrip)
+            .expect("verify persisted receipt");
+
+        let mut drifted_bytes = manifest_bytes.clone();
+        drifted_bytes.push(b'\n');
+        assert!(
+            verify_trust_ux_study_receipt(&manifest, &drifted_bytes, &sessions, &receipt).is_err()
+        );
+
+        sessions[0].study_manifest_digest = Some(format!("sha256:{}", "e".repeat(64)));
+        sessions[0] = seal_trust_ux_session(sessions[0].clone());
+        let rejected = aggregate_trust_ux_study(&manifest, &manifest_bytes, &sessions)
+            .expect("rejected aggregate remains auditable");
+        assert!(!rejected.aggregate.passed);
+        assert_eq!(rejected.aggregate.rejected_sessions, 1);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use genegis_plugin_api::CapabilityPolicy;
+use sha2::{Digest, Sha256};
 use wasmtime::{Engine, Module};
 
 use crate::discover::PluginEntry;
@@ -87,6 +88,13 @@ impl PluginHost {
                 wasm_path.display()
             ))
         })?;
+        let observed_digest = format!("sha256:{:x}", Sha256::digest(&wasm_bytes));
+        if observed_digest != entry.manifest.artifact_digest {
+            return Err(PluginHostError::Bundle(format!(
+                "plugin {} artifact digest mismatch",
+                entry.manifest.id
+            )));
+        }
 
         let module = Module::from_binary(&self.engine, &wasm_bytes)
             .map_err(|err| PluginHostError::Wasm(err.to_string()))?;
@@ -106,6 +114,10 @@ mod tests {
     use std::path::Path;
 
     fn write_demo_bundle(dir: &Path, include_wasm: bool) {
+        let wasm = include_wasm.then(|| {
+            wat::parse_str(r#"(module (func (export "plugin_info") (result i32) i32.const 42))"#)
+                .expect("wat")
+        });
         let manifest = PluginManifest {
             id: "demo-filter".into(),
             name: "Demo Filter".into(),
@@ -114,6 +126,10 @@ mod tests {
             description: "Host smoke plugin".into(),
             author: "GeneGIS".into(),
             capabilities: vec![PluginCapability::AnalysisStep],
+            artifact_digest: wasm.as_ref().map_or_else(
+                || format!("sha256:{}", "0".repeat(64)),
+                |bytes| format!("sha256:{:x}", Sha256::digest(bytes)),
+            ),
             wasm: Some(WasmModuleSpec {
                 entry: "demo_filter.wasm".into(),
             }),
@@ -125,11 +141,7 @@ mod tests {
         )
         .expect("write manifest");
 
-        if include_wasm {
-            let wasm = wat::parse_str(
-                r#"(module (func (export "plugin_info") (result i32) i32.const 42))"#,
-            )
-            .expect("wat");
+        if let Some(wasm) = wasm {
             std::fs::write(dir.join("demo_filter.wasm"), wasm).expect("write wasm");
         }
     }

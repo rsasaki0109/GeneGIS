@@ -183,7 +183,7 @@ Core: Rust · UI: TypeScript/Tauri · plugins: Python/WASM · analytics: DuckDB
 - [Architecture](docs/architecture/overview.md)
 - [Master RFC](docs/rfcs/0001-master-architecture.md)
 - [Proof-carrying analysis](docs/rfcs/0003-proof-carrying-spatial-analysis.md)
-- [Roadmap](docs/roadmap/phase-11-proof-carrying-analysis.md)
+- [Long-term roadmap](docs/roadmap/long-term-product-roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
 Apache-2.0 OR MIT

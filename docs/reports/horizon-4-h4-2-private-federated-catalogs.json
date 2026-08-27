@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "recorded_on": "2026-08-26",
+  "milestone": "H4.2",
+  "status": "complete",
+  "federation_contract": {
+    "catalog_classes": ["local", "organization_private", "public"],
+    "access_context": ["subject_id", "organization_id", "roles"],
+    "private_admission": "organization match plus subject or role allowlist",
+    "denied_disclosure": "count only; no endpoint ID or URL",
+    "source_identity": ["stable endpoint ID", "endpoint configuration SHA-256", "origin endpoint IDs on each deduplicated STAC item"],
+    "credentials": "secret-free environment references resolved only by the host"
+  },
+  "runtime_surfaces": [
+    "/api/catalogs/private/admit in genegis-workbench",
+    "/api/catalogs/private/admit in genegis-server"
+  ],
+  "verification": [
+    {
+      "command": "cargo test -p genegis-catalog private --offline",
+      "result": "2 passed; 0 failed"
+    },
+    {
+      "command": "cargo test -p genegis-analysis admission_is_bound_to_command_and_workflow --offline",
+      "result": "1 passed; 0 failed"
+    },
+    {
+      "command": "cargo check -p genegis-workbench -p genegis-server --offline",
+      "result": "passed"
+    }
+  ],
+  "negative_coverage": [
+    "cross-organization local/private access",
+    "role or subject outside allowlist",
+    "duplicate endpoint identity",
+    "policy missing an endpoint rule",
+    "endpoint mutation after admission",
+    "admission digest mutation"
+  ]
+}

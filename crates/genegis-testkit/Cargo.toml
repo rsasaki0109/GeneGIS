@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 genegis-analysis = { path = "../genegis-analysis" }
 genegis-contract = { path = "../genegis-contract" }
+genegis-core = { path = "../genegis-core" }
 genegis-crs = { path = "../genegis-crs" }
 genegis-geometry = { path = "../genegis-geometry" }
 genegis-pointcloud = { path = "../genegis-pointcloud" }
@@ -25,6 +26,7 @@ geoarrow-schema = "0.8"
 geoparquet = "0.8"
 parquet = { version = "58", default-features = false, features = ["arrow", "zstd"] }
 duckdb.workspace = true
+chrono.workspace = true
 gdal = "0.19"
 genegis-render = { path = "../genegis-render" }
 sha2.workspace = true

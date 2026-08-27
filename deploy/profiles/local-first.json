@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "id": "local-first-v1",
+  "class": "local_first",
+  "network": {"mode": "allow_list", "origins": ["https://planetarycomputer.microsoft.com", "https://earth-search.aws.element84.com"]},
+  "persistence": "local_filesystem",
+  "identity": "local",
+  "maximum_concurrent_workflows": 2,
+  "command_workflow_required": true,
+  "offline_capsule_verification": true,
+  "allowed_open_formats": ["cog", "copc", "geoparquet", "pmtiles", "stac"],
+  "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+  "registry_snapshot_digest": null
+}

@@ -49,20 +49,7 @@ impl RemoteAccessPolicy {
 
     /// Validate an HTTP(S) URL before opening a connection.
     pub fn validate_url(&self, value: &str) -> Result<(), StorageError> {
-        let url = url::Url::parse(value)
-            .map_err(|error| StorageError::UnsupportedScheme(format!("{value:?}: {error}")))?;
-        if !matches!(url.scheme(), "http" | "https") {
-            return Err(StorageError::UnsupportedScheme(url.scheme().into()));
-        }
-        if !url.username().is_empty() || url.password().is_some() {
-            return Err(StorageError::Http(
-                "remote URL credentials are not permitted".into(),
-            ));
-        }
-        let host = url
-            .host_str()
-            .ok_or_else(|| StorageError::Http("remote URL has no host".into()))?
-            .to_ascii_lowercase();
+        let host = remote_url_host(value)?;
         if self.allow_loopback && is_loopback_host(&host) {
             return Ok(());
         }
@@ -77,6 +64,23 @@ impl RemoteAccessPolicy {
             "remote host {host:?} is not allowlisted; set {REMOTE_ALLOWED_HOSTS_ENV}"
         )))
     }
+}
+
+/// Parse a credential-free HTTP(S) URL and return its normalized host.
+pub fn remote_url_host(value: &str) -> Result<String, StorageError> {
+    let url = url::Url::parse(value)
+        .map_err(|error| StorageError::UnsupportedScheme(format!("{value:?}: {error}")))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err(StorageError::UnsupportedScheme(url.scheme().into()));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(StorageError::Http(
+            "remote URL credentials are not permitted".into(),
+        ));
+    }
+    url.host_str()
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| StorageError::Http("remote URL has no host".into()))
 }
 
 fn is_loopback_host(host: &str) -> bool {
@@ -128,5 +132,15 @@ mod tests {
         assert!(RemoteAccessPolicy::from_env()
             .validate_url("https://user:secret@example.org/a")
             .is_err());
+    }
+
+    #[test]
+    fn extracts_only_credential_free_http_hosts() {
+        assert_eq!(
+            remote_url_host("https://DATA.example.org/object").expect("host"),
+            "data.example.org"
+        );
+        assert!(remote_url_host("file:///tmp/object").is_err());
+        assert!(remote_url_host("https://user:secret@example.org/object").is_err());
     }
 }

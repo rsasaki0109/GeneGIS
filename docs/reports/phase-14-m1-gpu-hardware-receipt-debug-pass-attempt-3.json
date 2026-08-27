@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "command_id": "97295a1b-29b3-434b-a756-e97a4e993688",
+  "workflow_digest": "sha256:284bcf7d332e36e5fbe4c9dbac067b6dc67a67e423756abbeb1a1662f302fc16",
+  "copc_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
+  "lod1_digest": "sha256:1683864d6b1af1e1613153b1242b800004ff665636714d15b555f3445ccf7848",
+  "build_digest": "sha256:70477dfefb18c8189ea00a0d14b5d67d4628d65e8be48d713e255ea6ff116f3c",
+  "observed_at": "2026-08-26T16:19:22.119823400+00:00",
+  "os": "windows-x86_64",
+  "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+  "crs": "EPSG:6675",
+  "coordinate_unit": "metres",
+  "vertical_unit": "metres",
+  "benchmark": {
+    "adapter": "NVIDIA GeForce GTX 1660 Ti",
+    "backend": "dx12",
+    "upload_bytes": 1147604,
+    "upload_ns": 221482200,
+    "point_count": 40949,
+    "building_count": 3,
+    "first_frame_ns": 1980988400,
+    "measured_frames": 120,
+    "steady_state_fps": 466.56969793111335
+  },
+  "first_frame_seconds_maximum": 2.0,
+  "steady_state_fps_minimum": 30.0,
+  "verdict": "pass",
+  "regressions": [],
+  "receipt_digest": "sha256:a70aa6a2eeec9ce3a3ec6ab74138f3a7d4ee94980803cb11ce87a25651fdb0f2"
+}

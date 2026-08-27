@@ -1,4 +1,4 @@
-# Plugin Author Guide (Phase 4 alpha)
+# Plugin Author Guide (SDK v1)
 
 GeneGIS plugins are **WASM modules** shipped with a JSON manifest. The host loads manifests first, applies a capability allow-list (RFC D7), and only then compiles the `.wasm` file.
 
@@ -18,7 +18,8 @@ The repository includes a smoke bundle at `GeneGIS/plugins/demo-filter/`.
 |-------|----------|-------------|
 | `id` | yes | Stable kebab-case identifier (`demo-filter`) |
 | `version` | yes | Semver `major.minor.patch` |
-| `api_version` | yes | Must match host `PLUGIN_API_VERSION` (`0.1.x`) |
+| `api_version` | yes | Must share host `PLUGIN_API_VERSION` major (`1.x`) |
+| `artifact_digest` | yes | SHA-256 identity of the distributed artifact |
 | `capabilities` | yes | Non-empty list of granted capabilities |
 | `name` | no | Display name for workbench / CLI |
 | `description` | no | Short summary |
@@ -32,10 +33,11 @@ Example:
   "id": "demo-filter",
   "name": "Demo Filter",
   "version": "0.1.0",
-  "api_version": "0.1.0",
+  "api_version": "1.0.0",
   "description": "Example analysis filter plugin",
   "author": "GeneGIS",
   "capabilities": ["analysis_step"],
+  "artifact_digest": "sha256:93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476",
   "wasm": { "entry": "demo_filter.wasm" }
 }
 ```
@@ -87,9 +89,10 @@ genegis plugin load plugins/demo-filter
 
 Default plugin root: `./plugins`, then the repository `plugins/` directory when running from a crate subdirectory.
 
-## WASM authoring (alpha limits)
+## WASM authoring
 
-Phase 4 alpha validates **manifest + module load** only. There is no stable plugin export ABI yet — do not rely on host function imports beyond future SDK releases.
+The stable component boundary is `sdk/v1/wasm/genegis-plugin-v1.wit`. Plugins
+may read declared inputs and emit Commands; they do not mutate projects directly.
 
 Recommended workflow for authors today:
 
@@ -100,15 +103,23 @@ Recommended workflow for authors today:
 
 ## Version contract
 
-- Host SDK version: `genegis_plugin_api::PLUGIN_API_VERSION` (`0.1.0`).
-- Compatible manifests: same `major.minor` (`0.1.x`).
+- Host SDK version: `genegis_plugin_api::PLUGIN_API_VERSION` (`1.0.0`).
+- Compatible manifests: same non-zero major (`1.x`).
 - Manifest filename: `genegis.plugin.json`.
 
-## Out of scope (Phase 4)
+## Signed registry
 
-- Plugin marketplace or billing
-- Native (non-WASM) plugins
-- TypeScript UI extensions and Python sandboxes (future tracks)
+Registry publication requires an Ed25519 signature from a configured trusted
+key. The host re-verifies manifest signature and artifact SHA-256 at resolution.
+A signed revocation immediately prevents resolution of that exact release.
+
+TypeScript and Python bindings plus the shared conformance fixture are under
+`sdk/v1/`; Rust remains the reference implementation.
+
+## Out of scope
+
+- Native in-process plugins
+- Billing and marketplace economics
 
 ## Related code
 
@@ -121,6 +132,6 @@ Recommended workflow for authors today:
 
 ## Next steps for authors
 
-- Watch for a stable WASM export surface (`plugin_info`, analysis hooks).
-- Keep manifests minimal until the host ABI is frozen.
+- Implement the SDK v1 WIT exports and request only required capabilities.
+- Run the shared Rust/Python conformance corpus before publication.
 - Open issues with reproducible `genegis plugin load` logs when sandboxing blocks expected capabilities.

@@ -7,13 +7,17 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use genegis_adapter::{
+    GazetteerEntry, GeocodingMode, GeocodingPrivacyPolicy, GeocodingProvider, GeocodingQuery,
+    GeocodingRatePolicy, GeocodingRequest, OgcRequest,
+};
 use genegis_agent::{
     get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run, AgentOrchestrator,
     AgentRole, AgentRun, AgentRunConfig, AgentRunSummary, DEFAULT_AGENT_RUNS_DIR,
     DEFAULT_AGENT_RUN_PATH,
 };
 use genegis_ai::{PlanResult, DEFAULT_AGENT_PLAN_PATH};
-use genegis_analysis::{run_ask_pipeline, spawn_gpu_preview_for_workflow};
+use genegis_analysis::{launch_scene3d_preview, run_ask_pipeline, spawn_gpu_preview_for_workflow};
 use genegis_catalog::{
     bind_stac_item, browse_alpha_stac_collection, endpoint_registry_path, extended_catalog,
     fetch_stac_collection, import_stac_item_url, load_catalog_overlay, AssetRequirements,
@@ -21,14 +25,17 @@ use genegis_catalog::{
 };
 use genegis_collab::{pull_session, push_session, CollabSession, MapComment, DEFAULT_SERVER_URL};
 use genegis_core::{Command, CommandEnvelope, CommandOrigin};
+use genegis_crs::{ChecksumVerification, Crs, SourceSnapshot};
 use genegis_plugin_host::PluginHost;
 use genegis_vector::{read_geoparquet_uri_with_options_and_policy, GeoParquetReadOptions};
 use genegis_workflow::{
     federated_asset_execution_template, federated_stac_search_template,
-    stac_endpoint_registry_template,
+    reviewed_workflow_templates, stac_endpoint_registry_template, ComposerCommand,
+    WorkflowComposer,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use sha2::{Digest, Sha256};
+use std::{collections::BTreeMap, sync::Mutex};
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
@@ -56,6 +63,15 @@ struct AppState {
     endpoint_registry: Arc<Mutex<EndpointRegistry>>,
     collab: Arc<Mutex<CollabSession>>,
     sync: Arc<Mutex<SyncStatus>>,
+    composers: Arc<Mutex<BTreeMap<Uuid, ComposerSession>>>,
+    verified_results: Arc<Mutex<BTreeMap<String, SourceSnapshot>>>,
+}
+
+#[derive(Clone)]
+struct ComposerSession {
+    template_id: String,
+    reviewed_digest: String,
+    composer: WorkflowComposer,
 }
 
 #[derive(Serialize)]
@@ -116,6 +132,9 @@ struct AskResponse {
 #[derive(Deserialize)]
 struct GpuPreviewRequest {
     workflow_id: Option<String>,
+    copc_path: Option<String>,
+    buildings_path: Option<String>,
+    crs: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -189,6 +208,214 @@ struct GpuPreviewResponse {
     ok: bool,
     error: Option<String>,
     message: Option<String>,
+    dashboard: Option<genegis_analysis::LiveDashboard>,
+}
+
+#[derive(Serialize)]
+struct OgcExecuteResponse {
+    ok: bool,
+    error: Option<String>,
+    result: Option<genegis_analysis::OgcWorkflowResult>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum GeocodingProviderRequest {
+    OfflineNagoya,
+    HttpJson {
+        provider_id: String,
+        version: String,
+        endpoint: String,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GeocodingExecuteRequest {
+    mode: GeocodingMode,
+    queries: Vec<GeocodingQuery>,
+    language: String,
+    max_candidates: u32,
+    provider: GeocodingProviderRequest,
+    privacy: GeocodingPrivacyPolicy,
+    #[serde(default)]
+    rate: GeocodingRatePolicy,
+}
+
+#[derive(Serialize)]
+struct GeocodingExecuteResponse {
+    ok: bool,
+    error: Option<String>,
+    result: Option<genegis_analysis::GeocodingWorkflowResult>,
+}
+
+#[derive(Serialize)]
+struct NarrativeComposeResponse {
+    ok: bool,
+    error: Option<String>,
+    receipt: Option<genegis_capsule::NarrativeCompositionReceipt>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NarrativeComposeRequest {
+    title: String,
+    result_digest: String,
+    frames: Vec<genegis_capsule::NarrativeFrame>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LiveFeedExecuteRequest {
+    request: genegis_adapter::LiveFeedRequest,
+    #[serde(default)]
+    policy: genegis_adapter::FeedFreshnessPolicy,
+}
+
+#[derive(Serialize)]
+struct LiveFeedExecuteResponse {
+    ok: bool,
+    error: Option<String>,
+    result: Option<genegis_analysis::LiveFeedWorkflowResult>,
+}
+
+#[derive(Serialize)]
+struct OperationalDashboardResponse {
+    ok: bool,
+    error: Option<String>,
+    receipt: Option<genegis_analysis::OperationalDashboardReceipt>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AlertEvaluateRequest {
+    policy: genegis_analysis::VerifiedAlertPolicy,
+    metric: genegis_analysis::AlertMetric,
+    window: genegis_analysis::AlertTriggeringWindow,
+    evaluated_at: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AlertAcknowledgeRequest {
+    alert: genegis_analysis::VerifiedAlertRecord,
+    acknowledgement: genegis_analysis::AlertAcknowledgement,
+}
+
+#[derive(Serialize)]
+struct AlertResponse<T> {
+    ok: bool,
+    error: Option<String>,
+    result: Option<T>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScenarioCompareRequest {
+    base: genegis_analysis::ScenarioBranch,
+    scenario: genegis_analysis::ScenarioBranch,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScenarioMergeRequest {
+    base: genegis_analysis::ScenarioBranch,
+    scenario: genegis_analysis::ScenarioBranch,
+    approval: genegis_analysis::ScenarioApproval,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CityScenePlanRequest {
+    manifest: genegis_render::CitySceneManifest,
+    view: genegis_render::SharedSpatialViewState,
+    budget: genegis_render::CityStreamBudget,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GovernanceExecuteRequest {
+    state: genegis_collab::GovernanceState,
+    operation: genegis_analysis::GovernanceOperation,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateCatalogAdmissionRequest {
+    endpoints: Vec<genegis_catalog::StacEndpoint>,
+    policy: genegis_catalog::FederatedCatalogPolicy,
+    context: genegis_catalog::CatalogAccessContext,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PluginRegistryExecuteRequest {
+    registry: genegis_plugin_host::PluginRegistry,
+    operation: genegis_plugin_host::PluginRegistryOperation,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SolutionPackAdmissionRequest {
+    pack: genegis_plugin_host::SolutionPackManifest,
+    registry: genegis_plugin_host::PluginRegistry,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PerformanceMatrixRequest {
+    profile: genegis_core::PerformanceMatrixProfile,
+    measurements: Vec<genegis_core::PerformanceMeasurement>,
+}
+
+#[derive(Deserialize)]
+struct PublishRequest {
+    capsule_path: String,
+    slug: String,
+}
+
+#[derive(Serialize)]
+struct PublishResponse {
+    ok: bool,
+    error: Option<String>,
+    output_path: Option<String>,
+    publication: Option<genegis_capsule::PortablePublication>,
+}
+
+#[derive(Serialize)]
+struct BridgeCapsuleResponse {
+    ok: bool,
+    error: Option<String>,
+    output_path: Option<String>,
+    manifest: Option<genegis_capsule::BridgeCapsuleManifest>,
+}
+
+#[derive(Deserialize)]
+struct ComposerCreateRequest {
+    template_id: String,
+}
+
+#[derive(Deserialize)]
+struct ComposerEditRequest {
+    command: ComposerCommand,
+}
+
+#[derive(Serialize)]
+struct ComposerResponse {
+    ok: bool,
+    error: Option<String>,
+    session_id: Option<Uuid>,
+    template_id: Option<String>,
+    composer: Option<WorkflowComposer>,
+}
+
+#[derive(Serialize)]
+struct ComposerRunResponse {
+    ok: bool,
+    error: Option<String>,
+    command: Option<CommandEnvelope>,
+    workflow: Option<genegis_workflow::GeoWorkflow>,
+    result: Option<genegis_analysis::AskPipelineResult>,
 }
 
 #[derive(Serialize)]
@@ -237,12 +464,49 @@ async fn main() {
         endpoint_registry: Arc::new(Mutex::new(endpoint_registry)),
         collab: Arc::new(Mutex::new(collab)),
         sync: Arc::new(Mutex::new(sync)),
+        composers: Arc::new(Mutex::new(BTreeMap::new())),
+        verified_results: Arc::new(Mutex::new(BTreeMap::new())),
     });
 
     let app = Router::new()
         .route("/", get(index))
         .route("/api/ask", post(ask))
         .route("/api/gpu-preview", post(gpu_preview))
+        .route("/api/ogc/execute", post(execute_ogc))
+        .route("/api/geocode", post(execute_geocoding))
+        .route("/api/narratives/compose", post(compose_narrative))
+        .route("/api/live/ingest", post(execute_live_feed))
+        .route("/api/operational/views", post(compose_operational_view))
+        .route("/api/alerts/evaluate", post(evaluate_alert))
+        .route("/api/alerts/acknowledge", post(acknowledge_alert))
+        .route("/api/scenarios/branches", post(create_scenario))
+        .route("/api/scenarios/compare", post(compare_scenario))
+        .route("/api/scenarios/merge", post(merge_scenario))
+        .route("/api/city-scene/plan", post(plan_city_scene))
+        .route("/api/governance/execute", post(execute_governance))
+        .route("/api/catalogs/private/admit", post(admit_private_catalog))
+        .route(
+            "/api/plugins/registry/execute",
+            post(execute_plugin_registry),
+        )
+        .route("/api/solution-packs/admit", post(admit_solution_pack))
+        .route(
+            "/api/performance-matrix/evaluate",
+            post(evaluate_performance_matrix),
+        )
+        .route("/api/publish", post(publish_capsule))
+        .route("/api/bridge/capsule", post(create_bridge_capsule))
+        .route("/api/composer/templates", get(composer_templates))
+        .route("/api/composer/sessions", post(create_composer_session))
+        .route("/api/composer/sessions/{id}", get(get_composer_session))
+        .route(
+            "/api/composer/sessions/{id}/edit",
+            post(edit_composer_session),
+        )
+        .route(
+            "/api/composer/sessions/{id}/run",
+            post(run_composer_session),
+        )
         .route("/api/stac/collection", get(stac_collection))
         .route("/api/stac/items/{id}", get(stac_item))
         .route("/api/stac/overlay", get(stac_overlay))
@@ -608,16 +872,38 @@ async fn index(State(state): State<Arc<AppState>>) -> Html<String> {
     )
 }
 
-async fn ask(Json(body): Json<AskRequest>) -> impl IntoResponse {
+async fn ask(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AskRequest>,
+) -> impl IntoResponse {
     match run_ask_pipeline(body.prompt.trim()) {
-        Ok(result) => (
-            StatusCode::OK,
-            Json(AskResponse {
-                ok: true,
-                error: None,
-                result: Some(result),
-            }),
-        ),
+        Ok(result) => {
+            if result.execution_receipt.verification_passed {
+                let digest = result.execution_receipt.result_digest.clone();
+                let mut source = SourceSnapshot::new(format!(
+                    "command://{}/result",
+                    result.execution_receipt.command_id
+                ));
+                source.dataset_id = Some(format!("result:{digest}"));
+                source.checksum = Some(digest.clone());
+                source.expected_checksum = Some(digest.clone());
+                source.observed_checksum = Some(digest.clone());
+                source.checksum_status = ChecksumVerification::Verified;
+                state
+                    .verified_results
+                    .lock()
+                    .expect("verified result lock")
+                    .insert(digest, source);
+            }
+            (
+                StatusCode::OK,
+                Json(AskResponse {
+                    ok: true,
+                    error: None,
+                    result: Some(result),
+                }),
+            )
+        }
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(AskResponse {
@@ -631,23 +917,907 @@ async fn ask(Json(body): Json<AskRequest>) -> impl IntoResponse {
 
 async fn gpu_preview(Json(body): Json<GpuPreviewRequest>) -> impl IntoResponse {
     let workflow_id = body.workflow_id.as_deref().unwrap_or("nagoya-density");
-    match spawn_gpu_preview_for_workflow(workflow_id) {
-        Ok(message) => (
+    let launch: Result<(String, Option<genegis_analysis::LiveDashboard>), String> =
+        if workflow_id == "scene3d-copc-lod1" {
+            let copc_path = body
+                .copc_path
+                .as_deref()
+                .ok_or_else(|| "scene3d-copc-lod1 requires copc_path".to_string());
+            let buildings_path = body
+                .buildings_path
+                .as_deref()
+                .ok_or_else(|| "scene3d-copc-lod1 requires buildings_path".to_string());
+            let crs = body
+                .crs
+                .as_deref()
+                .ok_or_else(|| "scene3d-copc-lod1 requires crs".to_string())
+                .and_then(|value| Crs::parse(value).map_err(|error| error.to_string()));
+            match (copc_path, buildings_path, crs) {
+                (Ok(copc_path), Ok(buildings_path), Ok(crs)) => {
+                    launch_scene3d_preview(copc_path, buildings_path, crs)
+                        .map(|receipt| {
+                            let message = format!(
+                                "WebGPU 3D scene launched: {} points, {} buildings, {} POIs",
+                                receipt.point_count, receipt.building_count, receipt.poi_count
+                            );
+                            (message, Some(receipt.dashboard))
+                        })
+                        .map_err(|error| error.to_string())
+                }
+                (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => Err(error),
+            }
+        } else {
+            spawn_gpu_preview_for_workflow(workflow_id)
+                .map(|message| (message, None))
+                .map_err(|error| error.to_string())
+        };
+    match launch {
+        Ok((message, dashboard)) => (
             StatusCode::OK,
             Json(GpuPreviewResponse {
                 ok: true,
                 error: None,
                 message: Some(message),
+                dashboard,
             }),
         ),
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(GpuPreviewResponse {
                 ok: false,
-                error: Some(err.to_string()),
+                error: Some(err),
                 message: None,
+                dashboard: None,
             }),
         ),
+    }
+}
+
+async fn execute_ogc(Json(request): Json<OgcRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::execute_ogc_workflow(
+            request,
+            genegis_storage::RemoteAccessPolicy::default(),
+        )
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(OgcExecuteResponse {
+                ok: true,
+                error: None,
+                result: Some(result),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(OgcExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(OgcExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+    }
+}
+
+async fn execute_geocoding(Json(body): Json<GeocodingExecuteRequest>) -> impl IntoResponse {
+    let provider = match body.provider {
+        GeocodingProviderRequest::OfflineNagoya => nagoya_gazetteer_provider(),
+        GeocodingProviderRequest::HttpJson {
+            provider_id,
+            version,
+            endpoint,
+        } => GeocodingProvider::HttpJson {
+            provider_id,
+            version,
+            endpoint,
+            remote_policy: genegis_storage::RemoteAccessPolicy::default(),
+        },
+    };
+    let request = GeocodingRequest {
+        mode: body.mode,
+        queries: body.queries,
+        language: body.language,
+        max_candidates: body.max_candidates,
+    };
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::execute_geocoding_workflow(request, provider, body.privacy, body.rate)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(GeocodingExecuteResponse {
+                ok: true,
+                error: None,
+                result: Some(result),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(GeocodingExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(GeocodingExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+    }
+}
+
+async fn compose_narrative(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<NarrativeComposeRequest>,
+) -> impl IntoResponse {
+    let source = state
+        .verified_results
+        .lock()
+        .expect("verified result lock")
+        .get(&request.result_digest)
+        .cloned();
+    let Some(result_source) = source else {
+        return (
+            StatusCode::CONFLICT,
+            Json(NarrativeComposeResponse {
+                ok: false,
+                error: Some("result digest is not verified in this Workbench session".into()),
+                receipt: None,
+            }),
+        );
+    };
+    let draft = genegis_capsule::NarrativeProjectViewDraft {
+        title: request.title,
+        result_digest: request.result_digest,
+        result_source,
+        frames: request.frames,
+    };
+    let composition =
+        tokio::task::spawn_blocking(move || genegis_capsule::compose_narrative_project_view(draft))
+            .await;
+    match composition {
+        Ok(Ok(receipt)) => (
+            StatusCode::OK,
+            Json(NarrativeComposeResponse {
+                ok: true,
+                error: None,
+                receipt: Some(receipt),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(NarrativeComposeResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                receipt: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(NarrativeComposeResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                receipt: None,
+            }),
+        ),
+    }
+}
+
+async fn execute_live_feed(Json(body): Json<LiveFeedExecuteRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::execute_live_feed_workflow(
+            body.request,
+            body.policy,
+            genegis_storage::RemoteAccessPolicy::default(),
+        )
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(LiveFeedExecuteResponse {
+                ok: true,
+                error: None,
+                result: Some(result),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(LiveFeedExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(LiveFeedExecuteResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+    }
+}
+
+async fn compose_operational_view(
+    Json(draft): Json<genegis_analysis::OperationalDashboardDraft>,
+) -> impl IntoResponse {
+    let execution =
+        tokio::task::spawn_blocking(move || genegis_analysis::compose_operational_dashboard(draft))
+            .await;
+    match execution {
+        Ok(Ok(receipt)) => (
+            StatusCode::OK,
+            Json(OperationalDashboardResponse {
+                ok: true,
+                error: None,
+                receipt: Some(receipt),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(OperationalDashboardResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                receipt: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(OperationalDashboardResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                receipt: None,
+            }),
+        ),
+    }
+}
+
+async fn evaluate_alert(Json(body): Json<AlertEvaluateRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::evaluate_verified_alert(
+            body.policy,
+            body.metric,
+            body.window,
+            body.evaluated_at,
+        )
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(AlertResponse {
+                ok: true,
+                error: None,
+                result: Some(result),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(AlertResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(AlertResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+    }
+}
+
+async fn acknowledge_alert(Json(body): Json<AlertAcknowledgeRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::acknowledge_verified_alert(body.alert, body.acknowledgement)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(AlertResponse {
+                ok: true,
+                error: None,
+                result: Some(result),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(AlertResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(AlertResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                result: None,
+            }),
+        ),
+    }
+}
+
+async fn create_scenario(
+    Json(draft): Json<genegis_analysis::ScenarioBranchDraft>,
+) -> impl IntoResponse {
+    match genegis_analysis::create_scenario_branch(draft) {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn compare_scenario(Json(body): Json<ScenarioCompareRequest>) -> impl IntoResponse {
+    match genegis_analysis::compare_scenarios(body.base, body.scenario) {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn merge_scenario(Json(body): Json<ScenarioMergeRequest>) -> impl IntoResponse {
+    match genegis_analysis::merge_reviewed_scenario(body.base, body.scenario, body.approval) {
+        Ok(result) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn plan_city_scene(Json(body): Json<CityScenePlanRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::plan_city_scene_workflow(body.manifest, body.view, body.budget)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn execute_governance(Json(body): Json<GovernanceExecuteRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::execute_governance_operation(body.state, body.operation)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn admit_private_catalog(
+    Json(body): Json<PrivateCatalogAdmissionRequest>,
+) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::admit_private_catalog_workflow(body.endpoints, body.policy, body.context)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn execute_plugin_registry(
+    Json(body): Json<PluginRegistryExecuteRequest>,
+) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_plugin_host::execute_plugin_registry_operation(body.registry, body.operation)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn admit_solution_pack(Json(body): Json<SolutionPackAdmissionRequest>) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_plugin_host::admit_solution_pack_workflow(body.pack, body.registry)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+async fn evaluate_performance_matrix(
+    Json(body): Json<PerformanceMatrixRequest>,
+) -> impl IntoResponse {
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_analysis::evaluate_performance_matrix_workflow(body.profile, body.measurements)
+    })
+    .await;
+    match execution {
+        Ok(Ok(result)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "result": result})),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"ok": false, "error": error.to_string()})),
+        ),
+    }
+}
+
+fn nagoya_gazetteer_provider() -> GeocodingProvider {
+    let entries = vec![
+        GazetteerEntry {
+            feature_id: "station:nagoya".into(),
+            label: "名古屋駅".into(),
+            aliases: vec!["Nagoya Station".into(), "名駅".into()],
+            longitude: 136.8815,
+            latitude: 35.1709,
+        },
+        GazetteerEntry {
+            feature_id: "landmark:nagoya-castle".into(),
+            label: "名古屋城".into(),
+            aliases: vec!["Nagoya Castle".into()],
+            longitude: 136.8997,
+            latitude: 35.1856,
+        },
+        GazetteerEntry {
+            feature_id: "district:sakae".into(),
+            label: "栄".into(),
+            aliases: vec!["Sakae".into(), "名古屋市中区栄".into()],
+            longitude: 136.9066,
+            latitude: 35.1681,
+        },
+    ];
+    let bytes = serde_json::to_vec(&entries).expect("bundled gazetteer must serialize");
+    let digest = format!("sha256:{:x}", Sha256::digest(bytes));
+    let mut source = SourceSnapshot::new("builtin://genegis/nagoya-gazetteer/v1");
+    source.dataset_id = Some("genegis-nagoya-gazetteer-v1".into());
+    source.license = Some("CC0-1.0".into());
+    source.checksum = Some(digest.clone());
+    source.expected_checksum = Some(digest.clone());
+    source.observed_checksum = Some(digest);
+    source.checksum_status = ChecksumVerification::Verified;
+    GeocodingProvider::OfflineGazetteer {
+        provider_id: "org.genegis.nagoya-gazetteer".into(),
+        version: "1".into(),
+        source,
+        entries,
+    }
+}
+
+async fn publish_capsule(Json(request): Json<PublishRequest>) -> impl IntoResponse {
+    let slug = match portable_slug(&request.slug) {
+        Ok(slug) => slug,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(PublishResponse {
+                    ok: false,
+                    error: Some(error),
+                    output_path: None,
+                    publication: None,
+                }),
+            )
+        }
+    };
+    let source = PathBuf::from(request.capsule_path);
+    let output = PathBuf::from(".genegis/publications").join(slug);
+    let output_for_task = output.clone();
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_capsule::export_portable_publication(
+            source,
+            &output_for_task,
+            &genegis_capsule::PublicationPolicy::default(),
+        )
+    })
+    .await;
+    match execution {
+        Ok(Ok(publication)) => (
+            StatusCode::OK,
+            Json(PublishResponse {
+                ok: true,
+                error: None,
+                output_path: Some(output.to_string_lossy().into_owned()),
+                publication: Some(publication),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(PublishResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                output_path: None,
+                publication: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(PublishResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                output_path: None,
+                publication: None,
+            }),
+        ),
+    }
+}
+
+async fn create_bridge_capsule(
+    Json(request): Json<genegis_capsule::DesktopBridgeRequest>,
+) -> impl IntoResponse {
+    let capsule_id = uuid::Uuid::new_v4().to_string();
+    let output = PathBuf::from(".genegis/bridge-capsules").join(capsule_id);
+    let output_for_task = output.clone();
+    let execution = tokio::task::spawn_blocking(move || {
+        genegis_capsule::seal_desktop_bridge_capsule(&request, &output_for_task)
+    })
+    .await;
+    match execution {
+        Ok(Ok(manifest)) => (
+            StatusCode::OK,
+            Json(BridgeCapsuleResponse {
+                ok: true,
+                error: None,
+                output_path: Some(output.to_string_lossy().into_owned()),
+                manifest: Some(manifest),
+            }),
+        ),
+        Ok(Err(error)) => (
+            StatusCode::BAD_REQUEST,
+            Json(BridgeCapsuleResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                output_path: None,
+                manifest: None,
+            }),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(BridgeCapsuleResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                output_path: None,
+                manifest: None,
+            }),
+        ),
+    }
+}
+
+fn portable_slug(value: &str) -> Result<String, String> {
+    let value = value.trim();
+    if value.is_empty()
+        || value.len() > 64
+        || !value.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        })
+    {
+        return Err("slug must use 1-64 lowercase ASCII letters, digits, or hyphens".into());
+    }
+    Ok(value.into())
+}
+
+async fn composer_templates() -> impl IntoResponse {
+    Json(serde_json::json!({
+        "ok": true,
+        "templates": reviewed_workflow_templates(),
+    }))
+}
+
+async fn create_composer_session(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ComposerCreateRequest>,
+) -> impl IntoResponse {
+    match resolved_composer(&request.template_id) {
+        Ok((composer, reviewed_digest)) => {
+            let session_id = Uuid::new_v4();
+            let response_composer = composer.clone();
+            state.composers.lock().expect("composer lock").insert(
+                session_id,
+                ComposerSession {
+                    template_id: request.template_id.clone(),
+                    reviewed_digest,
+                    composer,
+                },
+            );
+            (
+                StatusCode::CREATED,
+                Json(ComposerResponse {
+                    ok: true,
+                    error: None,
+                    session_id: Some(session_id),
+                    template_id: Some(request.template_id),
+                    composer: Some(response_composer),
+                }),
+            )
+        }
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(ComposerResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                session_id: None,
+                template_id: None,
+                composer: None,
+            }),
+        ),
+    }
+}
+
+async fn get_composer_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let session = state
+        .composers
+        .lock()
+        .expect("composer lock")
+        .get(&id)
+        .cloned();
+    match session {
+        Some(session) => (
+            StatusCode::OK,
+            Json(ComposerResponse {
+                ok: true,
+                error: None,
+                session_id: Some(id),
+                template_id: Some(session.template_id),
+                composer: Some(session.composer),
+            }),
+        ),
+        None => composer_not_found(id),
+    }
+}
+
+async fn edit_composer_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    Json(request): Json<ComposerEditRequest>,
+) -> impl IntoResponse {
+    let mut sessions = state.composers.lock().expect("composer lock");
+    let Some(session) = sessions.get_mut(&id) else {
+        return composer_not_found(id);
+    };
+    match session.composer.apply(request.command) {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(ComposerResponse {
+                ok: true,
+                error: None,
+                session_id: Some(id),
+                template_id: Some(session.template_id.clone()),
+                composer: Some(session.composer.clone()),
+            }),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(ComposerResponse {
+                ok: false,
+                error: Some(error.to_string()),
+                session_id: Some(id),
+                template_id: Some(session.template_id.clone()),
+                composer: Some(session.composer.clone()),
+            }),
+        ),
+    }
+}
+
+async fn run_composer_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let session = state
+        .composers
+        .lock()
+        .expect("composer lock")
+        .get(&id)
+        .cloned();
+    let Some(session) = session else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ComposerRunResponse {
+                ok: false,
+                error: Some(format!("composer session {id} not found")),
+                command: None,
+                workflow: None,
+                result: None,
+            }),
+        );
+    };
+    let workflow = match session.composer.workflow_for_execution() {
+        Ok(workflow) => workflow,
+        Err(error) => return composer_run_error(StatusCode::BAD_REQUEST, error.to_string()),
+    };
+    let digest = match workflow.stable_digest() {
+        Ok(digest) => digest,
+        Err(error) => return composer_run_error(StatusCode::BAD_REQUEST, error.to_string()),
+    };
+    if session.reviewed_digest != digest {
+        return composer_run_error(
+            StatusCode::CONFLICT,
+            "edited graph is valid but has no reviewed executor; undo to the reviewed digest before running".into(),
+        );
+    }
+    let Some(prompt) = composer_template_prompt(&session.template_id) else {
+        return composer_run_error(
+            StatusCode::NOT_IMPLEMENTED,
+            format!("template {} has no workbench executor", session.template_id),
+        );
+    };
+    match run_ask_pipeline(prompt) {
+        Ok(result) => {
+            let executed_digest = result.workflow.stable_digest().unwrap_or_default();
+            if executed_digest != digest {
+                return composer_run_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "composer and executed workflow digests differ".into(),
+                );
+            }
+            (
+                StatusCode::OK,
+                Json(ComposerRunResponse {
+                    ok: true,
+                    error: None,
+                    command: Some(result.command.clone()),
+                    workflow: Some(result.workflow.clone()),
+                    result: Some(result),
+                }),
+            )
+        }
+        Err(error) => composer_run_error(StatusCode::BAD_REQUEST, error.to_string()),
+    }
+}
+
+fn resolved_composer(template_id: &str) -> Result<(WorkflowComposer, String), String> {
+    let composer = if template_id == "nagoya-density" {
+        let catalog = extended_catalog();
+        let dataset = catalog
+            .require(genegis_analysis::default_nagoya_dataset_id())
+            .map_err(|error| error.to_string())?;
+        let workflow = genegis_analysis::nagoya_population_density_workflow_for_dataset(dataset)
+            .map_err(|error| error.to_string())?;
+        WorkflowComposer::from_reviewed_workflow(workflow).map_err(|error| error.to_string())?
+    } else {
+        WorkflowComposer::from_template(template_id).map_err(|error| error.to_string())?
+    };
+    let digest = composer
+        .workflow
+        .stable_digest()
+        .map_err(|error| error.to_string())?;
+    Ok((composer, digest))
+}
+
+fn composer_not_found(id: Uuid) -> (StatusCode, Json<ComposerResponse>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ComposerResponse {
+            ok: false,
+            error: Some(format!("composer session {id} not found")),
+            session_id: None,
+            template_id: None,
+            composer: None,
+        }),
+    )
+}
+
+fn composer_run_error(
+    status: StatusCode,
+    error: String,
+) -> (StatusCode, Json<ComposerRunResponse>) {
+    (
+        status,
+        Json(ComposerRunResponse {
+            ok: false,
+            error: Some(error),
+            command: None,
+            workflow: None,
+            result: None,
+        }),
+    )
+}
+
+fn composer_template_prompt(template_id: &str) -> Option<&'static str> {
+    match template_id {
+        "nagoya-density" => Some("名古屋市の人口密度を表示"),
+        "nagoya-geoparquet" => Some("名古屋 wards GeoParquet を検証"),
+        "nagoya-geoparquet-density" => Some("名古屋 GeoParquet 人口密度を表示"),
+        "local-cog-metadata" => Some("ローカル COG のメタデータを検証"),
+        "external-stac" => Some("外部 STAC カタログを検証"),
+        "dashboard-export" => Some("名古屋の人口密度ダッシュボードを出力"),
+        "flood-exposure" => Some("名古屋の洪水曝露を分析"),
+        "xmin-city" => Some("名古屋の徒歩圏を分析"),
+        "evacuation" => Some("名古屋の避難所アクセスを分析"),
+        "ndvi-timeseries" => Some("Sentinel NDVI 時系列を分析"),
+        "pointcloud-change" => Some("2時期の点群変化を分析"),
+        _ => None,
     }
 }
 

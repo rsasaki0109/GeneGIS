@@ -15,6 +15,14 @@ pub enum CloudFormat {
     Copc,
     /// PMTiles archive.
     PmTiles,
+    /// OGC Web Map Service response.
+    Wms,
+    /// OGC Web Feature Service response.
+    Wfs,
+    /// Provider-neutral geocoding response.
+    Geocoding,
+    /// Cursor-bounded live spatial feed response.
+    LiveFeed,
 }
 
 /// Semantic subset selected from an object.
@@ -54,6 +62,59 @@ pub enum IoSelection {
         x: u32,
         /// Tile row.
         y: u32,
+    },
+    /// WMS or WFS service metadata discovery.
+    OgcCapabilities {
+        /// Service identifier (`WMS` or `WFS`).
+        service: String,
+        /// Requested protocol version.
+        version: String,
+    },
+    /// One WMS map portrayal request.
+    WmsMap {
+        /// Layer names in draw order.
+        layers: Vec<String>,
+        /// Requested response CRS.
+        crs: String,
+        /// Requested bbox serialized without float normalization.
+        bbox: [String; 4],
+        /// Output pixel width.
+        width: u32,
+        /// Output pixel height.
+        height: u32,
+        /// Requested image media type.
+        format: String,
+    },
+    /// One WFS feature selection.
+    WfsFeatures {
+        /// Requested feature type names.
+        type_names: Vec<String>,
+        /// Requested output CRS.
+        crs: String,
+        /// Optional bbox serialized without float normalization.
+        bbox: Option<[String; 4]>,
+        /// Optional server-side feature limit.
+        count: Option<u32>,
+    },
+    /// Interactive or batch geocoding query selection.
+    GeocodingQueries {
+        /// Number of submitted queries.
+        query_count: u32,
+        /// Maximum candidates requested for each query.
+        max_candidates: u32,
+        /// Requested result language.
+        language: String,
+    },
+    /// One cursor/watermark-bounded live-feed page.
+    LiveFeedWindow {
+        /// Requested domain such as weather or mobility.
+        domain: String,
+        /// Exclusive cursor supplied to the provider.
+        after_cursor: u64,
+        /// Inclusive maximum observation count.
+        limit: u32,
+        /// Caller watermark in RFC 3339 form.
+        watermark: String,
     },
 }
 
@@ -206,6 +267,8 @@ impl IoReceipt {
             }
             if !gpu.steady_state_fps.is_finite() || gpu.steady_state_fps <= 0.0 {
                 failures.push(IoBudgetFailure::InvalidGpuMetrics);
+            } else if gpu.steady_state_fps < budget.minimum_steady_state_fps {
+                failures.push(IoBudgetFailure::SteadyStateFpsBelowMinimum);
             }
         } else if budget.require_gpu {
             failures.push(IoBudgetFailure::GpuMetricsMissing);
@@ -239,6 +302,9 @@ pub struct IoBudget {
     pub maximum_peak_rss_bytes: u64,
     /// Maximum first-frame latency.
     pub maximum_first_frame_ns: u64,
+    /// Minimum acceptable steady-state frame rate.
+    #[serde(default = "default_minimum_steady_state_fps")]
+    pub minimum_steady_state_fps: f64,
     /// Whether GPU evidence is mandatory.
     pub require_gpu: bool,
 }
@@ -253,6 +319,7 @@ impl IoBudget {
             maximum_response_bytes: 8 * 1024 * 1024,
             maximum_peak_rss_bytes: 1024 * 1024 * 1024,
             maximum_first_frame_ns: 2_000_000_000,
+            minimum_steady_state_fps: 30.0,
             require_gpu,
         }
     }
@@ -289,6 +356,8 @@ pub enum IoBudgetFailure {
     GpuMetricsMissing,
     /// GPU metrics were nonsensical.
     InvalidGpuMetrics,
+    /// Measured steady-state frame rate was below the explicit budget.
+    SteadyStateFpsBelowMinimum,
     /// A range or its byte count was internally inconsistent.
     MalformedRequestEvidence,
 }
@@ -372,4 +441,24 @@ mod tests {
         assert!(failures.contains(&IoBudgetFailure::GpuMetricsMissing));
         assert!(failures.contains(&IoBudgetFailure::MalformedRequestEvidence));
     }
+
+    #[test]
+    fn gpu_frame_rate_has_an_explicit_minimum_budget() {
+        let mut receipt = receipt(false);
+        receipt.gpu = Some(GpuFrameMetrics {
+            adapter: "test".into(),
+            backend: "vulkan".into(),
+            upload_bytes: 1,
+            upload_ns: 1,
+            first_frame_ns: 1,
+            steady_state_fps: 29.9,
+        });
+        assert!(receipt
+            .validate(&IoBudget::ci(true))
+            .contains(&IoBudgetFailure::SteadyStateFpsBelowMinimum));
+    }
+}
+
+fn default_minimum_steady_state_fps() -> f64 {
+    30.0
 }
