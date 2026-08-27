@@ -39,6 +39,18 @@ checks. It is a verification workbench—not a QGIS clone.
 Intent → Command → GeoWorkflow → Verified Execution → Map / Report
 ```
 
+## Explore a verified district in 3D
+
+The district view combines point-cloud terrain, LOD1 buildings, roads, POIs,
+and a linked dashboard in one deterministic orbit:
+
+<p align="center">
+  <img src="docs/assets/district3d.gif" alt="Verified offline 3D district fixture with point-cloud terrain, LOD1 buildings, roads, POIs, and dashboard" width="900" />
+</p>
+
+This verified offline fixture uses a local metric CRS. Sources and units remain
+explicit, and every frame is reproducible from the workflow output.
+
 ## Feature showcase
 
 <table>
@@ -95,18 +107,6 @@ OSM walk network, 名古屋市指定避難所 — see below for the one-command 
 Frames are synthetic offline fixtures, regenerated bit-stable by
 `cargo run -p genegis-cli -- demo frames` + `scripts/build-readme-showcase.sh`
 (spec: [`docs/rfcs/0005-application-use-cases.md`](docs/rfcs/0005-application-use-cases.md)).
-
-### 3D district exploration
-
-The Phase 14 district view combines point-cloud terrain, LOD1 buildings,
-roads, POIs, and a linked dashboard in one deterministic orbit:
-
-<p align="center">
-  <img src="docs/assets/district3d.gif" alt="Verified offline 3D district fixture with point-cloud terrain, LOD1 buildings, roads, POIs, and dashboard" width="800" />
-</p>
-
-This is a verified offline fixture with a local metric CRS; its sources and
-units remain explicit and the frames are reproducible from the workflow output.
 
 ## Same prompts, real open data
 
