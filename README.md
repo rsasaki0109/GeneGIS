@@ -1,8 +1,43 @@
 # GeneGIS
 
-**Verified spatial workflows from intent to map.**
+<div align="center">
+  <p><strong>Verified spatial workflows from intent to map.</strong></p>
+  <p>AI-native · Cloud-native · GPU-native · Open source</p>
+  <p>
+    <a href="https://github.com/rsasaki0109/GeneGIS/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/rsasaki0109/GeneGIS/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status" /></a>
+    <img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-5b8def?style=flat-square" alt="Apache-2.0 OR MIT license" />
+    <img src="https://img.shields.io/badge/core-Rust-dea584?style=flat-square&logo=rust&logoColor=white" alt="Rust core" />
+    <img src="https://img.shields.io/badge/UI-TypeScript-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript UI" />
+  </p>
+</div>
 
-AI-native · Cloud-native · GPU-native · Open source
+<p align="center">
+  <img src="docs/assets/workbench-hero.gif" alt="A prompt becoming a verified Nagoya population-density workflow and map" width="960" />
+</p>
+
+<p align="center">
+  <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open Playground</strong></a>
+  ·
+  <a href="#run"><strong>Run locally</strong></a>
+  ·
+  <a href="docs/architecture/overview.md"><strong>Explore architecture</strong></a>
+</p>
+
+GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
+engines, and returns a map with CRS, units, sources, provenance, and independent
+checks. It is a verification workbench—not a QGIS clone.
+
+## From prompt to proof
+
+| 1 · Ask | 2 · Execute | 3 · Verify |
+|:--:|:--:|:--:|
+| Describe the spatial question in natural language | Build and run a typed, inspectable workflow DAG | Return the map with sources, CRS, units, provenance, and independent checks |
+
+```text
+「名古屋市の人口密度を表示」
+        ↓
+Intent → Command → GeoWorkflow → Verified Execution → Map / Report
+```
 
 ## Feature showcase
 
@@ -10,7 +45,7 @@ AI-native · Cloud-native · GPU-native · Open source
   <tr>
     <td width="50%" align="center">
       <img src="docs/assets/feature-cloud.gif" alt="Measured multi-format cloud view" width="100%" /><br />
-      <sub><strong>Cloud selected view</strong><br />GeoParquet · COG · COPC · PMTiles · wgpu</sub>
+      <sub><strong>Cloud-selected data access</strong><br />GeoParquet · COG · COPC · PMTiles · wgpu</sub>
     </td>
     <td width="50%" align="center">
       <img src="docs/assets/feature-adapters.gif" alt="Cross-engine spatial verification" width="100%" /><br />
@@ -31,16 +66,6 @@ AI-native · Cloud-native · GPU-native · Open source
 
 Cloud metrics come from a reproducible
 [`evidence artifact`](docs/reports/readme-cloud-selected-view.json), not a product claim.
-
-### One prompt, inspectable end to end
-
-<p align="center">
-  <img src="docs/assets/workbench-hero.gif" alt="Intent to verified Nagoya population-density map" width="960" />
-</p>
-
-<p align="center">
-  <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open the zero-install Playground →</strong></a>
-</p>
 
 ## Five flagship use cases, one verified pipeline
 
@@ -124,16 +149,6 @@ On the 2026-08 fetch: 650k graph nodes / 775k edges / 21,353 km of
 walkable OSM highways, 4,218 real POIs (supermarket/clinic/school/park).
 UC-4 verifies in ~80 s and UC-1 in ~35 s (`--release`); both keep the
 same verifiers as the fixtures.
-
-GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
-engines, and returns a map with CRS, units, sources, provenance, and independent
-checks. It is a verification workbench—not a QGIS clone.
-
-North-star prompt:
-
-```text
-名古屋市の人口密度を表示
-```
 
 ## Why it is different
 
