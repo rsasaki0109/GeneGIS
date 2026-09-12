@@ -1,0 +1,29 @@
+{
+  "manifest_schema_version": 1,
+  "immutable": true,
+  "dataset_id": "nagoya-population-mesh",
+  "snapshot_version": "nagoya-2020-census-mesh-fixture-v1",
+  "census_year": 2020,
+  "mesh": {
+    "asset": "nagoya-population-mesh.geojson",
+    "sha256": "sha256:2acb7ec476599aad5ad7b6ce5dbccfc1b5bca9f355440c66fec3f9238ea34f92",
+    "generator": "scripts/build-nagoya-population-mesh.py",
+    "mesh_step_deg": 0.004166666666666667,
+    "real_source_page": "https://www.e-stat.go.jp/gis/statmap-search",
+    "real_source_name": "e-Stat 統計地理情報システム 地域メッシュ統計（令和2年国勢調査 4次メッシュ 500m）",
+    "real_fetch_script": "scripts/fetch-estat-mesh.py",
+    "license": "CC0-1.0 (synthetic fixture; 参考: e-Stat 統計地理情報システム 地域メッシュ統計)",
+    "retrieval_basis": "決定論的合成fixture。公式2020年区別人口を面積比例のセル配分で保つ。実観測データではない。",
+    "population_total": 2332176
+  },
+  "ward_conservation": {
+    "required_ward_count": 16,
+    "population_total_delta": 0,
+    "area_basis": "N03 ward boundary fixture (nagoya-wards.geojson)",
+    "verification": "density = mesh-aggregated ward population / N03 measured area; every ward matches the immutable nagoya-oracle-2020.json within the 0.5% area tolerance"
+  },
+  "integrity": {
+    "checks": ["population_total_oracle", "ward_coverage_oracle", "area_oracle_relative_error", "density_oracle"],
+    "fail_closed": "dropping or duplicating a mesh cell changes the aggregated total and fails the oracle checks"
+  }
+}

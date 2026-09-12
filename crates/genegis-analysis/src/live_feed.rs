@@ -38,6 +38,8 @@ struct LiveFeedExecutor {
     adapter: LiveFeedAdapter,
     request: LiveFeedRequest,
     policy: FeedFreshnessPolicy,
+    /// AMeDAS observation time; when set, the executor uses `execute_amedas`.
+    observed_at: Option<String>,
     response: Mutex<Option<LiveFeedResponse>>,
 }
 
@@ -47,10 +49,13 @@ impl WorkflowExecutor for LiveFeedExecutor {
         _workflow: &GeoWorkflow,
         context: &WorkflowExecutionContext,
     ) -> Result<WorkflowExecution, WorkflowExecutionError> {
-        let response = self
-            .adapter
-            .execute(&self.request, &self.policy)
-            .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
+        let response = match &self.observed_at {
+            Some(observed_at) => self
+                .adapter
+                .execute_amedas(&self.request, &self.policy, observed_at),
+            None => self.adapter.execute(&self.request, &self.policy),
+        }
+        .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
         let evidence = serde_json::to_value(&response.receipt)
             .map_err(|error| WorkflowExecutionError::Failed(error.to_string()))?;
         let result_digest = response.receipt.output_digest.clone();
@@ -125,9 +130,87 @@ pub fn execute_live_feed_workflow(
         adapter: LiveFeedAdapter::new(remote_policy),
         request,
         policy,
+        observed_at: None,
         response: Mutex::new(None),
     };
     let mut project = Project::new("Live spatial feed");
+    let mut bus = CommandBus::new(project.clone());
+    bus.register_workflow(workflow)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let execution = bus
+        .apply_with_executor(&mut project, envelope, &executor)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let response = executor
+        .response
+        .into_inner()
+        .map_err(|_| AnalysisError::Message("live-feed lock poisoned".into()))?
+        .ok_or_else(|| AnalysisError::Message("live-feed executor returned no response".into()))?;
+    let result_digest = execution
+        .result_digest
+        .ok_or_else(|| AnalysisError::Message("live-feed workflow returned no digest".into()))?;
+    if result_digest != response.receipt.output_digest {
+        return Err(AnalysisError::Message(
+            "live-feed workflow and adapter result digests differ".into(),
+        ));
+    }
+    Ok(LiveFeedWorkflowResult {
+        command_id: command_id.to_string(),
+        workflow_digest,
+        result_digest,
+        snapshots: response.snapshots,
+        receipt: response.receipt,
+    })
+}
+
+/// Execute one 気象庁 AMeDAS weather page exclusively through Command + Workflow.
+///
+/// The endpoint serves the AMeDAS `map/{time}.json` payload; the executor runs
+/// `LiveFeedAdapter::execute_amedas` so the real weather feed is verified with
+/// the same cursor/watermark/freshness and immutable-snapshot contract as every
+/// other live feed.
+pub fn execute_jma_live_feed_workflow(
+    request: LiveFeedRequest,
+    policy: FeedFreshnessPolicy,
+    remote_policy: RemoteAccessPolicy,
+    observed_at: &str,
+) -> Result<LiveFeedWorkflowResult, AnalysisError> {
+    let source = SourceSnapshot::new(request.endpoint.clone());
+    let domain = serde_json::to_value(request.domain)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+    let workflow = live_feed_ingest_template(
+        &domain,
+        &request.provider_id,
+        source.clone(),
+        request.after_cursor,
+        &request.watermark,
+        request.limit,
+    );
+    let workflow_digest = WorkflowDigest::new(
+        workflow
+            .stable_digest()
+            .map_err(|error| AnalysisError::Message(error.to_string()))?,
+    );
+    let envelope = CommandEnvelope::new(
+        CommandOrigin::Ui,
+        Command::RunWorkflow {
+            workflow_id: workflow.id,
+        },
+    )
+    .with_workflow_digest(workflow_digest.clone())
+    .with_source_snapshot(source.clone())
+    .with_input_snapshot(InputSnapshot::new("live-feed", source));
+    let command_id = envelope.id;
+    let executor = LiveFeedExecutor {
+        adapter: LiveFeedAdapter::new(remote_policy),
+        request,
+        policy,
+        observed_at: Some(observed_at.to_string()),
+        response: Mutex::new(None),
+    };
+    let mut project = Project::new("JMA AMeDAS live weather");
     let mut bus = CommandBus::new(project.clone());
     bus.register_workflow(workflow)
         .map_err(|error| AnalysisError::Message(error.to_string()))?;
@@ -237,5 +320,69 @@ mod tests {
         assert_eq!(result.receipt.next_cursor, 8);
         assert_eq!(result.result_digest, result.receipt.output_digest);
         assert!(result.receipt.fresh);
+    }
+
+    #[test]
+    fn jma_amedas_weather_page_commits_through_command_workflow() {
+        // A GET server serving the raw AMeDAS map payload; execute_amedas must
+        // convert + seal it with the shared live-feed contract.
+        let body = serde_json::to_vec(&serde_json::json!({
+            "51106": {
+                "pressure": [1013.4, 0],
+                "temp": [24.5, 0],
+                "humidity": [86, 0],
+                "precipitation1h": [0.0, 0],
+                "wind": [3.4, 0]
+            }
+        }))
+        .expect("json");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 2048];
+            loop {
+                let read = stream.read(&mut chunk).expect("read");
+                request.extend_from_slice(&chunk[..read]);
+                if request.windows(4).any(|value| value == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            assert!(String::from_utf8_lossy(&request).starts_with("GET"));
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).expect("headers");
+            stream.write_all(&body).expect("body");
+            stream.flush().expect("flush");
+            stream.shutdown(Shutdown::Write).expect("shutdown");
+        });
+        let result = execute_jma_live_feed_workflow(
+            LiveFeedRequest {
+                domain: FeedDomain::Weather,
+                endpoint: format!("http://{address}/amedas"),
+                provider_id: genegis_adapter::JMA_PROVIDER_ID.into(),
+                provider_version: genegis_adapter::JMA_PROVIDER_VERSION.into(),
+                after_cursor: 40,
+                watermark: "2026-09-12T07:40:00Z".into(),
+                limit: 10,
+                evaluated_at: "2026-09-12T08:00:00Z".into(),
+            },
+            FeedFreshnessPolicy::default(),
+            RemoteAccessPolicy::from_env(),
+            "2026-09-12T07:50:00Z",
+        )
+        .expect("workflow");
+        uuid::Uuid::parse_str(&result.command_id).expect("command id");
+        assert_eq!(result.receipt.next_cursor, 41);
+        assert_eq!(result.receipt.provider_id, "jma.amedas");
+        assert_eq!(result.result_digest, result.receipt.output_digest);
+        assert!(result.receipt.fresh);
+        assert_eq!(
+            result.snapshots[0].observation.values["temperature_c"],
+            24.5
+        );
     }
 }

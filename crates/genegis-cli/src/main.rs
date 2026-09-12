@@ -60,12 +60,87 @@ fn main() {
         Some("capsule") => handle_capsule(&args[2..]),
         Some("workflow") => handle_workflow(&args[2..]),
         Some("demo") => handle_demo(&args[2..]),
+        Some("live") => handle_live(&args[2..]),
         Some(cmd) => {
             eprintln!("Unknown command: {cmd}");
             print_help();
             process::exit(1);
         }
     }
+}
+
+fn handle_live(args: &[String]) {
+    match args.first().map(String::as_str) {
+        Some("amedas") => run_jma_amedas_live(),
+        _ => {
+            eprintln!("Usage: genegis live amedas");
+            eprintln!("       Fetch the latest 気象庁 AMeDAS Nagoya observation through the");
+            eprintln!("       verified live-feed Command + Workflow path (cursor/watermark).");
+            process::exit(1);
+        }
+    }
+}
+
+fn run_jma_amedas_live() {
+    let latest_url = "https://www.jma.go.jp/bosai/amedas/data/latest_time.txt";
+    let latest = match genegis_storage::fetch_http_bytes(
+        latest_url,
+    ) {
+        Ok(fetched) => String::from_utf8_lossy(&fetched.bytes).trim().to_string(),
+        Err(err) => {
+            eprintln!("Failed to resolve AMeDAS latest time: {err}");
+            process::exit(1);
+        }
+    };
+    // "2026-09-12T07:50:00+09:00" -> "20260912075000"
+    let compact = latest.replace(['-', ':', 'T', '+'], "");
+    let compact = &compact[..14.min(compact.len())];
+    let endpoint = format!("https://www.jma.go.jp/bosai/amedas/data/map/{compact}.json");
+    // Normalize to RFC 3339 UTC: "2026-09-12T07:50:00+09:00" -> "2026-09-12T07:50:00Z"
+    let observed_at = match chrono::DateTime::parse_from_rfc3339(&latest) {
+        Ok(value) => value.with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        Err(_) => {
+            eprintln!("Invalid AMeDAS latest time: {latest:?}");
+            process::exit(1);
+        }
+    };
+
+    let result = match genegis_analysis::execute_jma_live_feed_workflow(
+        genegis_adapter::LiveFeedRequest {
+            domain: genegis_adapter::FeedDomain::Weather,
+            endpoint,
+            provider_id: genegis_adapter::JMA_PROVIDER_ID.into(),
+            provider_version: genegis_adapter::JMA_PROVIDER_VERSION.into(),
+            after_cursor: 0,
+            watermark: "2000-01-01T00:00:00Z".into(),
+            limit: 10,
+            evaluated_at: format!("{observed_at}"),
+        },
+        genegis_adapter::FeedFreshnessPolicy::default(),
+        genegis_storage::RemoteAccessPolicy::from_env(),
+        &observed_at,
+    ) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("JMA AMeDAS live-feed failed: {err}");
+            process::exit(1);
+        }
+    };
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "command_id": result.command_id,
+            "workflow_digest": result.workflow_digest,
+            "provider": result.receipt.provider_id,
+            "observed_at": observed_at,
+            "next_cursor": result.receipt.next_cursor,
+            "next_watermark": result.receipt.next_watermark,
+            "fresh": result.receipt.fresh,
+            "output_digest": result.receipt.output_digest,
+            "observation": result.snapshots.first().map(|s| &s.observation.values),
+        }))
+        .expect("json")
+    );
 }
 
 fn handle_demo(args: &[String]) {
@@ -3134,6 +3209,12 @@ fn handle_workflow(args: &[String]) {
                         print_workflow_json(&copc_change_detect_template());
                     }
                 }
+                "nagoya-population-mesh" => {
+                    run_population_mesh_execute(export_html, export_png, output.as_deref());
+                }
+                "nagoya-xmin-city-transit" => {
+                    run_xmin_city_transit_execute();
+                }
                 _ => {
                     eprintln!("Unknown workflow: {name}");
                     process::exit(1);
@@ -3142,8 +3223,8 @@ fn handle_workflow(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "Usage: genegis workflow run [nagoya-density|remote-cog-demo|local-cog-demo|nagoya-geoparquet|nagoya-geoparquet-density|external-stac-demo|dashboard-export-demo|
-                                             nagoya-flood-exposure|nagoya-xmin-city] [--execute] [--html] [--png] [-o FILE]"
+                "Usage: genegis workflow run [nagoya-density|nagoya-population-mesh|remote-cog-demo|local-cog-demo|nagoya-geoparquet|nagoya-geoparquet-density|external-stac-demo|dashboard-export-demo|
+                                             nagoya-flood-exposure|nagoya-xmin-city|nagoya-xmin-city-transit] [--execute] [--html] [--png] [-o FILE]"
             );
             process::exit(1);
         }
@@ -3173,6 +3254,61 @@ fn run_xmin_city_execute() {
     println!(
         "{}",
         serde_json::to_string_pretty(&result.summary).expect("json")
+    );
+}
+
+fn run_xmin_city_transit_execute() {
+    let analysis = match genegis_analysis::run_nagoya_accessibility_with_transit(
+        genegis_catalog::nagoya_wards_geojson_path(),
+        genegis_catalog::nagoya_walk_network_path(),
+        genegis_catalog::nagoya_pois_path(),
+        genegis_catalog::nagoya_transit_path(),
+        15.0,
+    ) {
+        Ok(analysis) => analysis,
+        Err(err) => {
+            eprintln!("Multimodal accessibility failed: {err}");
+            process::exit(1);
+        }
+    };
+    let checks: Vec<_> = analysis
+        .verification
+        .checks
+        .iter()
+        .map(|check| serde_json::json!({ "name": check.name, "passed": check.passed }))
+        .collect();
+    let features: Vec<_> = analysis
+        .features
+        .iter()
+        .map(|feature| {
+            serde_json::json!({
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "reachable_pois": feature.reachable_pois,
+                "poi_total": feature.poi_total,
+                "accessibility_score": feature.accessibility_score,
+            })
+        })
+        .collect();
+    let summary = serde_json::json!({
+        "mode": "walk+transit",
+        "transit": genegis_catalog::nagoya_transit_path(),
+        "threshold_minutes": analysis.threshold_minutes,
+        "node_count": analysis.node_count,
+        "verification": checks,
+        "features": features,
+    });
+    eprintln!(
+        "Multimodal accessibility verification: {}",
+        analysis
+            .verification
+            .checks
+            .iter()
+            .all(|check| check.passed)
+    );
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&summary).expect("json")
     );
 }
 
@@ -3384,6 +3520,9 @@ Usage:
   genegis workflow run external-stac-demo --execute Fetch bundled sample STAC collection
   genegis workflow run nagoya-density -x --html    Execute + write HTML map
   genegis workflow run nagoya-density -x --png     Execute + write PNG map
+  genegis workflow run nagoya-population-mesh      Mesh->ward density + ward oracle verify
+  genegis workflow run nagoya-xmin-city-transit  Multimodal walk+transit accessibility
+  genegis live amedas                         Live 気象庁 AMeDAS Nagoya observation
   genegis version
   genegis help
 
@@ -3513,4 +3652,54 @@ fn run_nagoya_execute(export_html: bool, export_png: bool, output: Option<&Path>
         serde_json::to_string_pretty(&result.summary).expect("json")
     );
     write_exports(export_html, export_png, output, &result.html, &result.png);
+}
+
+fn run_population_mesh_execute(export_html: bool, export_png: bool, output: Option<&Path>) {
+    let path = genegis_catalog::nagoya_population_mesh_path();
+    let result = match genegis_analysis::run_nagoya_population_density_mesh(path) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Mesh density failed: {err}");
+            process::exit(1);
+        }
+    };
+    let checks: Vec<_> = result
+        .verification
+        .checks
+        .iter()
+        .map(|check| serde_json::json!({ "name": check.name, "passed": check.passed }))
+        .collect();
+    let features: Vec<_> = result
+        .features
+        .iter()
+        .map(|feature| {
+            serde_json::json!({
+                "ward_code": feature.ward_code,
+                "ward_name": feature.ward_name,
+                "population": feature.population,
+                "area_km2": feature.area_km2,
+                "density_per_km2": feature.density_per_km2,
+            })
+        })
+        .collect();
+    let summary = serde_json::json!({
+        "dataset": genegis_catalog::NAGOYA_POPULATION_MESH_ID,
+        "source": path,
+        "ward_count": result.features.len(),
+        "population_total": result.features.iter().map(|f| f.population).sum::<u64>(),
+        "verification": checks,
+        "features": features,
+    });
+    eprintln!("Population-mesh density verification: {}", result.verification.checks.iter().all(|c| c.passed));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&summary).expect("json")
+    );
+    let html = genegis_analysis::export_html_map(&result, "名古屋市 500m人口メッシュ密度");
+    let png = genegis_analysis::export_png_map(&result, "名古屋市 500m人口メッシュ密度").ok();
+    if let Some(png) = png {
+        write_exports(export_html, export_png, output, &html, &png);
+    } else if export_html {
+        write_bytes(Path::new("nagoya-density.html"), html.as_bytes(), "HTML");
+    }
 }

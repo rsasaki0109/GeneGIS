@@ -493,7 +493,7 @@ struct GpuReceiptDigestPayload<'a> {
     regressions: &'a [String],
 }
 
-fn gpu_receipt_digest(receipt: &GpuSceneAcceptanceReceipt) -> Result<String, AnalysisError> {
+pub fn gpu_receipt_digest(receipt: &GpuSceneAcceptanceReceipt) -> Result<String, AnalysisError> {
     digest(&GpuReceiptDigestPayload {
         schema_version: &receipt.schema_version,
         command_id: &receipt.command_id,

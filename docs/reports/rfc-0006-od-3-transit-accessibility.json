@@ -1,0 +1,69 @@
+{
+  "schema_version": "0.1.0",
+  "rfc": "0006",
+  "item": "OD-3",
+  "title": "Multimodal walk + transit accessibility (offline fixture + real N02/N07 path)",
+  "status": "pass",
+  "verified_at": "2026-09-12",
+  "deliverables": {
+    "transit_graph": "crates/genegis-network/src/transit.rs",
+    "accessibility": "crates/genegis-analysis/src/accessibility.rs",
+    "fixture_generator": "scripts/build-nagoya-transit.py",
+    "real_fetch_script": "scripts/fetch-mlit-transit.py",
+    "fixture": "examples/nagoya-population-density/data/nagoya-transit.geojson",
+    "manifest": "examples/nagoya-population-density/data/nagoya-transit-manifest.json",
+    "catalog_record": "crates/genegis-catalog/src/catalog.rs",
+    "cli_command": "genegis workflow run nagoya-xmin-city-transit"
+  },
+  "graph_model": {
+    "walk": "WalkGraph (80 m/min)",
+    "ride": "headway wait + in-vehicle ride + transfer penalty",
+    "physical_floor": "straight-line distance / 30 km/h (500 m/min)",
+    "real_source": "国土数値情報 鉄道(N02 2025) / バスルート(N07 2022)",
+    "real_source_url": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02.html",
+    "license": "国土数値情報（政府標準利用規約）",
+    "fixture_license": "CC0-1.0 (synthetic)"
+  },
+  "fixture": {
+    "corridors": ["meitetsu-nagoya-main", "meijo-line", "hokusei-line"],
+    "stops": 7,
+    "sha256": "sha256:c6849a7c6ea807b687d976561fe573b32222504c05e28b4900f1cb7535f77fb6",
+    "note": "SYNTHETIC rail corridors over the walk grid; real N02/N07 opt-in via GENEGIS_TRANSIT_PATH / GENEGIS_TRANSIT_SHA."
+  },
+  "verification": {
+    "executor": "run_nagoya_accessibility_with_transit",
+    "checks": [
+      {"name": "network_loaded", "passed": true},
+      {"name": "route_sanity_triangle", "passed": true},
+      {"name": "poi_reconciliation", "passed": true},
+      {"name": "transit_lines_present", "passed": true}
+    ],
+    "invariants": [
+      "multimodal routes never beat the physical floor",
+      "transit never reduces any ward's reachable POI set below walk-only",
+      "missing transit corridors fail closed"
+    ]
+  },
+  "measured": {
+    "cli": "genegis workflow run nagoya-xmin-city-transit passed all four checks at 15 min threshold",
+    "reachable_pois_by_ward": {
+      "中区": 12,
+      "東区": 10,
+      "昭和区": 10,
+      "熱田区": 8,
+      "瑞穂区": 8,
+      "西区": 6,
+      "北区": 6,
+      "千種区": 6,
+      "中村区": 6,
+      "港区": 4,
+      "中川区": 4,
+      "南区": 4,
+      "守山区": 4,
+      "緑区": 4,
+      "名東区": 4,
+      "天白区": 4
+    },
+    "test": "transit_mode_reaches_more_pois_than_walk_only_within_a_budget"
+  }
+}

@@ -6,8 +6,10 @@
 //! fixture's declared walk speed, so downstream scores are reproducible.
 
 pub mod isochrone;
+pub mod transit;
 
 pub use isochrone::{convex_hull, Isochrone};
+pub use transit::{RideEdge, TransitError, TransitGraph, TransitStop};
 
 use std::collections::BinaryHeap;
 
@@ -166,6 +168,11 @@ impl WalkGraph {
     /// Number of merged intersection nodes.
     pub fn node_count(&self) -> usize {
         self.nodes.len()
+    }
+
+    /// Adjacency list of a node: (neighbour index, cost minutes).
+    pub fn adjacency(&self, node: u32) -> &[(u32, f64)] {
+        &self.adjacency[node as usize]
     }
 
     /// Number of undirected street segments.

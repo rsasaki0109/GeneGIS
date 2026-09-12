@@ -2469,6 +2469,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "crossterm",
+ "genegis-adapter",
  "genegis-agent",
  "genegis-ai",
  "genegis-analysis",

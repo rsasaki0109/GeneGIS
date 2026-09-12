@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 use genegis_contract::GeoContract;
 use genegis_crs::{ChecksumVerification, Crs, SourceSnapshot};
 use genegis_storage::{
-    post_http_json_bytes_with_policy, CloudFormat, IoReceipt, IoRequestEvidence, IoSelection,
-    RemoteAccessPolicy,
+    fetch_http_bytes_with_policy, post_http_json_bytes_with_policy, CloudFormat, IoReceipt,
+    IoRequestEvidence, IoSelection, RemoteAccessPolicy,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,6 +18,7 @@ use crate::{
     BackendIdentity, Capability, CapabilityPolicy, Determinism, EvidenceHook,
     ADAPTER_MANIFEST_SCHEMA_VERSION,
 };
+use crate::jma::compact_amedas_time;
 
 /// Digest of the reviewed live-feed adapter contract.
 pub const LIVE_FEED_ADAPTER_BUILD_DIGEST: &str =
@@ -204,12 +205,12 @@ pub enum LiveFeedError {
     Evidence(String),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ProviderPage {
-    next_cursor: u64,
-    watermark: String,
-    observations: Vec<FeedObservation>,
+pub struct ProviderPage {
+    pub next_cursor: u64,
+    pub watermark: String,
+    pub observations: Vec<FeedObservation>,
 }
 
 /// Reviewed HTTP JSON live-feed adapter.
@@ -250,6 +251,81 @@ impl LiveFeedAdapter {
         request: &LiveFeedRequest,
         policy: &FeedFreshnessPolicy,
     ) -> Result<LiveFeedResponse, LiveFeedError> {
+        let started = Instant::now();
+        let request_bytes = serde_json::to_vec(request)
+            .map_err(|error| LiveFeedError::Evidence(error.to_string()))?;
+        let fetched = post_http_json_bytes_with_policy(
+            &request.endpoint,
+            &request_bytes,
+            &[],
+            &self.remote_policy,
+        )
+        .map_err(|error| LiveFeedError::Transport(error.to_string()))?;
+        self.seal(fetched, request, policy, started)
+    }
+
+    /// Admit, fetch (GET), validate, snapshot, and receipt one feed page.
+    ///
+    /// Used by GET-only providers such as 気象庁 AMeDAS where the request is
+    /// encoded in the URL rather than a POST body. Validation, freshness,
+    /// cursor/watermark monotonicity, and immutable snapshot sealing are
+    /// identical to the POST path.
+    pub fn execute_get(
+        &self,
+        request: &LiveFeedRequest,
+        policy: &FeedFreshnessPolicy,
+    ) -> Result<LiveFeedResponse, LiveFeedError> {
+        let started = Instant::now();
+        let fetched = fetch_http_bytes_with_policy(&request.endpoint, &self.remote_policy)
+            .map_err(|error| LiveFeedError::Transport(error.to_string()))?;
+        self.seal(fetched, request, policy, started)
+    }
+
+    /// Admit, fetch (GET), convert an AMeDAS map payload, and seal a weather page.
+    ///
+    /// The endpoint must serve the 気象庁 AMeDAS `map/{time}.json` payload; the
+    /// response is converted with `amedas_map_to_page` before the shared
+    /// cursor/watermark/freshness sealing runs, so the real weather feed is
+    /// verified exactly like every other live feed.
+    pub fn execute_amedas(
+        &self,
+        request: &LiveFeedRequest,
+        policy: &FeedFreshnessPolicy,
+        observed_at: &str,
+    ) -> Result<LiveFeedResponse, LiveFeedError> {
+        let started = Instant::now();
+        let fetched = fetch_http_bytes_with_policy(&request.endpoint, &self.remote_policy)
+            .map_err(|error| LiveFeedError::Transport(error.to_string()))?;
+        let payload: serde_json::Value = serde_json::from_slice(&fetched.bytes)
+            .map_err(|error| LiveFeedError::Response(error.to_string()))?;
+        let time = compact_amedas_time(&chrono::DateTime::parse_from_rfc3339(observed_at)
+            .map_err(|_| LiveFeedError::Request("invalid AMeDAS observation time".into()))?
+            .with_timezone(&chrono::Utc));
+        let page = crate::jma::amedas_map_to_page(&payload, &time, request.after_cursor, observed_at)
+            .map_err(LiveFeedError::Response)?;
+        let page_bytes = serde_json::to_vec(&page)
+            .map_err(|error| LiveFeedError::Evidence(error.to_string()))?;
+        self.seal(
+            genegis_storage::HttpFetchResult {
+                status: fetched.status,
+                bytes: page_bytes,
+                content_range: None,
+                content_type: Some("application/json".into()),
+            },
+            request,
+            policy,
+            started,
+        )
+    }
+
+    /// Validate, snapshot, and receipt one already-fetched feed page.
+    fn seal(
+        &self,
+        fetched: genegis_storage::HttpFetchResult,
+        request: &LiveFeedRequest,
+        policy: &FeedFreshnessPolicy,
+        started: Instant,
+    ) -> Result<LiveFeedResponse, LiveFeedError> {
         let requested_watermark = timestamp(&request.watermark, "request watermark")?;
         let evaluated_at = timestamp(&request.evaluated_at, "evaluation time")?;
         if request.provider_id.trim().is_empty()
@@ -285,16 +361,6 @@ impl LiveFeedAdapter {
             ));
         }
 
-        let started = Instant::now();
-        let request_bytes = serde_json::to_vec(request)
-            .map_err(|error| LiveFeedError::Evidence(error.to_string()))?;
-        let fetched = post_http_json_bytes_with_policy(
-            &request.endpoint,
-            &request_bytes,
-            &[],
-            &self.remote_policy,
-        )
-        .map_err(|error| LiveFeedError::Transport(error.to_string()))?;
         let content_type = fetched
             .content_type
             .as_deref()

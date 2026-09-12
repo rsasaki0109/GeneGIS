@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.1.0",
+  "rfc": "0006",
+  "item": "OD-2",
+  "title": "Real DEM + PLATEAU buildings (fetch + scene env-var override)",
+  "status": "pass",
+  "verified_at": "2026-09-12",
+  "deliverables": {
+    "gsi_dem_fetch": "scripts/fetch-gsi-dem.py",
+    "plateau_fetch": "scripts/fetch-plateau.py",
+    "scene_copc_override": "crates/genegis-catalog/src/catalog.rs (nagoya_scene_copc_path)",
+    "scene_lod1_override": "crates/genegis-catalog/src/catalog.rs (nagoya_scene_lod1_path)",
+    "gpu_acceptance_binary": "crates/genegis-analysis/src/bin/gpu_scene_acceptance.rs"
+  },
+  "env_overrides": {
+    "GENEGIS_COPC_PATH": "replaces the fixture COPC in the scene acceptance path",
+    "GENEGIS_BUILDINGS_PATH": "replaces the fixture LOD1 buildings",
+    "GENEGIS_DEM_BBOX": "restricts the GSI DEM fetch to a district-level subset",
+    "note": "digests must be re-declared so receipts stay fail-closed"
+  },
+  "gsi_dem": {
+    "source": "国土地理院 標高タイル DEM5A (5m), text format",
+    "source_url": "https://cyberjapandata.gsi.go.jp/xyz/dem5a/",
+    "license": "国土地理院コンテンツ利用規約（政府標準利用規約準拠）",
+    "output": "examples/nagoya-population-density/data/real/nagoya-dem5a-real.geojson",
+    "measured": {
+      "district_fetch": "6 tiles, 262,374 elevation points",
+      "elevation_range_m": [-6.08, 18.13],
+      "sha256": "sha256:7e8c3632402c25b7be227877f569c9dd5de46d8169aebde8dc16b0ee2805d004"
+    }
+  },
+  "plateau": {
+    "source": "PLATEAU 名古屋市 3D都市モデル 2022 (Project PLATEAU, MLIT)",
+    "source_url": "https://www.geospatial.jp/ckan/dataset/plateau-23100-nagoya-shi-2022",
+    "license": "CC BY 4.0",
+    "output": "examples/nagoya-population-density/data/real/nagoya-buildings-real.geojson"
+  },
+  "verification": {
+    "scene": "the gpu_scene_acceptance binary resolves GENEGIS_COPC_PATH / GENEGIS_BUILDINGS_PATH before the fixture manifest",
+    "fail_closed": "real scene assets require re-declared copc/lod1 digests; the committed Phase 14 M1 receipt still verifies against the committed fixtures"
+  }
+}

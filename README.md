@@ -164,6 +164,13 @@ same verifiers as the fixtures.
 # Prompt → verified map
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示"
 
+# Mesh→ward density with the same ward oracle verifier (synthetic fixture)
+cargo run -p genegis-cli -- workflow run nagoya-population-mesh
+
+# Real e-Stat 500m mesh (after fetch-estat-mesh.py)
+GENEGIS_POPULATION_MESH_PATH=... GENEGIS_POPULATION_MESH_SHA=<sha> \
+cargo run -p genegis-cli -- workflow run nagoya-population-mesh
+
 # Inspect without executing
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示" --plan-only
 

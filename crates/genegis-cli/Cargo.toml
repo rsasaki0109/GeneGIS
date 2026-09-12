@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 genegis-ai = { path = "../genegis-ai" }
+genegis-adapter = { path = "../genegis-adapter" }
 genegis-analysis = { path = "../genegis-analysis" }
 genegis-catalog = { path = "../genegis-catalog" }
 genegis-query = { path = "../genegis-query" }

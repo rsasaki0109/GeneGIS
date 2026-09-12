@@ -1,7 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chrono::{DateTime, Utc};
 use genegis_catalog::{
-    alpha_catalog, nagoya_wards_geojson_path, DatasetRecord, NAGOYA_WARDS_DENSITY_ID,
+    alpha_catalog, nagoya_wards_geojson_path, DatasetRecord, NAGOYA_POPULATION_MESH_ID,
+    NAGOYA_WARDS_DENSITY_ID,
 };
 use genegis_contract::{
     AssuranceCheck, AssuranceCheckKind, AssurancePolicy, AuthorityClass, CheckRequirement,
@@ -20,7 +21,7 @@ use genegis_style::ChoroplethStyle;
 use genegis_vector::{read_geojson_path, read_geoparquet_uri, VectorDataset};
 use genegis_workflow::{nagoya_population_density_template, GeoWorkflow, ReviewStatus};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::AnalysisError;
 use crate::export::{export_html_map, export_png_map};
@@ -876,6 +877,13 @@ fn canonical_json(value: &serde_json::Value) -> String {
 pub fn run_nagoya_population_density_for_dataset(
     dataset_id: &str,
 ) -> Result<AnalysisResult, AnalysisError> {
+    if dataset_id == NAGOYA_POPULATION_MESH_ID {
+        let catalog = alpha_catalog();
+        let record = catalog
+            .require(dataset_id)
+            .map_err(|e| AnalysisError::Message(e.to_string()))?;
+        return run_nagoya_population_density_mesh(&record.uri);
+    }
     let catalog = alpha_catalog();
     let record = catalog
         .require(dataset_id)
@@ -989,6 +997,126 @@ fn run_nagoya_population_density_from_vector_with_source(
         });
     }
 
+    let style = ChoroplethStyle::equal_interval("density_per_km2", DENSITY_UNIT, &densities, 5);
+    for (feature, density) in features.iter_mut().zip(densities.iter()) {
+        feature.color = style.color_for(*density);
+    }
+
+    let verification = build_verification(&input_crs, &features, source);
+    let citations = default_citations();
+    workflow.review_status = if verification.checks.iter().all(|c| c.passed) {
+        ReviewStatus::Executed
+    } else {
+        ReviewStatus::PendingReview
+    };
+
+    Ok(AnalysisResult {
+        workflow,
+        features,
+        style,
+        verification,
+        citations,
+    })
+}
+
+/// Run the verified Nagoya density pipeline from a 500m population-mesh source.
+///
+/// A mesh dataset carries one feature per ~500m cell with `population`,
+/// `ward_code`, and `ward_name`. The executor sums population per ward from the
+/// mesh cells, but computes each ward's measured area from the authoritative N03
+/// ward boundary fixture so the resulting density matches the official published
+/// area and the immutable ward oracle. This is the shared path for both the
+/// offline synthetic mesh fixture and the licensed real e-Stat 500m mesh.
+pub fn run_nagoya_population_density_mesh(
+    data_path: &str,
+) -> Result<AnalysisResult, AnalysisError> {
+    let mesh = read_geojson_path(data_path)?;
+    let boundary = read_geojson_path(nagoya_wards_geojson_path())?;
+    let source = source_metadata(data_path);
+    run_nagoya_population_density_mesh_with_source(mesh, boundary, source)
+}
+
+fn run_nagoya_population_density_mesh_with_source(
+    mesh: VectorDataset,
+    boundary: VectorDataset,
+    source: SourceMetadata,
+) -> Result<AnalysisResult, AnalysisError> {
+    let input_crs =
+        Crs::parse(&mesh.crs).map_err(|err| AnalysisError::Message(err.to_string()))?;
+    input_crs
+        .require_known()
+        .map_err(|err| AnalysisError::Message(err.to_string()))?;
+
+    // Sum population per ward from the mesh cells.
+    let mut population_by_code: BTreeMap<String, (String, u64)> = BTreeMap::new();
+    for feature in &mesh.features {
+        let ward_code = feature
+            .properties
+            .get("ward_code")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AnalysisError::Message("missing mesh ward_code".into()))?
+            .to_string();
+        let ward_name = feature
+            .properties
+            .get("ward_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let population = feature
+            .properties
+            .get("population")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| {
+                AnalysisError::Message(format!("missing mesh population for {ward_name}"))
+            })?;
+        let entry = population_by_code
+            .entry(ward_code.clone())
+            .or_insert_with(|| (ward_name.clone(), 0));
+        entry.1 += population;
+    }
+
+    // Compute each ward's area from the authoritative N03 boundary fixture.
+    let mut features = Vec::new();
+    let mut densities = Vec::new();
+    for feature in &boundary.features {
+        let ward_code = feature
+            .properties
+            .get("ward_code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let ward_name = feature
+            .properties
+            .get("ward_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let population = population_by_code
+            .get(&ward_code)
+            .map(|entry| entry.1)
+            .ok_or_else(|| {
+                AnalysisError::Message(format!("no mesh population found for ward {ward_code}"))
+            })?;
+        let area_km2 = polygon_parts_area_km2_for_crs(&feature.rings, &input_crs)
+            .map_err(|err| AnalysisError::Message(err.to_string()))?;
+        let density = if area_km2 > 0.0 {
+            population as f64 / area_km2
+        } else {
+            0.0
+        };
+        densities.push(density);
+        features.push(DensityFeature {
+            ward_code,
+            ward_name,
+            population,
+            area_km2,
+            density_per_km2: density,
+            rings: feature.rings.clone(),
+            color: genegis_style::ColorRgba::new(0.5, 0.5, 0.5, 1.0),
+        });
+    }
+
+    let mut workflow = build_nagoya_workflow(&input_crs, source.clone())?;
     let style = ChoroplethStyle::equal_interval("density_per_km2", DENSITY_UNIT, &densities, 5);
     for (feature, density) in features.iter_mut().zip(densities.iter()) {
         feature.color = style.color_for(*density);
@@ -1584,5 +1712,39 @@ mod tests {
             canonical_nagoya_execution_digest(&changed_render, &execution.evidence),
             execution.result_digest
         );
+    }
+
+    #[test]
+    fn population_mesh_conserves_the_ward_oracle() {
+        let mesh_path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/nagoya-population-density/data/nagoya-population-mesh.geojson"
+        );
+        let result = run_nagoya_population_density_mesh(mesh_path).expect("mesh density run");
+
+        let oracle = nagoya_oracle();
+        let total: u64 = result.features.iter().map(|feature| feature.population).sum();
+        assert_eq!(total, oracle.population_total);
+
+        let by_code: std::collections::HashMap<_, _> = result
+            .features
+            .iter()
+            .map(|feature| (feature.ward_code.as_str(), feature))
+            .collect();
+        assert_eq!(by_code.len(), oracle.wards.len());
+        for ward in &oracle.wards {
+            let feature = by_code
+                .get(ward.ward_code.as_str())
+                .expect("every oracle ward is present");
+            assert_eq!(feature.population, ward.population);
+            let rel_error = (feature.area_km2 - ward.area_km2).abs() / ward.area_km2;
+            assert!(rel_error <= 0.005, "{} area error too large", ward.ward_name);
+        }
+        // The density oracle check must pass on the mesh-aggregated path.
+        assert!(result
+            .verification
+            .checks
+            .iter()
+            .any(|check| check.name == "density_oracle" && check.passed));
     }
 }

@@ -34,9 +34,16 @@ fn run() -> Result<(), String> {
             .map_err(|error| format!("read {}: {error}", manifest_path.display()))?,
     )
     .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+    // Real-data override: GENEGIS_COPC_PATH / GENEGIS_BUILDINGS_PATH replace
+    // the fixture paths from the manifest (RFC 0006 OD-2). Digests must be
+    // re-declared in the manifest, so receipts stay fail-closed.
+    let copc_path = std::env::var("GENEGIS_COPC_PATH")
+        .unwrap_or_else(|_| field(&manifest, "/copc/path").unwrap_or_default().into());
+    let lod1_path = std::env::var("GENEGIS_BUILDINGS_PATH")
+        .unwrap_or_else(|_| field(&manifest, "/lod1/path").unwrap_or_default().into());
     let request = GpuSceneAcceptanceRequest {
-        copc_path: field(&manifest, "/copc/path")?.into(),
-        lod1_path: field(&manifest, "/lod1/path")?.into(),
+        copc_path,
+        lod1_path,
         copc_digest: field(&manifest, "/copc/sha256")?.into(),
         lod1_digest: field(&manifest, "/lod1/sha256")?.into(),
         build_digest: sha256_file(Path::new("Cargo.lock"))?,
