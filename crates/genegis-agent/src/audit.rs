@@ -125,18 +125,18 @@ mod tests {
         assert_eq!(
             stac.pointer("/alpha/collection/item_count")
                 .and_then(Value::as_u64),
-            Some(11)
+            Some(13)
         );
         let alpha_items = stac
             .pointer("/alpha/items")
             .and_then(Value::as_array)
             .expect("alpha items");
-        assert_eq!(alpha_items.len(), 11);
+        assert_eq!(alpha_items.len(), 13);
         assert!(stac.get("overlay").is_some());
         assert_eq!(
             stac.pointer("/merged/collection/item_count")
                 .and_then(Value::as_u64),
-            Some(11)
+            Some(13)
         );
 
         let runs = bundle
