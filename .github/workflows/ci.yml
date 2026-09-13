@@ -92,8 +92,8 @@ jobs:
           bundle = json.loads(Path("/tmp/genegis-audit-bundle.json").read_text())
           assert bundle["schema"] == "genegis-audit-bundle-v3", bundle["schema"]
           stac = bundle["stac"]
-          assert stac["alpha"]["collection"]["item_count"] == 5
-          assert len(stac["alpha"]["items"]) == 5
+          assert stac["alpha"]["collection"]["item_count"] == 13
+          assert len(stac["alpha"]["items"]) == 13
           assert stac["overlay"]["record_count"] >= 1
           assert len(stac["merged"]["items"]) >= 6
           PY
