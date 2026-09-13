@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod geocoding;
 mod grass;
+mod jma;
 mod live_feed;
 mod ogc;
 mod postgis;
@@ -24,6 +25,10 @@ pub use geocoding::{
     GeocodingAdapter, GeocodingError, GeocodingMode, GeocodingPrivacyPolicy, GeocodingProvider,
     GeocodingQuery, GeocodingRatePolicy, GeocodingReceipt, GeocodingRequest, GeocodingResponse,
     GEOCODING_ADAPTER_BUILD_DIGEST,
+};
+pub use jma::{
+    amedas_map_to_page, compact_amedas_time, jma_feed_domain, JMA_PROVIDER_ID,
+    JMA_PROVIDER_VERSION, JMA_SOURCE_REVISION, NAGOYA_AMEDAS_POINT, NAGOYA_AMEDAS_STATION,
 };
 pub use grass::{
     grass_manifest, GrassAdapter, GrassError, GrassOperation, GrassReceipt, SandboxEvidence,

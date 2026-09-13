@@ -1,0 +1,19 @@
+{
+  "manifest_schema_version": 1,
+  "immutable": true,
+  "dataset_id": "nagoya-transit",
+  "snapshot_version": "nagoya-transit-fixture-v1",
+  "generator": "scripts/build-nagoya-transit.py",
+  "mode": "walk+transit",
+  "corridors": [
+    {"line": "meitetsu-nagoya-main", "mode": "rail", "stops": ["kanayama", "nagoya-station", "jyoshi", "chikusa", "ikeshita"], "wait_minutes": 6.0, "ride_minutes_per_segment": 2.0},
+    {"line": "meijo-line", "mode": "rail", "stops": ["nagoya-station", "atsuta"], "wait_minutes": 6.0, "ride_minutes_per_segment": 2.0},
+    {"line": "hokusei-line", "mode": "rail", "stops": ["nagoya-station", "ozone"], "wait_minutes": 6.0, "ride_minutes_per_segment": 2.0}
+  ],
+  "real_source_page": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02.html",
+  "real_source_name": "国土数値情報 鉄道(N02) / バスルート(N07)",
+  "real_fetch_script": "scripts/fetch-mlit-transit.py",
+  "license": "CC0-1.0 (synthetic fixture; 参考: 国土数値情報 N02/N07 政府標準利用規約)",
+  "retrieval_basis": "決定論的合成fixture。実測のN02/N07ではない。",
+  "verification": "multimodal routes never beat the physical floor (straight-line / 30 km/h); transit never reduces a ward's reachable POI set below walk-only"
+}

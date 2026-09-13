@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1.0",
+  "rfc": "0006",
+  "item": "OD-4",
+  "title": "気象庁 AMeDAS live-weather feed through the verified live-feed contract",
+  "status": "pass",
+  "verified_at": "2026-09-12",
+  "deliverables": {
+    "adapter": "crates/genegis-adapter/src/live_feed.rs",
+    "conversion": "crates/genegis-adapter/src/jma.rs",
+    "analysis_workflow": "crates/genegis-analysis/src/live_feed.rs",
+    "cli_command": "genegis live amedas",
+    "fetch_script": "scripts/fetch-jma-amedas.py"
+  },
+  "adapter": {
+    "provider_id": "jma.amedas",
+    "provider_version": "amedas-map-v1",
+    "source_url": "https://www.jma.go.jp/bosai/amedas/data/map/{time}.json",
+    "station": "51106",
+    "station_name": "名古屋",
+    "license": "気象庁ホームページ利用規約（政府標準利用規約準拠）",
+    "contract": "cursor + watermark + freshness + immutable snapshot, identical to every other live feed",
+    "transport": "GET (execute_amedas) + amedas_map_to_page conversion"
+  },
+  "verification": {
+    "executor": "execute_jma_live_feed_workflow (Command + Workflow)",
+    "checks": [
+      "cursor/watermark monotonicity",
+      "freshness against max_age / allowed_lateness",
+      "fail-closed on stale or watermark-regressing pages",
+      "immutable snapshot digest per observation",
+      "workflow and adapter result digests agree"
+    ]
+  },
+  "measured": {
+    "cli": "genegis live amedas (2026-09-12 live fetch)",
+    "observed_at_utc": "2026-09-12T00:10:00Z",
+    "fresh": true,
+    "next_cursor": 1,
+    "values": {
+      "temperature_c": 26.2,
+      "humidity_pct": 78,
+      "pressure_hpa": 1013.8,
+      "precipitation1h_mm": 0.0,
+      "wind_mps": 1.6
+    },
+    "tests": [
+      "jma::tests::converts_amedas_payload_to_provider_page",
+      "jma::tests::execute_amedas_seals_weather_page_with_immutable_snapshot",
+      "live_feed::tests::jma_amedas_weather_page_commits_through_command_workflow"
+    ]
+  }
+}

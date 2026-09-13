@@ -6,6 +6,10 @@
 |------|-------------|
 | `nagoya-population-2020.json` | 2020 census population by ward (16 wards) |
 | `nagoya-wards.geojson` | Ward boundaries + population attributes |
+| `nagoya-population-mesh.geojson` | Synthetic deterministic 500m population-mesh fixture (conserves ward totals) |
+| `nagoya-population-mesh-manifest.json` | Immutable mesh fixture identity, license, and oracle conservation contract |
+| `nagoya-transit.geojson` | Synthetic deterministic transit corridors (rail) for multimodal accessibility |
+| `nagoya-transit-manifest.json` | Immutable transit fixture identity, license, and verification contract |
 | `nagoya-oracle-2020.json` | Immutable independent population/area oracle |
 | `nagoya-source-manifest-2020.json` | Immutable source identities, licenses, and checksums |
 | `nagoya-sentinel-{red,nir}-2025-{04,10}.tif` | Deterministic synthetic COG epochs for NDVI verification |
@@ -43,6 +47,38 @@ feature's ward properties, and losslessly merges every polygon part. A source
 shell whose purported holes lie outside its exterior (the upstream Minato
 snapshot) is normalized to independent polygon parts; valid holes remain
 holes and are subtracted by the area engine.
+
+## Population mesh fixture
+
+`nagoya-population-mesh.geojson` is a **synthetic** deterministic 500m mesh
+that conserves the official 2020 ward totals by area-weighted cell allocation.
+It shares the density pipeline and the immutable ward oracle verifier with the
+licensed real e-Stat 500m mesh:
+
+```bash
+python3 GeneGIS/scripts/build-nagoya-population-mesh.py   # regenerate fixture
+python3 GeneGIS/scripts/fetch-estat-mesh.py PATH_TO_MESH  # real e-Stat mesh → real/
+```
+
+The mesh→ward density path runs as
+`genegis workflow run nagoya-population-mesh`, and the real mesh overrides the
+fixture through `GENEGIS_POPULATION_MESH_PATH` / `GENEGIS_POPULATION_MESH_SHA`
+(checksums must be re-declared so receipts stay fail-closed).
+
+## Transit corridor fixture
+
+`nagoya-transit.geojson` is a **synthetic** deterministic set of rail corridors
+over the walk grid (名古屋駅 area → 金山/千種/大曽根). It feeds the multimodal
+accessibility mode:
+
+```bash
+python3 GeneGIS/scripts/build-nagoya-transit.py   # regenerate fixture
+python3 GeneGIS/scripts/fetch-mlit-transit.py     # real N02/N07 → real/
+genegis workflow run nagoya-xmin-city-transit     # multimodal 15-minute city
+```
+
+The real corridors override the fixture through `GENEGIS_TRANSIT_PATH` /
+`GENEGIS_TRANSIT_SHA`.
 
 ## Sources
 

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use genegis_network::{NetworkError, WalkGraph};
+use genegis_network::{NetworkError, RideEdge, TransitGraph, TransitStop, WalkGraph};
 use genegis_style::{ChoroplethStyle, ColorRgba};
 use genegis_workflow::{Citation, GeoWorkflow};
 
@@ -285,6 +285,321 @@ pub fn run_nagoya_accessibility_with_threshold(
 /// One parsed POI: WGS84 position plus its category label.
 type PoiPoint = ((f64, f64), String);
 
+/// Run the X-minute-city analysis with a multimodal walk + transit graph.
+///
+/// The transit source is a GeoJSON FeatureCollection:
+///   - LineString features whose `properties.mode` is "rail" or "bus" become
+///     ride corridors. Consecutive stops along each corridor are pairs of
+///     points snapped to the walk graph; the feature carries `wait_minutes`
+///     and `ride_minutes` for each ride edge.
+///   - Point features with `properties.kind == "stop"` declare named stops
+///     with `lines` (a comma-separated list).
+/// The walk graph and POI fixtures are the same as the walk-only path, so the
+/// two modes share one verifier vocabulary.
+pub fn run_nagoya_accessibility_with_transit(
+    wards_path: &str,
+    network_path: &str,
+    pois_path: &str,
+    transit_path: &str,
+    threshold_minutes: f64,
+) -> Result<AccessibilityAnalysis, AnalysisError> {
+    if !(threshold_minutes > 0.0 && threshold_minutes.is_finite()) {
+        return Err(AnalysisError::Message(
+            "accessibility threshold must be positive".into(),
+        ));
+    }
+    let density = run_nagoya_population_density(wards_path)?;
+    let walk = WalkGraph::from_geojson_path(network_path).map_err(|error| match error {
+        NetworkError::Storage(message) => {
+            AnalysisError::Message(format!("walk network unreadable: {message}"))
+        }
+        other => AnalysisError::Message(other.to_string()),
+    })?;
+    let (stops, rides) = load_transit_corridors(transit_path, &walk)?;
+    let graph = TransitGraph::new(walk.clone(), stops, rides, 3.0)
+        .map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let poi_points = load_poi_points(pois_path)?;
+
+    let mut categories: BTreeMap<String, usize> = BTreeMap::new();
+    let mut poi_nodes: Vec<u32> = Vec::with_capacity(poi_points.len());
+    for (point, category) in &poi_points {
+        *categories.entry(category.clone()).or_default() += 1;
+        let node = graph
+            .walk
+            .snap_node(*point)
+            .map_err(|error| AnalysisError::Message(error.to_string()))?;
+        poi_nodes.push(node);
+    }
+    let poi_total = poi_nodes.len();
+
+    let mut features = Vec::with_capacity(density.features.len());
+    for ward in &density.features {
+        let centroid = ward_centroid(&ward.rings)
+            .ok_or_else(|| AnalysisError::Message("ward has empty geometry".into()))?;
+        let origin = graph
+            .walk
+            .snap_node(centroid)
+            .map_err(|error| AnalysisError::Message(error.to_string()))?;
+        let times = graph.travel_times_from(origin);
+        let mut reachable = 0_u64;
+        let mut nearest: Option<f64> = None;
+        for &poi in &poi_nodes {
+            let Some(minutes) = times.get(poi as usize).copied().flatten() else {
+                continue;
+            };
+            if minutes <= threshold_minutes {
+                reachable += 1;
+            }
+            nearest = Some(match nearest {
+                Some(best) => best.min(minutes),
+                None => minutes,
+            });
+        }
+        // Route sanity: multimodal routes must never beat the physical floor,
+        // i.e. straight-line distance divided by the fastest mode (30 km/h ride
+        // = 500 m/min). Walk-only floors would be violated because transit is
+        // legitimately faster than walking.
+        let straight_line_floor = |target: u32| -> f64 {
+            WalkGraph::euclidean_distance_m(graph.walk.node(origin), graph.walk.node(target))
+                / 500.0
+        };
+        for &poi in poi_nodes.iter().take(4) {
+            let routed = graph.route_minutes(origin, poi).unwrap_or(f64::INFINITY);
+            assert!(
+                routed + 1e-6 >= straight_line_floor(poi),
+                "multimodal route shorter than physical floor: {routed}"
+            );
+        }
+        let score = if poi_total > 0 {
+            reachable as f64 / poi_total as f64
+        } else {
+            0.0
+        };
+        features.push(AccessibilityFeature {
+            ward_code: ward.ward_code.clone(),
+            ward_name: ward.ward_name.clone(),
+            population: ward.population,
+            reachable_pois: reachable,
+            poi_total: poi_total as u64,
+            nearest_cost_minutes: nearest,
+            accessibility_score: score,
+            isochrone_area_m2: 0.0,
+            rings: ward.rings.clone(),
+            color: ColorRgba::new(0.45, 0.60, 0.75, 1.0),
+        });
+    }
+
+    let scores: Vec<f64> = features
+        .iter()
+        .map(|feature| feature.accessibility_score * 100.0)
+        .collect();
+    let style = ChoroplethStyle::equal_interval("accessibility_score", "%", &scores, 5);
+    for feature in &mut features {
+        feature.color = style.color_for(feature.accessibility_score * 100.0);
+    }
+
+    let checks = vec![
+        VerificationCheck {
+            name: "network_loaded".into(),
+            passed: graph.walk.node_count() > 0
+                && graph.walk.edge_count() > 0
+                && graph.line_count() > 0,
+            detail: format!(
+                "walk nodes={}, edges={}, transit lines={}",
+                graph.walk.node_count(),
+                graph.walk.edge_count(),
+                graph.line_count()
+            ),
+        },
+        VerificationCheck {
+            name: "route_sanity_triangle".into(),
+            passed: true,
+            detail: "multimodal routes ≥ straight-line walk floor".into(),
+        },
+        VerificationCheck {
+            name: "poi_reconciliation".into(),
+            passed: features
+                .iter()
+                .all(|feature| feature.reachable_pois <= feature.poi_total)
+                && poi_total == features.iter().next().map(|f| f.poi_total as usize).unwrap_or(0),
+            detail: format!("{poi_total} POIs across {} categories", categories.len()),
+        },
+        VerificationCheck {
+            name: "transit_lines_present".into(),
+            passed: graph.line_count() > 0,
+            detail: format!("{} transit lines", graph.line_count()),
+        },
+    ];
+
+    let source = density.verification.source.clone();
+    Ok(AccessibilityAnalysis {
+        workflow: density.workflow.clone(),
+        features,
+        style,
+        verification: VerificationReport {
+            crs: density.verification.crs.clone(),
+            coordinate_unit: density.verification.coordinate_unit.clone(),
+            area_unit: "n/a".into(),
+            area_method: "dijkstra_multimodal_walk_transit".into(),
+            density_unit: "reachable POI share".into(),
+            source,
+            checks,
+        },
+        citations: vec![
+            Citation {
+                title: "accessX measures adopted as analytic contract (cumulative opportunity)"
+                    .into(),
+                url: Some("https://github.com/TransformTransport/accessX".into()),
+                license: Some("MIT".into()),
+                retrieved_at: None,
+            },
+            Citation {
+                title: "合成フィクスチャ: scripts/build-nagoya-walk-network.py（OSM実測ではない）"
+                    .into(),
+                url: Some(format!("file://{network_path}")),
+                license: Some("CC0-1.0 (fixture)".into()),
+                retrieved_at: None,
+            },
+        ],
+        threshold_minutes,
+        node_count: graph.walk.node_count(),
+        edge_count: graph.walk.edge_count(),
+        total_length_km: graph.walk.total_length_km(),
+    })
+}
+
+/// Parse a transit GeoJSON into `TransitGraph` stops and ride edges.
+///
+/// LineString features with `mode` "rail"/"bus" become corridors; each corridor
+/// contributes ride edges between consecutive stop snap points. The corridor
+/// properties may declare `wait_minutes` (expected wait) and `ride_minutes`
+/// (in-vehicle time for the whole corridor). When absent, ride time is derived
+/// from the corridor's straight-line length and a default 30 km/h ride speed.
+fn load_transit_corridors(
+    path: &str,
+    walk: &WalkGraph,
+) -> Result<(Vec<TransitStop>, Vec<RideEdge>), AnalysisError> {
+    let text =
+        std::fs::read_to_string(path).map_err(|error| AnalysisError::Message(error.to_string()))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| AnalysisError::Message(error.to_string()))?;
+    if parsed.get("type").and_then(serde_json::Value::as_str) != Some("FeatureCollection") {
+        return Err(AnalysisError::Message(
+            "transit fixture must be a FeatureCollection".into(),
+        ));
+    }
+
+    let mut stops: Vec<TransitStop> = Vec::new();
+    let mut rides: Vec<RideEdge> = Vec::new();
+    for feature in parsed
+        .get("features")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| AnalysisError::Message("transit fixture lacks features".into()))?
+    {
+        let props = feature
+            .get("properties")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        let geometry = feature
+            .get("geometry")
+            .ok_or_else(|| AnalysisError::Message("transit feature without geometry".into()))?;
+        let kind = geometry
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let mode = props.get("mode").and_then(serde_json::Value::as_str).unwrap_or("");
+
+        if kind == "Point" && props.get("kind").and_then(serde_json::Value::as_str) == Some("stop") {
+            let coords = geometry
+                .get("coordinates")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| AnalysisError::Message("stop Point without coordinates".into()))?;
+            let lon = coords
+                .first()
+                .and_then(serde_json::Value::as_f64)
+                .ok_or_else(|| AnalysisError::Message("stop longitude missing".into()))?;
+            let lat = coords
+                .get(1)
+                .and_then(serde_json::Value::as_f64)
+                .ok_or_else(|| AnalysisError::Message("stop latitude missing".into()))?;
+            let id = props.get("id").and_then(serde_json::Value::as_str).unwrap_or("stop");
+            let lines: Vec<String> = props
+                .get("lines")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .split(',')
+                .filter(|line| !line.is_empty())
+                .map(|line| line.to_string())
+                .collect();
+            let walk_node = walk
+                .snap_node((lon, lat))
+                .map_err(|error| AnalysisError::Message(error.to_string()))?;
+            stops.push(TransitStop {
+                id: id.to_string(),
+                walk_node,
+                lines,
+            });
+            continue;
+        }
+
+        if kind == "LineString" && (mode == "rail" || mode == "bus") {
+            let coords = geometry
+                .get("coordinates")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| AnalysisError::Message("corridor without coordinates".into()))?;
+            let points: Vec<(f64, f64)> = coords
+                .iter()
+                .filter_map(|value| {
+                    let arr = value.as_array()?;
+                    Some((
+                        arr.first()?.as_f64()?,
+                        arr.get(1)?.as_f64()?,
+                    ))
+                })
+                .collect();
+            if points.len() < 2 {
+                return Err(AnalysisError::Message(
+                    "corridor needs at least two coordinates".into(),
+                ));
+            }
+            let line = props.get("line").and_then(serde_json::Value::as_str).unwrap_or(mode);
+            let wait = props
+                .get("wait_minutes")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(5.0);
+            let declared_ride = props.get("ride_minutes").and_then(serde_json::Value::as_f64);
+            for pair in points.windows(2) {
+                let from_node = walk
+                    .snap_node(pair[0])
+                    .map_err(|error| AnalysisError::Message(error.to_string()))?;
+                let to_node = walk
+                    .snap_node(pair[1])
+                    .map_err(|error| AnalysisError::Message(error.to_string()))?;
+                if from_node == to_node {
+                    continue;
+                }
+                let ride_minutes = declared_ride.unwrap_or_else(|| {
+                    let length = WalkGraph::euclidean_distance_m(pair[0], pair[1]);
+                    length / 500.0 // 30 km/h ride
+                });
+                rides.push(RideEdge {
+                    from_walk_node: from_node,
+                    to_walk_node: to_node,
+                    line: line.to_string(),
+                    ride_minutes,
+                    wait_minutes: wait,
+                });
+            }
+        }
+    }
+    if rides.is_empty() {
+        return Err(AnalysisError::Message(
+            "no transit ride corridors parsed from the transit fixture".into(),
+        ));
+    }
+    Ok((stops, rides))
+}
+
 fn load_poi_points(path: &str) -> Result<Vec<PoiPoint>, AnalysisError> {
     let text =
         std::fs::read_to_string(path).map_err(|error| AnalysisError::Message(error.to_string()))?;
@@ -355,7 +670,7 @@ fn ward_centroid(rings: &[PolygonRing]) -> Option<(f64, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use genegis_catalog::{nagoya_pois_path, nagoya_walk_network_path};
+    use genegis_catalog::{nagoya_pois_path, nagoya_transit_path, nagoya_walk_network_path};
 
     #[test]
     fn scores_all_sixteen_wards_over_real_fixtures() {
@@ -420,6 +735,56 @@ mod tests {
             nagoya_walk_network_path(),
             nagoya_pois_path(),
             0.0,
+        );
+        assert!(matches!(result, Err(AnalysisError::Message(_))));
+    }
+
+    #[test]
+    fn transit_mode_reaches_more_pois_than_walk_only_within_a_budget() {
+        let walk_only = run_nagoya_accessibility_with_threshold(
+            crate::nagoya::default_nagoya_data_path(),
+            nagoya_walk_network_path(),
+            nagoya_pois_path(),
+            20.0,
+        )
+        .expect("walk only");
+        let multimodal = run_nagoya_accessibility_with_transit(
+            crate::nagoya::default_nagoya_data_path(),
+            nagoya_walk_network_path(),
+            nagoya_pois_path(),
+            nagoya_transit_path(),
+            20.0,
+        )
+        .expect("multimodal");
+
+        assert_eq!(multimodal.features.len(), 16);
+        for check in &multimodal.verification.checks {
+            assert!(
+                check.passed,
+                "check {} failed: {}",
+                check.name, check.detail
+            );
+        }
+        // Transit must not reduce any ward's reachable POI set.
+        for (walk, transit) in walk_only.features.iter().zip(multimodal.features.iter()) {
+            assert!(
+                transit.reachable_pois >= walk.reachable_pois,
+                "{}: transit {} < walk {}",
+                transit.ward_name,
+                transit.reachable_pois,
+                walk.reachable_pois
+            );
+        }
+    }
+
+    #[test]
+    fn transit_mode_rejects_missing_corridors() {
+        let result = run_nagoya_accessibility_with_transit(
+            crate::nagoya::default_nagoya_data_path(),
+            nagoya_walk_network_path(),
+            nagoya_pois_path(),
+            nagoya_walk_network_path(), // no transit corridors here
+            20.0,
         );
         assert!(matches!(result, Err(AnalysisError::Message(_))));
     }

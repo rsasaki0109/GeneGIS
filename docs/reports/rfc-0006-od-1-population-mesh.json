@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1.0",
+  "rfc": "0006",
+  "item": "OD-1",
+  "title": "500m population mesh (offline fixture + real e-Stat path)",
+  "status": "pass",
+  "verified_at": "2026-09-12",
+  "deliverables": {
+    "fixture_generator": "scripts/build-nagoya-population-mesh.py",
+    "real_fetch_script": "scripts/fetch-estat-mesh.py",
+    "fixture": "examples/nagoya-population-density/data/nagoya-population-mesh.geojson",
+    "manifest": "examples/nagoya-population-density/data/nagoya-population-mesh-manifest.json",
+    "catalog_record": "crates/genegis-catalog/src/catalog.rs",
+    "density_executor": "crates/genegis-analysis/src/nagoya.rs",
+    "cli_command": "genegis workflow run nagoya-population-mesh",
+    "rfc": "docs/rfcs/0006-open-data-expansion.md"
+  },
+  "fixture": {
+    "mesh_cells": 2163,
+    "mesh_step_deg": 0.004166666666666667,
+    "population_total": 2332176,
+    "sha256": "sha256:2acb7ec476599aad5ad7b6ce5dbccfc1b5bca9f355440c66fec3f9238ea34f92",
+    "wards": 16,
+    "real_source": "e-Stat 統計地理情報システム 地域メッシュ統計（令和2年国勢調査 4次メッシュ 500m）",
+    "real_source_url": "https://www.e-stat.go.jp/gis/statmap-search",
+    "license": "CC0-1.0 (synthetic fixture; 参考: e-Stat 地域メッシュ統計)",
+    "real_license": "e-Stat 利用規約 / 政府標準利用規約",
+    "note": "SYNTHETIC fixture conserving official 2020 ward totals; real mesh opt-in via GENEGIS_POPULATION_MESH_PATH / GENEGIS_POPULATION_MESH_SHA."
+  },
+  "verification": {
+    "executor": "run_nagoya_population_density_mesh",
+    "oracle": "examples/nagoya-population-density/data/nagoya-oracle-2020.json",
+    "checks": [
+      {"name": "population_total_oracle", "passed": true, "tolerance": "exact"},
+      {"name": "ward_coverage_oracle", "passed": true, "tolerance": "exact"},
+      {"name": "area_oracle_relative_error", "passed": true, "tolerance": "0.5%"},
+      {"name": "density_oracle", "passed": true, "tolerance": "0.5%"}
+    ],
+    "area_basis": "N03 ward boundary fixture (nagoya-wards.geojson)",
+    "fail_closed": "dropping or duplicating a mesh cell changes the aggregated total and fails the oracle checks"
+  },
+  "measured": {
+    "sample_ward": {
+      "ward_code": "23101",
+      "ward_name": "千種区",
+      "population": 165245,
+      "area_km2": 18.1845,
+      "density_per_km2": 9087.11
+    },
+    "test": "population_mesh_conserves_the_ward_oracle",
+    "cli_smoke": "genegis workflow run nagoya-population-mesh passed all four oracle checks"
+  }
+}

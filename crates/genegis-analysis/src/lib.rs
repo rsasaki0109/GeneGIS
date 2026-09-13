@@ -32,8 +32,9 @@ pub mod zone_index;
 pub use showcase::{render_usecase_frames, ShowcaseFrame};
 
 pub use accessibility::{
-    run_nagoya_accessibility, run_nagoya_accessibility_with_threshold, AccessibilityAnalysis,
-    AccessibilityFeature, DEFAULT_THRESHOLD_MINUTES,
+    run_nagoya_accessibility, run_nagoya_accessibility_with_threshold,
+    run_nagoya_accessibility_with_transit, AccessibilityAnalysis, AccessibilityFeature,
+    DEFAULT_THRESHOLD_MINUTES,
 };
 pub use change::{
     run_pointcloud_change_detection, ChangeClassSummary, ChangeDetectionAnalysis,
@@ -58,19 +59,22 @@ pub use governance::{
     GovernanceOperationReceipt,
 };
 pub use gpu_acceptance::{
-    run_gpu_scene_acceptance_workflow, verify_gpu_scene_acceptance_receipt, GpuAcceptanceVerdict,
-    GpuSceneAcceptanceReceipt, GpuSceneAcceptanceRequest,
+    gpu_receipt_digest, run_gpu_scene_acceptance_workflow, verify_gpu_scene_acceptance_receipt,
+    GpuAcceptanceVerdict, GpuSceneAcceptanceReceipt, GpuSceneAcceptanceRequest,
 };
 pub use live_dashboard::{
     build_scene3d_dashboard, canonical_scene_result_digest, CategoryCount, DashboardWidget,
     HistogramBin, LiveDashboard, LiveDashboardError,
 };
-pub use live_feed::{execute_live_feed_workflow, LiveFeedWorkflowResult};
+pub use live_feed::{
+    execute_jma_live_feed_workflow, execute_live_feed_workflow, LiveFeedWorkflowResult,
+};
 pub use nagoya::{
     canonical_nagoya_execution_digest, default_nagoya_data_path, default_nagoya_dataset_id,
     nagoya_population_density_workflow_for_dataset, run_nagoya_population_density,
     run_nagoya_population_density_for_dataset, run_nagoya_population_density_from_catalog,
-    run_nagoya_population_density_geoparquet, verify_nagoya_analysis, NagoyaArtifactDigests,
+    run_nagoya_population_density_geoparquet, run_nagoya_population_density_mesh,
+    verify_nagoya_analysis, NagoyaArtifactDigests,
     NagoyaExecutionOutput, NagoyaWorkflowExecutor,
 };
 pub use ndvi::{

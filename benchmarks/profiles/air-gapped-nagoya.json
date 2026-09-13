@@ -3,8 +3,8 @@
   "id": "air-gapped-nagoya",
   "deployment_class": "air_gapped",
   "dataset_id": "nagoya-population-2020",
-  "dataset_digest": "sha256:176aa7996622d4ea3339abc6143591245ae2142177a46501b2fd0c4199f2b54d",
-  "build_digest": "sha256:11bab387c33d0251316276044afc9be33a643b4fb5f8a6a0554cb21ed72a6915",
+  "dataset_digest": "sha256:bd19086c0e859d397c2b3cb8e945fcda850fd3907a404e3f9756f74b154e8c6c",
+  "build_digest": "sha256:ecc7207be170b9415307d1bb7d6f1210dcf805822c77ba2f004eaef78d8c3e15",
   "metrics": [
     {
       "id": "cpu.workflow_p95_ms",
