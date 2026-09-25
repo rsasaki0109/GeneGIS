@@ -12,9 +12,13 @@
         <strong>GeneGIS</strong>
         <span>AI-native GIS Workbench · Phase 10 alpha</span>
       </div>
+      <nav class="view-tabs" aria-label="表示の切り替え">
+        <button type="button" class="view-tab active" data-view="workbench-view">ワークベンチ</button>
+        <button type="button" class="view-tab" data-view="gis-view">データ分析</button>
+      </nav>
     </header>
 
-    <main class="layout">
+    <main id="workbench-view" class="layout">
       <section class="panel prompt-panel">
         <h2>Intent</h2>
         <label for="prompt">自然言語プロンプト</label>
@@ -237,6 +241,92 @@
       </aside>
     </main>
 
+    <main id="gis-view" class="gis-layout" hidden>
+      <section class="panel gis-data">
+        <h2>データ</h2>
+        <label id="gis-drop" class="gis-drop" for="gis-file">
+          <strong>ファイルをドロップ／選択</strong>
+          <small>GeoJSON · CSV/TSV · Shapefile(zip) · GeoPackage · GeoParquet</small>
+          <input id="gis-file" type="file" multiple accept=".geojson,.json,.csv,.tsv,.txt,.zip,.gpkg,.parquet,.geoparquet" />
+        </label>
+        <button id="gis-samples-btn" type="button" class="secondary gis-wide">名古屋のサンプルデータを読み込む</button>
+        <div id="gis-crs-prompt" class="gis-callout" hidden>
+          <p id="gis-crs-message"></p>
+          <label for="gis-crs-select">座標参照系 (CRS)</label>
+          <select id="gis-crs-select"></select>
+          <div class="gis-row">
+            <button id="gis-crs-retry" type="button">この CRS で読み込む</button>
+            <button id="gis-crs-cancel" type="button" class="secondary">取り消す</button>
+          </div>
+        </div>
+
+        <h3>場所を追加</h3>
+        <div class="gis-row">
+          <input id="gis-place-query" type="text" placeholder="札幌市 / 名古屋市中区 / 名古屋駅" />
+        </div>
+        <div class="gis-row">
+          <select id="gis-place-provider">
+            <option value="nominatim">境界 (OpenStreetMap)</option>
+            <option value="gsi">地点 (国土地理院)</option>
+          </select>
+          <button id="gis-place-btn" type="button" class="secondary">追加</button>
+        </div>
+
+        <h3>レイヤ</h3>
+        <div id="gis-layers" class="gis-layers"><p class="gis-empty">まだレイヤがありません。</p></div>
+      </section>
+
+      <section class="gis-center">
+        <div class="panel gis-ask">
+          <label for="gis-prompt">データに質問する</label>
+          <textarea id="gis-prompt" rows="2" placeholder="例: 駅から500m以内の避難所を数えて ／ この点から1km以内の人口は？ ／ 区ごとの店舗数 ／ 区の人口密度"></textarea>
+          <div class="gis-row">
+            <button id="gis-ask-btn" type="button">質問して実行</button>
+            <button id="gis-plan-btn" type="button" class="secondary">計画だけ見る</button>
+            <select id="gis-planner-mode" aria-label="プランナー">
+              <option value="auto">自動</option>
+              <option value="rule">ルール</option>
+              <option value="llm">LLM</option>
+            </select>
+            <label class="gis-check"><input id="gis-keep-intermediate" type="checkbox" /> 途中結果も保存</label>
+            <span id="gis-status" class="status" role="status">Ready</span>
+          </div>
+        </div>
+        <div id="gis-map" class="gis-map" tabindex="0" aria-label="地図">
+          <svg id="gis-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div class="gis-map-controls">
+            <button type="button" id="gis-zoom-in" class="secondary" aria-label="拡大">＋</button>
+            <button type="button" id="gis-zoom-out" class="secondary" aria-label="縮小">−</button>
+            <button type="button" id="gis-zoom-all" class="secondary" aria-label="全体表示">⤢</button>
+            <label class="gis-check"><input id="gis-basemap" type="checkbox" checked /> 背景地図</label>
+          </div>
+          <div id="gis-legend" class="gis-legend" hidden></div>
+          <div id="gis-popup" class="gis-popup" hidden></div>
+          <div class="gis-attribution" id="gis-attribution"></div>
+          <div class="gis-coords" id="gis-coords"></div>
+        </div>
+        <div class="panel gis-table-panel">
+          <div class="gis-row">
+            <strong id="gis-table-title">属性テーブル</strong>
+            <input id="gis-where" type="text" placeholder="絞り込み: 人口 >= 100000 AND ward_name LIKE '%中%'" />
+            <button id="gis-where-btn" type="button" class="secondary">適用</button>
+            <span id="gis-table-count" class="status"></span>
+            <button id="gis-prev" type="button" class="secondary" aria-label="前のページ">◀</button>
+            <button id="gis-next" type="button" class="secondary" aria-label="次のページ">▶</button>
+          </div>
+          <div class="gis-table-scroll"><table id="gis-table"></table></div>
+        </div>
+      </section>
+
+      <aside class="panel gis-result">
+        <h2>分析結果と来歴</h2>
+        <div id="gis-result" class="gis-result-body">
+          <p class="gis-empty">質問すると、実行した Workflow・各ステップの検証・CRS・単位・出典がここに表示されます。</p>
+        </div>
+      </aside>
+    </main>
+
     <script type="module" src="app.js"></script>
+    <script type="module" src="gis.js"></script>
   </body>
 </html>

@@ -1,13 +1,13 @@
 {
   "schema_version": "1.2.0",
-  "command_id": "8e1a967b-927b-454a-9c5f-1368644d2785",
+  "command_id": "7dff7076-aeac-4f8e-95e2-b3ce46de4188",
   "workflow_digest": "sha256:284bcf7d332e36e5fbe4c9dbac067b6dc67a67e423756abbeb1a1662f302fc16",
   "copc_digest": "sha256:090ee2b1287303ef5994d60f10fbae55a08ebed04a385f3ebf5da1731a6c80e2",
   "lod1_digest": "sha256:1683864d6b1af1e1613153b1242b800004ff665636714d15b555f3445ccf7848",
-  "build_digest": "sha256:6574525b72e5ad416a4a1b35f1ce179381aae38fc55701de7d002aec32659f58",
-  "executable_digest": "sha256:6e766a41c852a7190fc749363fe63999ce02ab603f1382eab9e209411d3ac4cf",
+  "build_digest": "sha256:ecc7207be170b9415307d1bb7d6f1210dcf805822c77ba2f004eaef78d8c3e15",
+  "executable_digest": "sha256:dacfcf3e3eb1b79589e466839eb0ed514fa34bcf049c4bfa88307a68acfd6ea8",
   "build_profile": "release",
-  "observed_at": "2026-09-25T14:08:10.141402100+00:00",
+  "observed_at": "2026-08-26T23:17:58.241407100+00:00",
   "os": "windows-x86_64",
   "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
   "crs": "EPSG:6675",
@@ -15,18 +15,18 @@
   "vertical_unit": "metres",
   "benchmark": {
     "adapter": "NVIDIA GeForce GTX 1660 Ti",
-    "backend": "vulkan",
+    "backend": "dx12",
     "upload_bytes": 1147604,
-    "upload_ns": 38468400,
+    "upload_ns": 39634300,
     "point_count": 40949,
     "building_count": 3,
-    "first_frame_ns": 1177837800,
+    "first_frame_ns": 1534415500,
     "measured_frames": 120,
-    "steady_state_fps": 627.599963599202
+    "steady_state_fps": 619.5559745589665
   },
   "first_frame_seconds_maximum": 2.0,
   "steady_state_fps_minimum": 30.0,
   "verdict": "pass",
   "regressions": [],
-  "receipt_digest": "sha256:47bc878900ebc5b51bb50049f700ba96e6474bcf2c7055fba628230bbc18efce"
+  "receipt_digest": "sha256:fe5b26cb86cb29bbbfb59ba9bac1fde4bb185b4322356e886c8113d3bc1092b3"
 }

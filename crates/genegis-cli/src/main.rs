@@ -1,5 +1,7 @@
 //! GeneGIS CLI — Phase 1: ask, workflow run, execute, export.
 
+mod gis_cmd;
+
 use genegis_agent::{
     build_audit_bundle, get_agent_run, list_agent_runs, pull_latest_agent_run, push_agent_run,
     AgentOrchestrator, AgentRole, AgentRun, AgentRunConfig, AuditCollabSnapshot,
@@ -47,6 +49,7 @@ fn main() {
             println!("genegis {}", env!("CARGO_PKG_VERSION"));
         }
         Some("ask") => handle_ask(&args[2..]),
+        Some("gis") => gis_cmd::handle_gis(&args[2..]),
         Some("bench") => handle_bench(&args[2..]),
         Some("storage") => handle_storage(&args[2..]),
         Some("raster") => handle_raster(&args[2..]),
@@ -3449,6 +3452,9 @@ Usage:
   genegis ask "..." --png                          Intent → execute + PNG map
   genegis ask "..." -o out.html                    Custom HTML output path
   genegis ask "..." -o out.png                     Custom PNG output path
+  genegis gis import <file> [--crs EPSG:…] [--out f]  Import any GeoJSON/CSV/Shapefile/GPKG/GeoParquet
+  genegis gis ask "..." --layer <file> …            Plan + verify a question over your own layers
+  genegis gis ops                                  List general-purpose GIS operations
   genegis bench [pipeline|render|all]              North-star performance benchmarks
   genegis bench pipeline --iterations 20 --json    JSON benchmark report
   genegis bench equivalence --json                 Native/DuckDB/GDAL 20+ case corpus

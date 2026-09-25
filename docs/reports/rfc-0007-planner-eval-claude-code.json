@@ -1,0 +1,364 @@
+{
+  "schema_version": "1.0.0",
+  "evaluation": "rfc-0007-planner",
+  "mode": "mcp-agent",
+  "agent": "claude-code 2.1.282 (Claude Code)",
+  "models": [
+    "claude-opus-5-5"
+  ],
+  "observed_at": "2026-09-25T15:10:54.921019+00:00",
+  "correct": 15,
+  "total": 17,
+  "held_out_correct": 3,
+  "held_out_total": 5,
+  "criteria": "the last verified analysis the agent stored matches a hand-written ground-truth plan within 0.5 %; refusal cases must produce no analysis; the agent's prose is not scored",
+  "cases": [
+    {
+      "analyses": 1,
+      "detail": "shelter_count matches truth [2.0]",
+      "held_out": false,
+      "prompt": "駅から500m以内の避難所を数えて",
+      "rules_expected": true,
+      "steps": [
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え: 2か所です。** サンプルの避難所32か所のうち、どれかの主要駅から500m以内にあるのは2か所でした。\n\n- **手順:** 主要駅8駅のどれか1つから500m以内にある避難所を選び（UTM 53Nのメートル単位で計算）、その件数を1行に集計しました。1つの避難所は、近くに駅が複数あっても1回だけ数えています。\n- **検証:** 別の方法で選び直した結果と照合し、食い違いは0件でした。集計の前後で件数が変わらないことも確認済みです。\n- **出力レイヤ:** `lyr_95d0f3d87c54`（1行、`shelter_count = 2`）\n- **workflow digest:** `sha256:f46c024351cb1b698997a7baff85cc5d294003c43e4ce3825c7e24daa5b947c5`\n\n避難所は合成サンプル、駅の位置はおおよその座標なので、実際の件数ではなくこのサンプルデータでの結果です。",
+      "turns": 5,
+      "duration_s": 40.6,
+      "cost_usd": 0.13894420000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "population_within_1km matches truth [31577.146487470658]",
+      "held_out": false,
+      "prompt": "この点から1km以内の人口は？",
+      "rules_expected": true,
+      "steps": [
+        "make_points",
+        "buffer",
+        "spatial_join"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：約31,577人**（クリック地点 経度136.9066・緯度35.1815 から半径1km以内の推計人口）\n\n**求め方**\n1. クリック地点を点データにしました（EPSG:4326）。\n2. その点を中心に半径1,000mの円を作りました（UTM 53N 上で計算）。\n3. 区ごとの人口（令和2年国勢調査）を、円と重なる面積の割合で配分し、合計しました。円と重なる区は4区でした。\n\n**検証**\n- 円の面積と理論値πr²の差は0.64%で、許容範囲内です。\n- 重なる区の数は、別の方法で数え直しても4区で一致しました。\n- 配分した人口は元データの合計（2,332,176人）を超えていません。\n\n**注意点**\n- 区の中では人口が均一に分布していると仮定した推計値です。\n- 元データは区単位なので、町丁目単位の実際の分布とはずれる可能性があります。\n\n- 出力レイヤ：`lyr_c6ea1f1f6d65`（1行、`population_within_1km` = 31,577.15 人）\n- workflow digest：`sha256:7179a53ac798208413ebd1d97fb8920d3481f09029a18100c51e7d8d28dd6686`\n- 出典：国土数値情報 N03 / 名古屋市 令和2年国勢調査（政府標準利用規約 2.0）",
+      "turns": 5,
+      "duration_s": 51.3,
+      "cost_usd": 0.1500104,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "store_count matches truth [0.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 6.0, 6.0, 6.0, 6.0, 8.0, 8.0, 10.0, 10.0, 12.0]",
+      "held_out": false,
+      "prompt": "区ごとの店舗数",
+      "rules_expected": true,
+      "steps": [
+        "spatial_join"
+      ],
+      "verdict": "correct",
+      "agent_answer": "区界ポリゴンに店舗の点を空間結合して数えた、区ごとの店舗数です。独立したチェックも通っています。\n\n| 区 | 店舗数 |\n|---|---|\n| 中区 | 12 |\n| 東区 | 10 |\n| 昭和区 | 10 |\n| 瑞穂区 | 8 |\n| 熱田区 | 8 |\n| 千種区 | 6 |\n| 北区 | 6 |\n| 西区 | 6 |\n| 中村区 | 6 |\n| 中川区 | 4 |\n| 港区 | 4 |\n| 南区 | 4 |\n| 緑区 | 4 |\n| 名東区 | 4 |\n| 天白区 | 4 |\n| 守山区 | 0 |\n| **合計** | **96** |\n\n- **対象：** 「店舗・施設（サンプル）」レイヤの全件を、カテゴリで絞らずに店舗として数えました。このデータは合成サンプルです。\n- **区の外の4件：** レイヤには100件ありますが、どの区界にも入っていない4件は集計に含まれていません。そのため合計は96件です。\n\n出力レイヤは `lyr_55796b086b24` で、1行が1区の16行です。workflow digest は `sha256:7d19ee939728bec14c31ac5c105edbbe9d01e9fee3536fce8ab76d6269e12383` です。",
+      "turns": 5,
+      "duration_s": 68.9,
+      "cost_usd": 0.20406980000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "pop_density matches truth [3145.870661962837, 5192.950191388889, 6564.796419519648, 6893.831297959304, 7285.367920230391, 7636.665767120418, 8170.0590796424385, 8427.936049255582, 8474.50966234137, 8504.348946735752, 9087.110486657328, 9296.569231378504, 9656.04245290574, 9832.608549631563, 9924.435869451176, 10949.29430258553]",
+      "held_out": false,
+      "prompt": "区の人口密度",
+      "rules_expected": true,
+      "steps": [
+        "measure",
+        "calculate"
+      ],
+      "verdict": "correct",
+      "agent_answer": "名古屋市16区の人口密度を計算しました。人口は令和2年国勢調査の確定値、面積は区界ポリゴンから計った楕円体面積（km²）です。人口密度が最も高いのは**東区（約10,949人/km²）**、最も低いのは**港区（約3,146人/km²）**でした。\n\n| 順位 | 区 | 人口（人） | 面積（km²） | 人口密度（人/km²） |\n|---|---|---:|---:|---:|\n| 1 | 東区 | 84,392 | 7.71 | 10,949 |\n| 2 | 中区 | 93,100 | 9.38 | 9,924 |\n| 3 | 昭和区 | 107,599 | 10.94 | 9,833 |\n| 4 | 瑞穂区 | 108,332 | 11.22 | 9,656 |\n| 5 | 北区 | 162,956 | 17.53 | 9,297 |\n| 6 | 千種区 | 165,245 | 18.18 | 9,087 |\n| 7 | 中村区 | 138,599 | 16.30 | 8,504 |\n| 8 | 名東区 | 164,755 | 19.44 | 8,475 |\n| 9 | 西区 | 151,082 | 17.93 | 8,428 |\n| 10 | 熱田区 | 66,957 | 8.20 | 8,170 |\n| 11 | 天白区 | 164,817 | 21.58 | 7,6",
+      "turns": 5,
+      "duration_s": 63.0,
+      "cost_usd": 0.21947160000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "shelter_count matches truth [0.0]",
+      "held_out": false,
+      "prompt": "浸水想定区域の中にある避難所の収容人数の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え: 0人です。** 浸水想定区域の中にある避難所は、32か所のうち1か所もありません。\n\n| 項目 | 値 |\n|---|---|\n| 区域内の避難所の数 | 0か所（全32か所中） |\n| 収容人数の合計 | 0人 |\n\n**手順**\n1. 浸水想定区域の6区域のうち4区域は形状が壊れていて、そのままでは分析に使えませんでした。先に修復してから使いました。修復で面積が最大で約31%変わった区域があります。\n2. 避難所のうち、区域の中にあるものを選びました。区域の境界上にあるものも含める条件で試しても、結果は同じ0か所でした。\n3. 選んだ避難所の収容人数を合計しました。\n\nどの手順も、別の計算方法による確認に通っています。避難所と浸水想定区域はどちらも合成サンプルデータなので、実際の名古屋の状況を示すものではありません。\n\n- 最後に実行した計画の出力レイヤ: `lyr_37f7f90bb5ad`（1行: `total_capacity=0`, `shelter_count=0`）\n- workflow digest: `sha256:f2782682c4c7c202ce05d786a636d3009c9718bd55cc0fe6cf4f62e411bc793a`",
+      "turns": 7,
+      "duration_s": 60.4,
+      "cost_usd": 0.1906248,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false,
+      "rerun_reason": "re-run after select_by_location/distance_to_nearest began rejecting invalid polygons; the first run selected against unrepaired flood zones"
+    },
+    {
+      "analyses": 2,
+      "detail": "shelter_count matches truth [32.0]",
+      "held_out": false,
+      "prompt": "浸水想定区域の外にある避難所はいくつ？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：浸水想定区域の外にある避難所は 32 か所です。** サンプルの避難所は全部で32か所なので、すべてが区域の外にあります。区域内にある避難所は0か所です。\n\n**手順**\n1. 浸水想定区域レイヤの6ポリゴンのうち4つが不正な形状だったため、最初の実行はエラーで止まりました。`make_valid` で修復しました。\n2. 避難所のうち、浸水想定区域と重ならないもの（`disjoint`）を選びました。\n3. その件数を数え、1行の結果にしました（`shelter_count = 32`）。\n\n**確かめたこと**\n- 各ステップの自動チェックはすべて通り、別の方法で数えた結果とも食い違いはありませんでした。\n- 逆に「区域と重なる避難所」も数えたところ0か所で、0 + 32 = 32 になり全件と一致します。\n- 最後の実行の出力レイヤ `lyr_cfeb0feef34a` がこの答えです。workflow digest は `sha256:41c39e4fad1aebdcb794cb0eca98c8b699b802ccd8ba9ae226ced9f14e3fd1f6` です。\n\n**注意点**\n- 形状の修復で、ポリゴンの面積が最大で約31%変わりました。自己交差していた部分の数え方が変わったためです。今回の結果は、この修復後の形で判定しています。\n- 同じ修復を3回",
+      "turns": 8,
+      "duration_s": 66.1,
+      "cost_usd": 0.2162064,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false,
+      "rerun_reason": "re-run after select_by_location/distance_to_nearest began rejecting invalid polygons; the first run selected against unrepaired flood zones"
+    },
+    {
+      "analyses": 1,
+      "detail": "ward_count matches truth [8.0]",
+      "held_out": false,
+      "prompt": "人口が15万人以上の区はいくつある？",
+      "rules_expected": false,
+      "steps": [
+        "filter",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "名古屋市の16区のうち、人口が15万人以上の区は**8区**です。人口は令和2年国勢調査の値です。\n\n- 手順：`population >= 150000` で区界レイヤを絞り込み、残った区を数えて1行にまとめました。\n- 検証：条件に合う8区と合わない8区を足すと全16区になり、集計でも8区すべてが数えられていることを確認しました。\n- 出力レイヤ：`lyr_ac22b9ff80fd`（`ward_count = 8`、1行）\n- workflow digest：`sha256:8c8e85b9504b021f4dc28c3f04cb0b5a7c16f1963215ed152fd0ade4f60720fa`",
+      "turns": 5,
+      "duration_s": 40.3,
+      "cost_usd": 0.1354328,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "mean_distance_m matches truth [278.42749999999995]",
+      "held_out": false,
+      "prompt": "店舗から最寄りの避難所までの平均距離は何メートル？",
+      "rules_expected": false,
+      "steps": [
+        "distance_to_nearest",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：約278メートル（278.43 m）**です。\n\n- **対象：** 店舗・施設レイヤの全100件。避難所は32件あります。\n- **計算方法：** 店舗ごとに最寄りの避難所までの距離を測り、その平均をとりました。距離はUTM 53N（EPSG:32653）で計算しています。\n- **検証：** 100件すべての距離を測地線で測り直し、差は最大でも0.0055%でした。集計でも100件すべてが使われていることを確認済みです。\n- **出力レイヤ：** `lyr_79b2172558e7`（1行）\n- **ワークフローダイジェスト：** `sha256:8ddc7dfa31b3094469c32d3352b7725e52c2fc8a32331a3fe945756a185d0871`\n\n店舗と避難所はどちらも合成サンプルデータなので、実際の名古屋の値ではありません。距離は直線距離で、道のりではありません。",
+      "turns": 5,
+      "duration_s": 41.4,
+      "cost_usd": 0.13989880000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "area_ha matches truth [770.7528692517832, 819.5411972826317, 938.0885848290384, 1094.3077765872397, 1121.9089034493654, 1629.742627778683, 1752.8616841789144, 1792.633440940083, 1818.4548349294364, 1846.3034602066643, 1944.124280513014, 2158.2324672322025, 3201.818995271024, 3400.514033291173, 3789.9423546511903, 4568.36963253697]",
+      "held_out": false,
+      "prompt": "各区の面積をヘクタールで出して",
+      "rules_expected": false,
+      "steps": [
+        "measure"
+      ],
+      "verdict": "correct",
+      "agent_answer": "名古屋市16区の面積をヘクタールで計算しました。区界ポリゴンからWGS84楕円体上の測地線面積として求めています。別の方法（UTM 53N での平面面積）でも計算して照合し、差は最大0.0104%で検証を通過しました。\n\n| 区 | 面積 (ha) |\n|---|---:|\n| 千種区 | 1,818.5 |\n| 東区 | 770.8 |\n| 北区 | 1,752.9 |\n| 西区 | 1,792.6 |\n| 中村区 | 1,629.7 |\n| 中区 | 938.1 |\n| 昭和区 | 1,094.3 |\n| 瑞穂区 | 1,121.9 |\n| 熱田区 | 819.5 |\n| 中川区 | 3,201.8 |\n| 港区 | 4,568.4 |\n| 南区 | 1,846.3 |\n| 守山区 | 3,400.5 |\n| 緑区 | 3,789.9 |\n| 名東区 | 1,944.1 |\n| 天白区 | 2,158.2 |\n\n- いちばん広いのは港区（4,568.4 ha）、いちばん狭いのは東区（770.8 ha）です。\n- この値は国土数値情報 N03 の区界ポリゴンから計算したものです。市が公表している公式面積とは少し違うことがあります。\n- 出力レイヤは `lyr_620fada0e0b7` で、元の区界レイヤに `area_ha` の列を追加したものです。\n- workflow di",
+      "turns": 5,
+      "duration_s": 62.5,
+      "cost_usd": 0.20111800000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "store_count matches truth [12.0]",
+      "held_out": false,
+      "prompt": "栄駅から2km以内にある店舗の数",
+      "rules_expected": false,
+      "steps": [
+        "filter",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "栄駅から2km以内にある店舗は **12件** です（検証済み）。\n\n- **使ったデータ**: 栄駅の位置は「主要駅（サンプル）」レイヤ、店舗は「店舗・施設（サンプル）」レイヤ（全100件）です。\n- **計画**: 栄駅だけを抜き出し、そこから2km以内の地点を選んで、件数を1行に集計しました。距離はメートル単位の座標系（EPSG:32653）で計算しています。\n- **検証**: 各ステップの独立チェックはすべて通りました。別の方法で数え直した結果とも食い違いは0件でした。\n- **workflow digest**: `sha256:0560df3534078f6aedf4b179b0ec57b50a51bb3ed32d84a65ef46c43b8beb381`\n\n**注意:** このレイヤは「店舗・施設」で、スーパーのほかに診療所・学校・公園も含んでいます。12件はそれらを全部合わせた数です。スーパーだけの件数が必要なら、「category = 'supermarket'」で絞り込んでもう一度実行します。",
+      "turns": 7,
+      "duration_s": 45.2,
+      "cost_usd": 0.1802268,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "total_capacity matches truth [26400.0]",
+      "held_out": true,
+      "prompt": "浸水想定区域から1km以内にある避難所の収容人数の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：浸水想定区域から1km以内にある避難所の収容人数の合計は 26,400人です。** 対象の避難所は32か所中9か所です。\n\n**手順**\n1. 浸水想定区域の6ポリゴンのうち4つが不正な形状だったため、最初の実行はエラーになりました。修復処理（`make_valid`）を加えて4つとも直しました。\n2. 修復した区域から1km以内（区域の中も含む）にある避難所を選びました。距離は UTM 53N（EPSG:32653）に変換して計算しています。\n3. 選んだ避難所の `capacity` を合計しました。\n\n**検証**\n- 選択結果は別の方法でも確認し、確認した組み合わせでは食い違いは0件でした。ただし別の方法で確認できたのは一部の組み合わせだけです。\n- 集計前後で避難所の数は9件のまま変わっていません。\n- workflow digest: `sha256:54e5653ddaf123dd01af31640e4b7330e13d2266ed7efafe5ebaafad77602683`\n- 出力レイヤ: `lyr_090b3f30192d`（1行：total_capacity = 26400, shelter_count = 9）\n\n**注意点**\n- 修復で、あるポリゴンの面積が最大30.75%変わりました。形状が自分自身と重なっていた部分を1回だけ数えるようにし",
+      "turns": 6,
+      "duration_s": 56.6,
+      "cost_usd": 0.16964640000000003,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false,
+      "rerun_reason": "re-run after select_by_location/distance_to_nearest began rejecting invalid polygons; the first run selected against unrepaired flood zones"
+    },
+    {
+      "analyses": 1,
+      "detail": "store_count matches truth [0.0]",
+      "held_out": true,
+      "prompt": "避難所から1km以内にない店舗はいくつ？",
+      "rules_expected": false,
+      "steps": [
+        "distance_to_nearest",
+        "filter",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：0件です。** 避難所から1km以内にない店舗は1つもありません。\n\n**手順**\n1. `distance_to_nearest`：店舗・施設レイヤの100地点それぞれについて、いちばん近い避難所（32か所）までの距離を測りました。距離は測地線で測り直して照合し、誤差は最大0.0055%でした。\n2. `filter`：距離が1,000mを超える地点を抜き出しました。該当は0件で、残りの100件はすべて1km以内でした。\n3. `summarize`：件数を数えて1行にまとめました。結果は `store_count = 0` です。\n\n**補足**\n- このレイヤには店舗以外の施設も入っていますが、100地点すべてが1km以内なので、店舗だけに絞っても答えは0件のままです。\n- 「1km以内」は1,000mちょうども含むものとして数えました。\n- データはGeneGISの合成サンプル（CC0-1.0）です。\n- workflow digest: `sha256:64b532ba9a301e794dd40fa6fe0d4879d481414f8cd53c649b10af32bc575662`\n- 出力レイヤ: `lyr_bf7ba124cd1d`",
+      "turns": 5,
+      "duration_s": 58.8,
+      "cost_usd": 0.14468260000000002,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 1,
+      "detail": "no field matches truth [21.0]",
+      "held_out": true,
+      "prompt": "収容人数が3000人以上の避難所から500m以内にある店舗の数",
+      "rules_expected": false,
+      "steps": [
+        "filter",
+        "filter",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "wrong",
+      "agent_answer": "**答え: 5店舗**\n\n収容人数3000人以上の避難所から500m以内にある店舗は5件です。\n\n**前提:**\n- 「店舗・施設」レイヤには clinic、supermarket、park、school の4分類があります。このうち店舗にあたるのは supermarket（全28件）だけなので、これを店舗として数えました。診療所・公園・学校は含めていません。\n- 複数の避難所から500m以内にある店舗も、重複せず1件として数えています。\n\n**計算の流れ:**\n1. 避難所32か所から、収容人数3000人以上の8か所を選びました。\n2. 店舗・施設100件から、supermarket の28件を選びました。\n3. その28件のうち、8か所のいずれかから500m以内にある5件を選びました。距離は UTM 53N（EPSG:32653）で計算しています。\n4. 件数を数えて1行にまとめました（store_count = 5）。\n\n各ステップの検証チェックはすべて通過しました。距離判定は別の方法でも計算し、結果の食い違いは0件でした。\n\n- 出力レイヤ: `lyr_b60a922a7957`\n- workflow digest: `sha256:5c986080e065ae29273724d1c1a81ce09cb8fcd48d0f6c4dd1a76d54679924b7`\n\n店舗・施",
+      "turns": 6,
+      "duration_s": 50.2,
+      "cost_usd": 0.1704106,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false,
+      "reviewer_note": "ambiguous question: the layer is 店舗・施設 (supermarket, clinic, park, school); the agent counted only supermarkets as 店舗 and stated the assumption (5), the ground truth counts all facilities (21). Verdict kept as scored."
+    },
+    {
+      "analyses": 2,
+      "detail": "no field matches truth [0.0, 3200.0, 4200.0, 4400.0, 4600.0, 4800.0, 4800.0, 4800.0, 5200.0, 5200.0, 5200.0, 5600.0, 5800.0, 6000.0, 6800.0, 8400.0]",
+      "held_out": true,
+      "prompt": "区ごとの避難所の収容人数の合計",
+      "rules_expected": false,
+      "steps": [
+        "summarize"
+      ],
+      "verdict": "wrong",
+      "agent_answer": "名古屋市の区ごとの避難所収容人数の合計を出しました。16区すべてに2か所ずつ避難所があり、全32か所の合計は **87,200人** です。\n\n| 区 | 避難所数 | 収容人数の合計（人） |\n|---|---|---|\n| 中区 | 2 | 8,400 |\n| 緑区 | 2 | 6,800 |\n| 港区 | 2 | 6,400 |\n| 中川区 | 2 | 6,000 |\n| 天白区 | 2 | 5,800 |\n| 中村区 | 2 | 5,600 |\n| 千種区 | 2 | 5,200 |\n| 東区 | 2 | 5,200 |\n| 南区 | 2 | 5,200 |\n| 守山区 | 2 | 5,000 |\n| 西区 | 2 | 4,800 |\n| 昭和区 | 2 | 4,800 |\n| 名東区 | 2 | 4,800 |\n| 瑞穂区 | 2 | 4,600 |\n| 北区 | 2 | 4,400 |\n| 熱田区 | 2 | 4,200 |\n\n**集計方法:** 避難所レイヤの `ward_name`（区名）ごとに、`capacity`（収容人数）を合計しました。32か所すべてが集計に入っていることは確認済みです。\n- 出力レイヤ: `lyr_45251f1b6af0`\n- workflow digest: `sha256:045c7f5504595e9f7e2bb739ac00330",
+      "turns": 6,
+      "duration_s": 82.3,
+      "cost_usd": 0.2412768,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false,
+      "reviewer_note": "ambiguous question: the agent grouped by the shelters' ward_name attribute; the ground truth joins by location against N03 ward polygons, and three sample shelters lie just outside those polygons. Verdict kept as scored."
+    },
+    {
+      "analyses": 1,
+      "detail": "population_total matches truth [285091.0]",
+      "held_out": true,
+      "prompt": "店舗が10件以上ある区の人口の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "spatial_join",
+        "filter",
+        "summarize"
+      ],
+      "verdict": "correct",
+      "agent_answer": "**答え：店舗が10件以上ある区は3つで、その人口の合計は 285,091人（令和2年国勢調査）です。**\n\n計算の流れ：\n1. 区ごとに、区の中にある店舗の数を数えました（区界 × 店舗・施設、contains）。\n2. 店舗が10件以上の区だけを残しました。16区のうち3区です。\n3. 残った3区の `population` を合計しました。\n\n- どのステップもツール側の検証を通っています。\n- 店舗・施設100件のうち、どの区にも入らなかった4件は数えていません。区の外に位置しているためです。\n- 使った店舗データは合成サンプルです。\n- workflow digest：`sha256:a843371ed9f50d4976f522ae185bca571cd91e400745ab53f87cd83717924f63`\n- 出力レイヤ：`lyr_d264d4b940d3`（1行）",
+      "turns": 5,
+      "duration_s": 81.8,
+      "cost_usd": 0.14449019999999999,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 0,
+      "detail": "declined (no verified analysis)",
+      "held_out": false,
+      "prompt": "明日の名古屋の天気を教えて",
+      "rules_expected": true,
+      "steps": [],
+      "verdict": "correct",
+      "agent_answer": "この質問には答えられません。\n\n読み込まれているレイヤを確認しましたが、天気や気象予報のデータは入っていませんでした。\n\n- 名古屋市の区界と人口（令和2年国勢調査）：区名、人口など\n- 避難所（サンプル）：名称、種別、収容人数\n- 店舗・施設（サンプル）：カテゴリ、規模\n- 浸水想定区域（サンプル）：想定される浸水深、想定規模\n- 主要駅（サンプル）：駅名、路線、位置\n\nどれも静的な地理・統計データです。気温、降水、予報のような時間で変わる情報はありません。そのため run_plan は実行していません。\n\n明日の天気は、気象庁や天気予報サイトで確認してください。読み込まれたデータで答えられる質問にはお答えできます。たとえば「浸水想定区域内の人口」や「駅から500 m以内の避難所」などです。",
+      "turns": 3,
+      "duration_s": 41.5,
+      "cost_usd": 0.09863559999999999,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    },
+    {
+      "analyses": 0,
+      "detail": "declined (no verified analysis)",
+      "held_out": false,
+      "prompt": "東京タワーの高さは？",
+      "rules_expected": true,
+      "steps": [],
+      "verdict": "correct",
+      "agent_answer": "その質問には、読み込まれているデータでは答えられません。\n\n読み込まれているレイヤは次の5つで、どれも名古屋市内のものです。\n- 区界と人口：区名、人口など\n- 避難所：名前、収容人数など\n- 店舗・施設：カテゴリ、収容人数など\n- 浸水想定区域：想定浸水深など\n- 主要駅：駅名、路線、緯度・経度\n\n東京タワーは東京都港区にあるので、どのレイヤにも入っていません。また、建物の高さを持つフィールドもありません。そのため run_plan は実行していません。\n\n一般的な知識では東京タワーの高さは333 mですが、GeneGIS のデータで確認した値ではありません。",
+      "turns": 3,
+      "duration_s": 39.8,
+      "cost_usd": 0.0965316,
+      "models": [
+        "claude-opus-5-5"
+      ],
+      "agent_error": false
+    }
+  ],
+  "total_cost_usd": 2.8417,
+  "comparison_rule_report": "docs/reports/rfc-0007-planner-eval-rule.json"
+}

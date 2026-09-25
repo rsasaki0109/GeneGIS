@@ -150,6 +150,60 @@ walkable OSM highways, 4,218 real POIs (supermarket/clinic/school/park).
 UC-4 verifies in ~80 s and UC-1 in ~35 s (`--release`); both keep the
 same verifiers as the fixtures.
 
+## Bring your own data
+
+The **データ分析** view in the Workbench is a general-purpose GIS on the same
+verified pipeline ([RFC 0007](docs/rfcs/0007-core-gis-toolkit.md)):
+
+<p align="center">
+  <img src="docs/assets/gis-toolkit.png" alt="データ分析 view: a verified ward population-density choropleth with the executed workflow, per-step checks, units, and digests" width="960" />
+</p>
+
+- **Import** GeoJSON, CSV/TSV (lon/lat or WKT), zipped Shapefile (Shift_JIS
+  aware), GeoPackage, and GeoParquet. The CRS is read from the file or
+  inferred and flagged; if it cannot be known, GeneGIS asks instead of
+  guessing.
+- **Analyse** with 17 operations — buffer, clip, erase, intersect, dissolve,
+  spatial join (including area-weighted population), select by location,
+  nearest distance, reproject, measure, filter, calculate, summarize, and
+  more. Every operation needs explicit units, runs metric work in a metric
+  CRS, and returns independent checks. A failed check rejects the result.
+- **Ask** in plain language. The rule planner works offline, and an LLM
+  planner can compose any graph from the catalog. Either way, the plan is
+  validated and executed through Command + Workflow Graph.
+- **Go anywhere**: resolve place boundaries (OpenStreetMap) or points
+  (国土地理院) by name.
+- **Inspect**: click features on the map, filter and sort the attribute
+  table, and colour layers by natural breaks, quantiles, equal intervals, or
+  categories.
+- **Export** GeoJSON, CSV, GeoPackage, GeoParquet, or a PDF map with legend,
+  scale bar, CRS, sources, and digests.
+
+| Question | Plan |
+|---|---|
+| 「駅から500m以内の避難所を数えて」 | `select_by_location` → `summarize` |
+| 「この点から1km以内の人口は？」 | `make_points` → `buffer` → `spatial_join` (area-weighted) |
+| 「区ごとの店舗数」 | `spatial_join` (count) |
+| 「区の人口密度」 | `measure` (geodesic km²) → `calculate` (persons/km²) |
+| 「駅から徒歩10分以内の店舗」 | 800 m (80 m/min, stated as an assumption) → `select_by_location` |
+
+### From Claude Code (MCP)
+
+The repository ships an MCP server, `genegis-mcp`, registered in `.mcp.json`.
+Open the repo in Claude Code, approve the `genegis` server, and ask:
+
+```text
+名古屋のサンプルを読み込んで、浸水想定区域から1km以内にある避難所の収容人数の合計を出して
+```
+
+Claude plans the workflow; GeneGIS validates it, runs it through Command +
+Workflow Graph, and verifies every step. If a plan is wrong (missing unit,
+invalid polygons, failed check) the tool returns the reason and Claude fixes
+the plan. Results land in the same layer store as the Workbench.
+[Planner evaluation](docs/reports/rfc-0007-planner-eval-claude-code.json):
+the same 17 questions scored against hand-written ground truth, rule planner
+vs. Claude Code over MCP.
+
 ## Why it is different
 
 - Every operation flows through Command + Workflow Graph.
@@ -161,6 +215,9 @@ same verifiers as the fixtures.
 ## Run
 
 ```bash
+# Workbench with the データ分析 view (http://127.0.0.1:7812/?view=gis)
+cargo run -p genegis-workbench
+
 # Prompt → verified map
 cargo run -p genegis-cli -- ask "名古屋市の人口密度を表示"
 
@@ -205,6 +262,7 @@ Core: Rust · UI: TypeScript/Tauri · plugins: Python/WASM · analytics: DuckDB
 - [Architecture](docs/architecture/overview.md)
 - [Master RFC](docs/rfcs/0001-master-architecture.md)
 - [Proof-carrying analysis](docs/rfcs/0003-proof-carrying-spatial-analysis.md)
+- [Core GIS toolkit](docs/rfcs/0007-core-gis-toolkit.md)
 - [Long-term roadmap](docs/roadmap/long-term-product-roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
