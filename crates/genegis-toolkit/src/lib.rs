@@ -14,6 +14,7 @@ pub mod geojson_io;
 pub mod geoparquet_io;
 pub mod gpkg_io;
 pub mod import;
+pub mod index;
 pub mod layer;
 pub mod ops;
 pub mod place;

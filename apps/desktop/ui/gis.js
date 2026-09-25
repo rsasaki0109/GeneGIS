@@ -202,20 +202,45 @@ function geometryParts(geometry, origin) {
   }
 }
 
+function coordinateBox(geometry, box = [Infinity, Infinity, -Infinity, -Infinity]) {
+  if (!geometry) return box;
+  if (geometry.type === "GeometryCollection") {
+    for (const g of geometry.geometries) coordinateBox(g, box);
+    return box;
+  }
+  const visit = (value) => {
+    if (typeof value[0] === "number") {
+      box[0] = Math.min(box[0], value[0]);
+      box[1] = Math.min(box[1], value[1]);
+      box[2] = Math.max(box[2], value[0]);
+      box[3] = Math.max(box[3], value[1]);
+    } else {
+      for (const v of value) visit(v);
+    }
+  };
+  visit(geometry.coordinates);
+  return box;
+}
+
 async function loadGeometry(id) {
   if (state.geo.has(id)) return state.geo.get(id);
   const response = await fetch(`/api/gis/layers/${encodeURIComponent(id)}/geojson`);
   if (!response.ok) throw new Error(`geometry ${id}: HTTP ${response.status}`);
+  const tolerance = Number(response.headers.get("x-genegis-display-tolerance-deg") || 0);
   const geojson = await response.json();
   const summary = layerById(id);
   const bbox = summary?.bbox_wgs84;
   const origin = bbox ? worldXY(bbox[0], bbox[3], BASE_ZOOM) : [0, 0];
-  const features = geojson.features.map((feature) => ({
-    id: feature.properties.__id,
-    properties: feature.properties,
-    ...geometryParts(feature.geometry, origin),
-  }));
-  const entry = { origin, features };
+  const features = geojson.features.map((feature) => {
+    const parts = geometryParts(feature.geometry, origin);
+    return {
+      id: feature.properties.__id,
+      ...parts,
+      path: parts.d ? new Path2D(parts.d) : null,
+      box: coordinateBox(feature.geometry),
+    };
+  });
+  const entry = { origin, features, simplified: tolerance > 0 ? tolerance : null };
   state.geo.set(id, entry);
   return entry;
 }
@@ -279,6 +304,21 @@ function drawMap() {
   drawTiles(tiles, w, h, cx, cy);
   svg.append(tiles);
 
+  // Features are drawn on a canvas: Path2D objects are built once per layer
+  // in base-zoom coordinates and re-used for every pan/zoom frame.
+  const canvas = $("gis-canvas");
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const [west, north] = screenToLonLat(0, 0);
+  const [east, south] = screenToLonLat(w, h);
+  const visibleBox = (box) => box[0] <= east && box[2] >= west && box[1] <= north && box[3] >= south;
+
   const zoomScale = 2 ** (state.view.zoom - BASE_ZOOM);
   state.layers.forEach((summary, index) => {
     if (!state.visible.get(summary.id)) return;
@@ -288,51 +328,85 @@ function drawMap() {
       return;
     }
     const color = layerColor(summary, index);
+    const classified = !!summary.style?.classification;
     const [ox, oy] = [entry.origin[0] * zoomScale - cx + w / 2, entry.origin[1] * zoomScale - cy + h / 2];
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("transform", `translate(${ox.toFixed(2)} ${oy.toFixed(2)}) scale(${zoomScale})`);
-    const points = document.createElementNS(SVG_NS, "g");
+    ctx.setTransform(zoomScale * dpr, 0, 0, zoomScale * dpr, ox * dpr, oy * dpr);
+    const unit = 1 / zoomScale; // one CSS pixel in local coordinates
+    const points = [];
     for (const feature of entry.features) {
+      if (!visibleBox(feature.box)) continue;
       const fill = classColor(summary, feature.id) || color;
       const highlighted = state.highlight?.layerId === summary.id && state.highlight?.featureId === feature.id;
-      if (feature.d) {
-        const path = document.createElementNS(SVG_NS, "path");
-        path.setAttribute("d", feature.d);
-        path.setAttribute("vector-effect", "non-scaling-stroke");
-        path.setAttribute("fill-rule", "evenodd");
+      if (feature.path) {
         if (feature.area) {
-          path.setAttribute("fill", fill);
-          path.setAttribute("fill-opacity", summary.style?.classification ? "0.78" : "0.35");
-          path.setAttribute("stroke", highlighted ? "#ffeb3b" : summary.style?.classification ? "#333" : color);
-          path.setAttribute("stroke-width", highlighted ? "3" : "1");
+          ctx.globalAlpha = classified ? 0.78 : 0.35;
+          ctx.fillStyle = fill;
+          ctx.fill(feature.path, "evenodd");
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = highlighted ? "#ffeb3b" : classified ? "#333" : color;
+          ctx.lineWidth = (highlighted ? 3 : 1) * unit;
         } else {
-          path.setAttribute("fill", "none");
-          path.setAttribute("stroke", highlighted ? "#ffeb3b" : fill);
-          path.setAttribute("stroke-width", highlighted ? "4" : "2");
+          ctx.strokeStyle = highlighted ? "#ffeb3b" : fill;
+          ctx.lineWidth = (highlighted ? 4 : 2) * unit;
         }
-        group.append(path);
+        ctx.stroke(feature.path);
       }
-      for (const [lon, lat] of feature.points) {
-        const [x, y] = worldXY(lon, lat, state.view.zoom);
-        const circle = document.createElementNS(SVG_NS, "circle");
-        circle.setAttribute("cx", (x - cx + w / 2).toFixed(1));
-        circle.setAttribute("cy", (y - cy + h / 2).toFixed(1));
-        circle.setAttribute("r", highlighted ? "7" : "4.5");
-        circle.setAttribute("fill", fill);
-        circle.setAttribute("stroke", highlighted ? "#ffeb3b" : "#fff");
-        circle.setAttribute("stroke-width", highlighted ? "2.5" : "1.2");
-        points.append(circle);
+      for (const point of feature.points) points.push([point, fill, highlighted]);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Batch points per colour into one path: one fill (and one outline for
+    // small layers) instead of a draw call per point.
+    const dense = points.length > 5000;
+    const radius = dense ? 2.5 : 4.5;
+    const batches = new Map();
+    const highlightedPoints = [];
+    for (const [[lon, lat], fill, highlighted] of points) {
+      const [x, y] = worldXY(lon, lat, state.view.zoom);
+      const sx = x - cx + w / 2;
+      const sy = y - cy + h / 2;
+      if (highlighted) {
+        highlightedPoints.push([sx, sy, fill]);
+        continue;
+      }
+      if (!batches.has(fill)) batches.set(fill, new Path2D());
+      const path = batches.get(fill);
+      path.moveTo(sx + radius, sy);
+      path.arc(sx, sy, radius, 0, Math.PI * 2);
+    }
+    for (const [fill, path] of batches) {
+      ctx.fillStyle = fill;
+      ctx.fill(path);
+      if (!dense) {
+        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke(path);
       }
     }
-    svg.append(group, points);
+    for (const [sx, sy, fill] of highlightedPoints) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#ffeb3b";
+      ctx.stroke();
+    }
   });
 
   if (state.clickPoint) {
     const [x, y] = worldXY(state.clickPoint[0], state.clickPoint[1], state.view.zoom);
-    const marker = document.createElementNS(SVG_NS, "g");
-    marker.setAttribute("transform", `translate(${(x - cx + w / 2).toFixed(1)} ${(y - cy + h / 2).toFixed(1)})`);
-    marker.innerHTML = '<circle r="9" fill="none" stroke="#111" stroke-width="3"/><circle r="9" fill="none" stroke="#fff" stroke-width="1.5"/><circle r="2.5" fill="#111"/>';
-    svg.append(marker);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    for (const [width, colour] of [[3, "#111"], [1.5, "#fff"]]) {
+      ctx.beginPath();
+      ctx.arc(x - cx + w / 2, y - cy + h / 2, 9, 0, Math.PI * 2);
+      ctx.lineWidth = width;
+      ctx.strokeStyle = colour;
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(x - cx + w / 2, y - cy + h / 2, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#111";
+    ctx.fill();
   }
 
   drawLegend();
@@ -374,6 +448,8 @@ function drawAttribution() {
     node.append(el("a", { href: "https://maps.gsi.go.jp/development/ichiran.html", target: "_blank", rel: "noopener" }, "地理院タイル"));
   }
   if (sources.size) node.append(` | ${[...sources].join(" | ")}`);
+  const simplified = state.layers.filter((l) => state.visible.get(l.id) && state.geo.get(l.id)?.simplified);
+  if (simplified.length) node.append(" | 表示用に簡略化（計算は元の形状）");
 }
 
 function methodLabel(method) {
@@ -896,24 +972,17 @@ async function selectFeature(layer, featureId) {
   state.visible.set(layer.id, true);
   const entry = await loadGeometry(layer.id);
   const feature = entry.features.find((f) => f.id === featureId);
-  const geometryBox = feature ? featureBox(feature, entry.origin) : null;
+  const geometryBox = feature ? featureBox(feature) : null;
   if (geometryBox) fitBounds(geometryBox);
   loadTable();
   render();
 }
 
-function featureBox(feature, origin) {
-  const coords = [...feature.points];
-  const regex = /[ML](-?[\d.]+) (-?[\d.]+)/g;
-  let match;
-  while ((match = regex.exec(feature.d))) {
-    coords.push(lonLat(Number(match[1]) + origin[0], Number(match[2]) + origin[1], BASE_ZOOM));
-  }
-  if (!coords.length) return null;
-  const lons = coords.map((c) => c[0]);
-  const lats = coords.map((c) => c[1]);
+function featureBox(feature) {
+  const box = feature.box;
+  if (!box || !Number.isFinite(box[0])) return null;
   const pad = 0.002;
-  return [Math.min(...lons) - pad, Math.min(...lats) - pad, Math.max(...lons) + pad, Math.max(...lats) + pad];
+  return [box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad];
 }
 
 function setupTable() {

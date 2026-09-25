@@ -21,6 +21,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Result, ToolkitError};
 use crate::expr;
+use crate::index::GridIndex;
 use crate::layer::{CrsStatus, Feature, Layer};
 use crate::proj::{self, AxisUnit, CrsInfo, Projection};
 use crate::table::with_nulls;
@@ -1388,6 +1389,7 @@ fn spatial_join(target: &Layer, join: &Layer, params: &Value) -> Result<OpOutput
     let target_m = target.reprojected(&work)?;
     let join_m = join.reprojected(&work)?;
     let joins = index_layer(&join_m);
+    let join_grid = GridIndex::build(joins.iter().map(|j| j.bbox).collect(), 4);
     if area_weighted && joins.iter().any(|j| polygonal(&j.geometry).is_none()) {
         return Err(ToolkitError::parameter(
             "spatial_join",
@@ -1424,10 +1426,8 @@ fn spatial_join(target: &Layer, join: &Layer, params: &Value) -> Result<OpOutput
             if let Some(p) = &target_poly {
                 target_polys.push(p.clone());
             }
-            for (j, candidate) in joins.iter().enumerate() {
-                if !bbox_overlap(&bbox, &candidate.bbox, pad) {
-                    continue;
-                }
+            for j in join_grid.query(bbox, pad) {
+                let candidate = &joins[j];
                 let hit = predicate_holds(predicate, geometry, &candidate.geometry);
                 match predicate_independent(predicate, geometry, &candidate.geometry) {
                     Some(true) => independent_matches += 1,
@@ -1557,6 +1557,10 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
     let layer_m = layer.reprojected(&work)?;
     let other_m = other.reprojected(&work)?;
     let others = index_layer(&other_m);
+    let other_grid = GridIndex::build(others.iter().map(|o| o.bbox).collect(), 4);
+    let others_all_points = others
+        .iter()
+        .all(|o| matches!(o.geometry, Geometry::Point(_)));
     let pad = match predicate {
         Predicate::WithinDistance(d) => d,
         _ => 0.0,
@@ -1571,14 +1575,13 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
         let Some(bbox) = bbox_of(geometry) else {
             continue;
         };
-        let candidates: Vec<&Indexed> = if predicate == Predicate::Disjoint {
-            others.iter().collect()
-        } else {
-            others
-                .iter()
-                .filter(|o| bbox_overlap(&bbox, &o.bbox, pad))
-                .collect()
-        };
+        // Features whose boxes do not overlap cannot intersect, so disjoint
+        // only needs to rule out the overlapping candidates too.
+        let candidates: Vec<&Indexed> = other_grid
+            .query(bbox, pad)
+            .into_iter()
+            .map(|i| &others[i])
+            .collect();
         let hit = if predicate == Predicate::Disjoint {
             candidates.iter().all(|o| !o.geometry.intersects(geometry))
         } else {
@@ -1589,20 +1592,20 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
         // Independent verification.
         let independent: Option<bool> = match predicate {
             Predicate::WithinDistance(d) => match geometry {
-                Geometry::Point(pt) => {
+                Geometry::Point(pt) if others_all_points => {
                     let lonlat = proj::to_geographic(&work, pt.x(), pt.y())?;
                     let mut best = f64::INFINITY;
-                    let mut available = true;
-                    for o in &others {
-                        match &o.geometry {
-                            Geometry::Point(q) => {
-                                let q = proj::to_geographic(&work, q.x(), q.y())?;
-                                best = best.min(Geodesic.distance(
-                                    Point::new(lonlat.0, lonlat.1),
-                                    Point::new(q.0, q.1),
-                                ));
-                            }
-                            _ => available = false,
+                    let available = true;
+                    // Geodesic re-measurement of every point within a
+                    // slightly wider box; anything outside it is farther
+                    // than the threshold in both metrics.
+                    for i in other_grid.query(bbox, d * 1.01 + 1.0) {
+                        if let Geometry::Point(q) = &others[i].geometry {
+                            let q = proj::to_geographic(&work, q.x(), q.y())?;
+                            best = best.min(
+                                Geodesic
+                                    .distance(Point::new(lonlat.0, lonlat.1), Point::new(q.0, q.1)),
+                            );
                         }
                     }
                     // Geodesic vs projected distances differ by the UTM scale
@@ -1688,6 +1691,7 @@ fn distance_to_nearest(layer: &Layer, target: &Layer, params: &Value) -> Result<
     let layer_m = layer.reprojected(&work)?;
     let target_m = target.reprojected(&work)?;
     let targets = index_layer(&target_m);
+    let target_grid = GridIndex::build(targets.iter().map(|t| t.bbox).collect(), 2);
     if targets.is_empty() {
         return Err(ToolkitError::parameter(
             "distance_to_nearest",
@@ -1704,14 +1708,22 @@ fn distance_to_nearest(layer: &Layer, target: &Layer, params: &Value) -> Result<
         let Some(geometry) = &feature.geometry else {
             continue;
         };
-        let mut best: Option<(f64, &Indexed)> = None;
-        for t in &targets {
-            let d = Euclidean.distance(geometry, &t.geometry);
-            if best.is_none_or(|(b, _)| d < b) {
-                best = Some((d, t));
-            }
-        }
-        let (distance, nearest) = best.expect("targets is non-empty");
+        let (best_index, distance) = match geometry {
+            // Points: ring search on the grid with exact distances.
+            Geometry::Point(p) => target_grid
+                .nearest((p.x(), p.y()), |i| {
+                    Euclidean.distance(geometry, &targets[i].geometry)
+                })
+                .expect("targets is non-empty"),
+            // Extended geometries: exact scan (the ring bound assumes a point).
+            _ => targets
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i, Euclidean.distance(geometry, &t.geometry)))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .expect("targets is non-empty"),
+        };
+        let nearest = &targets[best_index];
         if let (Geometry::Point(a), Geometry::Point(b)) = (geometry, &nearest.geometry) {
             let a = proj::to_geographic(&work, a.x(), a.y())?;
             let b = proj::to_geographic(&work, b.x(), b.y())?;
