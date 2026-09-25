@@ -7,6 +7,7 @@
 //! parameters, so the same graph always yields the same layer digest.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use geo::{
     Area, BooleanOps, BoundingRect, Buffer, Centroid, Distance, Euclidean, Geodesic, GeodesicArea,
@@ -104,6 +105,28 @@ pub fn catalog() -> Vec<OperationSpec> {
                 p("points", true, "array of {lon, lat, name?} objects or [lon, lat] pairs"),
                 p("crs", false, "CRS of the coordinates, default EPSG:4326"),
                 p("name", false, "layer name"),
+            ],
+        },
+        OperationSpec {
+            name: "place",
+            title: "地名から範囲を取得",
+            description: "Resolve a place name to a boundary (OpenStreetMap Nominatim) or a point (国土地理院). No inputs. Use it to analyse places that are not loaded.",
+            inputs: &[],
+            params: vec![
+                p("query", true, "place name, e.g. 札幌市 or 福岡市中央区"),
+                p("provider", false, "nominatim (boundaries, default) | gsi (points)"),
+                p("candidate", false, "candidate index, default 0"),
+            ],
+        },
+        OperationSpec {
+            name: "census_mesh",
+            title: "国勢調査人口メッシュを取得",
+            description: "Fetch 令和2年国勢調査 population per grid square (e-Stat, no key) for the extent of `area`. Fields: mesh_code, population, male, female (persons). To get the population of an area, spatial_join the area with this layer using area_weighted_sum on population.",
+            inputs: &["area"],
+            params: vec![
+                p("level", false, "1km | 500m (default) | 250m"),
+                p("clip", false, "keep only cells intersecting the area geometry (default true)"),
+                p("cross_check", false, "compare totals with the independent 1km product (default true)"),
             ],
         },
         OperationSpec {
@@ -294,6 +317,8 @@ pub fn run(op: &str, inputs: &BTreeMap<String, Layer>, params: &Value) -> Result
     let input = |role: &str| &inputs[role];
     let mut output = match op {
         "make_points" => make_points(&params),
+        "place" => place(&params),
+        "census_mesh" => census_mesh(input("area"), &params),
         "buffer" => buffer(input("layer"), &params),
         "clip" => clip(input("layer"), input("mask"), false),
         "erase" => clip(input("layer"), input("mask"), true),
@@ -725,6 +750,192 @@ fn working_note(crs: &CrsInfo) -> String {
 // ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
+
+fn cache_dir() -> PathBuf {
+    std::env::var("GENEGIS_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".genegis/cache"))
+}
+
+fn place(params: &Value) -> Result<OpOutput> {
+    use crate::place::{
+        parse_response, request_url, Fetcher, HttpFetcher, PlaceProvider, PlaceRequest,
+    };
+    let request = PlaceRequest {
+        query: str_param(params, "query").unwrap_or_default().to_string(),
+        provider: serde_json::from_value(
+            params
+                .get("provider")
+                .cloned()
+                .unwrap_or(json!("nominatim")),
+        )
+        .map_err(|e| ToolkitError::parameter("place", e.to_string()))?,
+        candidate: params.get("candidate").and_then(Value::as_u64).unwrap_or(0) as usize,
+    };
+    let url = request_url(&request);
+    let body = HttpFetcher.get(&url)?;
+    let candidates = parse_response(request.provider, &request.query, &body)?;
+    let (chosen, feature) = candidates.get(request.candidate).cloned().ok_or_else(|| {
+        ToolkitError::Provider(format!(
+            "no place named {:?} ({} candidates)",
+            request.query,
+            candidates.len()
+        ))
+    })?;
+    let name = chosen
+        .name
+        .split([',', '、'])
+        .next()
+        .unwrap_or(&chosen.name)
+        .trim()
+        .to_string();
+    let mut layer = derived(name, "EPSG:4326");
+    layer.crs_status = CrsStatus::Declared;
+    layer.features.push(Feature { id: 0, ..feature });
+    let digest = crate::layer::sha256_bytes(&body);
+    let (license, attribution) = match request.provider {
+        PlaceProvider::Nominatim => ("ODbL-1.0", "© OpenStreetMap contributors"),
+        PlaceProvider::Gsi => (
+            "国土地理院コンテンツ利用規約",
+            "国土地理院 地名・住所検索API",
+        ),
+    };
+    let mut output = OpOutput {
+        checks: vec![Check::new(
+            "place_resolved",
+            true,
+            format!(
+                "{} of {} candidates chosen ({}, boundary: {})",
+                request.candidate + 1,
+                candidates.len(),
+                chosen.kind,
+                chosen.has_boundary
+            ),
+        )],
+        notes: vec![format!("{url} → {digest}")],
+        layer,
+    };
+    if !chosen.has_boundary {
+        output
+            .notes
+            .push("provider returned a point, not a boundary".into());
+    }
+    output.layer.provenance.license = Some(license.into());
+    output.layer.provenance.attribution = Some(attribution.into());
+    Ok(output)
+}
+
+fn census_mesh(area: &Layer, params: &Value) -> Result<OpOutput> {
+    use crate::estat::{build_census_mesh, fetch_mesh_file, first_meshes, MeshLevel};
+    use crate::place::HttpFetcher;
+    let level = MeshLevel::parse(str_param(params, "level").unwrap_or("500m"))?;
+    let clip = params.get("clip").and_then(Value::as_bool).unwrap_or(true);
+    let cross_check = params
+        .get("cross_check")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let bbox = area
+        .bbox_wgs84()
+        .ok_or_else(|| ToolkitError::parameter("census_mesh", "area has no geometry"))?;
+    let meshes = first_meshes(bbox);
+    if meshes.is_empty() {
+        return Err(ToolkitError::parameter(
+            "census_mesh",
+            "area lies outside Japan's grid squares",
+        ));
+    }
+    if meshes.len() > 12 {
+        return Err(ToolkitError::parameter(
+            "census_mesh",
+            format!(
+                "area spans {} first-level meshes; choose a smaller area",
+                meshes.len()
+            ),
+        ));
+    }
+    let cache = cache_dir().join("estat");
+    let files = meshes
+        .iter()
+        .map(|m| fetch_mesh_file(level, m, &HttpFetcher, Some(&cache)))
+        .collect::<Result<Vec<_>>>()?;
+    let built = build_census_mesh(level, bbox, &files)?;
+    let mut layer = built.layer;
+    let before_clip = layer.features.len();
+    if clip {
+        let wgs84 = proj::lookup_epsg(4326)?;
+        let area_4326 = area.reprojected(&wgs84)?;
+        let shapes: Vec<Geometry<f64>> = area_4326
+            .features
+            .iter()
+            .filter_map(|f| f.geometry.clone())
+            .collect();
+        layer.features.retain(|cell| {
+            cell.geometry
+                .as_ref()
+                .is_some_and(|g| shapes.iter().any(|shape| shape.intersects(g)))
+        });
+    }
+    let mut checks = vec![Check::new(
+        "cells_conserve_published_totals",
+        built.raw_total == built.built_total,
+        format!(
+            "{} persons in raw rows vs {} in built cells across {} first-level meshes",
+            built.raw_total,
+            built.built_total,
+            meshes.len()
+        ),
+    )];
+    if cross_check && level != MeshLevel::Km1 {
+        let coarse = meshes
+            .iter()
+            .map(|m| fetch_mesh_file(MeshLevel::Km1, m, &HttpFetcher, Some(&cache)))
+            .collect::<Result<Vec<_>>>()?;
+        let reference = build_census_mesh(MeshLevel::Km1, bbox, &coarse)?;
+        let relative = (built.raw_total - reference.raw_total).abs() as f64
+            / reference.raw_total.max(1) as f64;
+        // Every level publishes the same totals per first-level mesh, so the
+        // independent 1 km product must agree exactly.
+        checks.push(Check::new(
+            "matches_1km_product",
+            built.raw_total == reference.raw_total,
+            format!(
+                "{} {} vs independent 1km product {} persons ({:.4}% apart)",
+                level.label(),
+                built.raw_total,
+                reference.raw_total,
+                relative * 100.0
+            ),
+        ));
+    }
+    let mut notes = layer.provenance.notes.clone();
+    notes.push(format!(
+        "{} cells kept of {before_clip} in the area's extent{}",
+        layer.features.len(),
+        if clip {
+            " (clipped to the area geometry)"
+        } else {
+            ""
+        }
+    ));
+    for file in &built.files {
+        notes.push(format!(
+            "{} → {}{}",
+            file.url,
+            file.sha256,
+            if file.cached { " (cache)" } else { "" }
+        ));
+    }
+    let license = layer.provenance.license.clone();
+    let attribution = layer.provenance.attribution.clone();
+    let mut output = OpOutput {
+        layer,
+        checks,
+        notes,
+    };
+    output.layer.provenance.license = license;
+    output.layer.provenance.attribution = attribution;
+    Ok(output)
+}
 
 fn make_points(params: &Value) -> Result<OpOutput> {
     let crs = proj::lookup(str_param(params, "crs").unwrap_or("EPSG:4326"))?;

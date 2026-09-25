@@ -7,6 +7,7 @@
 //! units, sources, and provenance recorded at every step.
 
 pub mod error;
+pub mod estat;
 pub mod execute;
 pub mod export;
 pub mod expr;

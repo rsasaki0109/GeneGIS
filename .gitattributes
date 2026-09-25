@@ -2,3 +2,7 @@ crates/genegis-testkit/fixtures/usgs-earthquakes-2020-01-01.json text eol=lf
 # Deterministic JSON fixtures are byte-identical across OSes; checksums are
 # declared against the LF form so CI (Linux) and local (Windows) agree.
 examples/nagoya-population-density/data/*.json text eol=lf
+
+# GPU and performance receipts bind the exact Cargo.lock bytes; keep LF on
+# every platform so digests verify on Windows checkouts too.
+Cargo.lock text eol=lf

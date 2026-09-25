@@ -163,7 +163,7 @@ verified pipeline ([RFC 0007](docs/rfcs/0007-core-gis-toolkit.md)):
   aware), GeoPackage, and GeoParquet. The CRS is read from the file or
   inferred and flagged; if it cannot be known, GeneGIS asks instead of
   guessing.
-- **Analyse** with 17 operations — buffer, clip, erase, intersect, dissolve,
+- **Analyse** with 19 operations — buffer, clip, erase, intersect, dissolve,
   spatial join (including area-weighted population), select by location,
   nearest distance, reproject, measure, filter, calculate, summarize, and
   more. Every operation needs explicit units, runs metric work in a metric
@@ -172,7 +172,10 @@ verified pipeline ([RFC 0007](docs/rfcs/0007-core-gis-toolkit.md)):
   planner can compose any graph from the catalog. Either way, the plan is
   validated and executed through Command + Workflow Graph.
 - **Go anywhere**: resolve place boundaries (OpenStreetMap) or points
-  (国土地理院) by name.
+  (国土地理院) by name, and fetch 令和2年国勢調査 population grid squares
+  from e-Stat without an application ID. 「札幌市の人口密度」 with nothing
+  loaded returns 1,759 persons/km² (official ≈1,760), verified against the
+  independent 1 km product.
 - **Inspect**: click features on the map, filter and sort the attribute
   table, and colour layers by natural breaks, quantiles, equal intervals, or
   categories.
@@ -186,6 +189,7 @@ verified pipeline ([RFC 0007](docs/rfcs/0007-core-gis-toolkit.md)):
 | 「区ごとの店舗数」 | `spatial_join` (count) |
 | 「区の人口密度」 | `measure` (geodesic km²) → `calculate` (persons/km²) |
 | 「駅から徒歩10分以内の店舗」 | 800 m (80 m/min, stated as an assumption) → `select_by_location` |
+| 「札幌市の人口密度」 | `place` → `census_mesh` → `spatial_join` (area-weighted) → `measure` → `calculate` |
 
 ### From Claude Code (MCP)
 

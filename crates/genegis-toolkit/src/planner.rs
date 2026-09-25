@@ -401,6 +401,18 @@ fn numeric_field_mentioned(prompt: &str, layer: &Layer) -> Option<String> {
     })
 }
 
+/// Whether `value` occurs in the prompt as itself rather than as the stem
+/// of an administrative name (名古屋 inside 名古屋市 is the city, not the
+/// station 名古屋).
+fn mentions_standalone(prompt: &str, value: &str) -> bool {
+    let admin = "市区町村都道府県郡";
+    prompt.match_indices(value).any(|(at, _)| {
+        let next = prompt[at + value.len()..].chars().next();
+        value.chars().last().is_some_and(|c| admin.contains(c))
+            || next.is_none_or(|c| !admin.contains(c))
+    })
+}
+
 /// Named features of `layer` mentioned in the prompt, e.g. 「栄駅」「千種区」:
 /// text values that select a minority of the layer's features. Returns the
 /// field and every matching value (longest match wins per position).
@@ -424,7 +436,7 @@ fn named_values(prompt: &str, layer: &Layer) -> Option<(String, Vec<String>)> {
                 value.chars().count() >= 1
                     && value.chars().count() <= 20
                     && *count * 2 <= total
-                    && prompt.contains(value.as_str())
+                    && mentions_standalone(prompt, value)
             })
             .map(|(value, _)| value)
             .collect();
@@ -606,6 +618,40 @@ fn step(id: &str, op: &str, inputs: &[(&str, &str)], params: Value) -> PlanStep 
     }
 }
 
+/// Administrative place named right before 「の人口」, e.g. 札幌市 in
+/// 「札幌市の人口密度」 or 千代田区 in 「東京都の千代田区の人口」.
+fn place_before_population(text: &str) -> Option<String> {
+    let at = text.find("の人口")?;
+    let before: Vec<char> = text[..at].chars().collect();
+    let mut start = before.len();
+    while start > 0 {
+        let c = before[start - 1];
+        if c.is_ascii() || "のはをでとがに、。「」（）".contains(c) {
+            break;
+        }
+        start -= 1;
+    }
+    let name: String = before[start..].iter().collect();
+    let ends_admin = name
+        .chars()
+        .last()
+        .is_some_and(|c| "市区町村都道府県".contains(c));
+    (name.chars().count() >= 2 && ends_admin).then_some(name)
+}
+
+/// Whether loaded source data already covers `name` (a layer named after
+/// it, or a text value equal to it).
+fn place_is_loaded(name: &str, layers: &BTreeMap<String, Layer>) -> bool {
+    layers.values().filter(|l| is_source(l)).any(|layer| {
+        normalize(&layer.name).contains(name)
+            || layer.features.iter().any(|f| {
+                f.properties
+                    .values()
+                    .any(|v| v.as_str().is_some_and(|s| normalize(s.trim()) == name))
+            })
+    })
+}
+
 /// Deterministic planner for common spatial questions.
 pub fn plan_with_rules(
     prompt: &str,
@@ -703,6 +749,60 @@ pub fn plan_with_rules(
             )
             .find_map(|id| population_field(&layers[&id]).map(|f| (id, f)))
     };
+
+    // 0. 「札幌市の人口密度」 for a place that is not loaded: resolve the
+    //    boundary and census grid squares inside the workflow itself.
+    if let Some(name) = place_before_population(&text).filter(|n| !place_is_loaded(n, layers)) {
+        rp.steps.push(step(
+            "area",
+            "place",
+            &[],
+            json!({"query": name, "provider": "nominatim"}),
+        ));
+        rp.steps.push(step(
+            "mesh",
+            "census_mesh",
+            &[("area", "area")],
+            json!({"level": "500m"}),
+        ));
+        rp.steps.push(step(
+            "population",
+            "spatial_join",
+            &[("target", "area"), ("join", "mesh")],
+            json!({"aggregates": [{"op": "area_weighted_sum", "field": "population", "as": "population", "unit": "persons"}]}),
+        ));
+        rp.rationale
+            .push(format!("{name} の境界を OpenStreetMap から取得"));
+        rp.rationale.push(
+            "令和2年国勢調査 500m 人口メッシュを e-Stat から取得し、境界との重なりで面積按分"
+                .into(),
+        );
+        rp.assumptions
+            .push("人口は各メッシュ内に一様に分布すると仮定（面積按分）".into());
+        rp.assumptions.push(
+            "境界は OpenStreetMap のもので、国土数値情報の行政区域とわずかに異なる場合がある"
+                .into(),
+        );
+        if density {
+            rp.steps.push(step(
+                "area_km2",
+                "measure",
+                &[("layer", "population")],
+                json!({"metrics": ["area"], "area_unit": "km2"}),
+            ));
+            rp.steps.push(step(
+                "result",
+                "calculate",
+                &[("layer", "area_km2")],
+                json!({"field": "density", "expression": "population / area_km2", "unit": "persons/km²"}),
+            ));
+            rp.rationale
+                .push("人口を測地線面積 (km²) で割って人口密度を算出".into());
+        } else {
+            rp.steps.last_mut().expect("pushed").id = "result".into();
+        }
+        return finish(prompt, rp, layers);
+    }
 
     // 1. "この点から 1km 以内の人口" / "この点から500m以内の避難所"
     if here && distance.is_some() {
@@ -1698,6 +1798,33 @@ mod tests {
         .unwrap();
         let chosen = &layers[&result.plan.steps[0].inputs["layer"]];
         assert_eq!(chosen.name, "店舗", "picked {}", chosen.name);
+    }
+
+    #[test]
+    fn plans_census_fetch_for_places_that_are_not_loaded() {
+        let layers = sample_layers();
+        let context = PlannerContext::default();
+        let result = plan_with_rules("札幌市の人口密度", &layers, &context).unwrap();
+        let ops: Vec<&str> = result.plan.steps.iter().map(|s| s.op.as_str()).collect();
+        assert_eq!(
+            ops,
+            vec![
+                "place",
+                "census_mesh",
+                "spatial_join",
+                "measure",
+                "calculate"
+            ]
+        );
+        assert_eq!(result.plan.steps[0].params["query"], "札幌市");
+        // Nagoya is loaded, so its density uses the loaded census wards.
+        let result = plan_with_rules("名古屋市の人口密度", &layers, &context).unwrap();
+        assert!(result.plan.steps.iter().all(|s| s.op != "place"));
+        assert_eq!(
+            place_before_population("東京都の千代田区の人口は？").as_deref(),
+            Some("千代田区")
+        );
+        assert_eq!(place_before_population("この点の人口"), None);
     }
 
     #[test]

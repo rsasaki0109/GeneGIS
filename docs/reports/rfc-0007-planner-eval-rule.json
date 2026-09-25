@@ -213,7 +213,7 @@
       "verdict": "correct"
     },
     {
-      "detail": "declined: planner could not resolve the request: 「5年前と比べて名古屋市の人口は増えた？」を解析できませんでした。例: 「駅から500m以内の避難所を数えて」「この点から1km以内の人口」「区ごとの店舗数」「人口密度を計算」。読み込み済みレイヤ: 避難所（サンプル）、名古屋市 区界と人口（令和2年国勢調査）、浸水想定区域（サンプル）、主要駅（サンプル）、店舗・施設（サンプル）",
+      "detail": "declined: planner could not resolve the request: 「5年前と比べて名古屋市の人口は増えた？」の時点の比較をルール式プランナーでは扱えないため、違う質問に答えてしまわないよう回答を控えます。LLM プランナーか MCP 経由のエージェントを使ってください",
       "held_out": false,
       "prompt": "5年前と比べて名古屋市の人口は増えた？",
       "rules_expected": false,
@@ -245,7 +245,7 @@
   "held_out_total": 0,
   "mode": "rule",
   "model": null,
-  "observed_at": "2026-09-25T20:38:35.606032600+00:00",
+  "observed_at": "2026-09-25T21:59:20.450780800+00:00",
   "schema_version": "1.0.0",
   "total": 23
 }
