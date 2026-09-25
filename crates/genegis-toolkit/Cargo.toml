@@ -1,0 +1,31 @@
+[package]
+name = "genegis-toolkit"
+description = "General-purpose GIS toolkit: data import, spatial operations, planning, and export through Command + Workflow Graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+genegis-core = { path = "../genegis-core" }
+genegis-crs = { path = "../genegis-crs" }
+genegis-workflow = { path = "../genegis-workflow" }
+geo = "0.33"
+geo-types = "0.7"
+geojson.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+encoding_rs = "0.8"
+flate2 = "1"
+zip = { version = "6", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+arrow-array = "58"
+arrow-schema = "58"
+parquet = { version = "58", default-features = false, features = ["arrow", "zstd"] }
+bytes = "1"
+ureq = { version = "3", features = ["json"] }
+
+[dev-dependencies]

@@ -30,6 +30,7 @@ members = [
     "crates/genegis-cli",
     "crates/genegis-ffi",
     "crates/genegis-testkit",
+    "crates/genegis-toolkit",
     "examples/nagoya-population-density",
     "examples/copc-metadata",
     "apps/desktop/src-tauri",

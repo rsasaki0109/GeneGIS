@@ -1,0 +1,197 @@
+{
+  "cases": [
+    {
+      "detail": "count matches truth [2.0]",
+      "held_out": false,
+      "prompt": "駅から500m以内の避難所を数えて",
+      "rules_expected": true,
+      "steps": [
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "population matches truth [31577.146487470658]",
+      "held_out": false,
+      "prompt": "この点から1km以内の人口は？",
+      "rules_expected": true,
+      "steps": [
+        "make_points",
+        "buffer",
+        "spatial_join"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "count matches truth [0.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 6.0, 6.0, 6.0, 6.0, 8.0, 8.0, 10.0, 10.0, 12.0]",
+      "held_out": false,
+      "prompt": "区ごとの店舗数",
+      "rules_expected": true,
+      "steps": [
+        "spatial_join"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "density matches truth [3145.870661962837, 5192.950191388889, 6564.796419519648, 6893.831297959304, 7285.367920230391, 7636.665767120418, 8170.0590796424385, 8427.936049255582, 8474.50966234137, 8504.348946735752, 9087.110486657328, 9296.569231378504, 9656.04245290574, 9832.608549631563, 9924.435869451176, 10949.29430258553]",
+      "held_out": false,
+      "prompt": "区の人口密度",
+      "rules_expected": true,
+      "steps": [
+        "measure",
+        "calculate"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "sum_capacity matches truth [0.0]",
+      "held_out": false,
+      "prompt": "浸水想定区域の中にある避難所の収容人数の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "clip",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "count matches truth [32.0]",
+      "held_out": false,
+      "prompt": "浸水想定区域の外にある避難所はいくつ？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "erase",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "count matches truth [8.0]",
+      "held_out": false,
+      "prompt": "人口が15万人以上の区はいくつある？",
+      "rules_expected": false,
+      "steps": [
+        "filter",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "mean_nearest_distance_m matches truth [278.42749999999995]",
+      "held_out": false,
+      "prompt": "店舗から最寄りの避難所までの平均距離は何メートル？",
+      "rules_expected": false,
+      "steps": [
+        "distance_to_nearest",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "area_ha matches truth [770.7528692517832, 819.5411972826317, 938.0885848290384, 1094.3077765872397, 1121.9089034493654, 1629.742627778683, 1752.8616841789144, 1792.633440940083, 1818.4548349294364, 1846.3034602066643, 1944.124280513014, 2158.2324672322025, 3201.818995271024, 3400.514033291173, 3789.9423546511903, 4568.36963253697]",
+      "held_out": false,
+      "prompt": "各区の面積をヘクタールで出して",
+      "rules_expected": false,
+      "steps": [
+        "measure"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "count matches truth [12.0]",
+      "held_out": false,
+      "prompt": "栄駅から2km以内にある店舗の数",
+      "rules_expected": false,
+      "steps": [
+        "filter",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "no field matches truth [26400.0]",
+      "held_out": true,
+      "prompt": "浸水想定区域から1km以内にある避難所の収容人数の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "make_valid",
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "wrong"
+    },
+    {
+      "detail": "no field matches truth [0.0]",
+      "held_out": true,
+      "prompt": "避難所から1km以内にない店舗はいくつ？",
+      "rules_expected": false,
+      "steps": [
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "wrong"
+    },
+    {
+      "detail": "no field matches truth [21.0]",
+      "held_out": true,
+      "prompt": "収容人数が3000人以上の避難所から500m以内にある店舗の数",
+      "rules_expected": false,
+      "steps": [
+        "select_by_location",
+        "summarize"
+      ],
+      "verdict": "wrong"
+    },
+    {
+      "detail": "sum_capacity matches truth [0.0, 3200.0, 4200.0, 4400.0, 4600.0, 4800.0, 4800.0, 4800.0, 5200.0, 5200.0, 5200.0, 5600.0, 5800.0, 6000.0, 6800.0, 8400.0]",
+      "held_out": true,
+      "prompt": "区ごとの避難所の収容人数の合計",
+      "rules_expected": false,
+      "steps": [
+        "spatial_join"
+      ],
+      "verdict": "correct"
+    },
+    {
+      "detail": "no field matches truth [285091.0]",
+      "held_out": true,
+      "prompt": "店舗が10件以上ある区の人口の合計は？",
+      "rules_expected": false,
+      "steps": [
+        "summarize"
+      ],
+      "verdict": "wrong"
+    },
+    {
+      "detail": "declined: planner could not resolve the request: 「明日の名古屋の天気を教えて」を解析できませんでした。例: 「駅から500m以内の避難所を数えて」「この点から1km以内の人口」「区ごとの店舗数」「人口密度を計算」。読み込み済みレイヤ: 避難所（サンプル）、名古屋市 区界と人口（令和2年国勢調査）、浸水想定区域（サンプル）、主要駅（サンプル）、店舗・施設（サンプル）",
+      "held_out": false,
+      "prompt": "明日の名古屋の天気を教えて",
+      "rules_expected": true,
+      "steps": [],
+      "verdict": "correct"
+    },
+    {
+      "detail": "declined: planner could not resolve the request: 「東京タワーの高さは？」を解析できませんでした。例: 「駅から500m以内の避難所を数えて」「この点から1km以内の人口」「区ごとの店舗数」「人口密度を計算」。読み込み済みレイヤ: 避難所（サンプル）、名古屋市 区界と人口（令和2年国勢調査）、浸水想定区域（サンプル）、主要駅（サンプル）、店舗・施設（サンプル）",
+      "held_out": false,
+      "prompt": "東京タワーの高さは？",
+      "rules_expected": true,
+      "steps": [],
+      "verdict": "correct"
+    }
+  ],
+  "correct": 13,
+  "criteria": "answer field matches a hand-written ground-truth plan within 0.5 %; refusal cases must decline; every plan executes through RunWorkflow with all checks passing",
+  "endpoint": null,
+  "evaluation": "rfc-0007-planner",
+  "held_out_correct": 1,
+  "held_out_total": 5,
+  "mode": "rule",
+  "model": null,
+  "observed_at": "2026-09-25T15:15:25.105411400+00:00",
+  "schema_version": "1.0.0",
+  "total": 17
+}

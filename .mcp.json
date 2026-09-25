@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "genegis": {
+      "command": "cargo",
+      "args": ["run", "-q", "-p", "genegis-toolkit", "--bin", "genegis-mcp"],
+      "env": {
+        "GENEGIS_LAYER_DIR": ".genegis/layers"
+      }
+    }
+  }
+}

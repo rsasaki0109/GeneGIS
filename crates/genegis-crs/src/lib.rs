@@ -34,6 +34,198 @@ pub const UTM_18N_EPSG: u32 = 32618;
 /// EPSG identifier for WGS 84 / UTM zone 54N.
 pub const UTM_54N_EPSG: u32 = 32654;
 
+/// Names of JGD2011 / Japan Plane Rectangular CS I–XIX (EPSG:6669–6687).
+const JGD2011_PLANE_NAMES: [&str; 19] = [
+    "JGD2011 / Japan Plane Rectangular CS I",
+    "JGD2011 / Japan Plane Rectangular CS II",
+    "JGD2011 / Japan Plane Rectangular CS III",
+    "JGD2011 / Japan Plane Rectangular CS IV",
+    "JGD2011 / Japan Plane Rectangular CS V",
+    "JGD2011 / Japan Plane Rectangular CS VI",
+    "JGD2011 / Japan Plane Rectangular CS VII",
+    "JGD2011 / Japan Plane Rectangular CS VIII",
+    "JGD2011 / Japan Plane Rectangular CS IX",
+    "JGD2011 / Japan Plane Rectangular CS X",
+    "JGD2011 / Japan Plane Rectangular CS XI",
+    "JGD2011 / Japan Plane Rectangular CS XII",
+    "JGD2011 / Japan Plane Rectangular CS XIII",
+    "JGD2011 / Japan Plane Rectangular CS XIV",
+    "JGD2011 / Japan Plane Rectangular CS XV",
+    "JGD2011 / Japan Plane Rectangular CS XVI",
+    "JGD2011 / Japan Plane Rectangular CS XVII",
+    "JGD2011 / Japan Plane Rectangular CS XVIII",
+    "JGD2011 / Japan Plane Rectangular CS XIX",
+];
+
+/// Names of JGD2000 / Japan Plane Rectangular CS I–XIX (EPSG:2443–2461).
+const JGD2000_PLANE_NAMES: [&str; 19] = [
+    "JGD2000 / Japan Plane Rectangular CS I",
+    "JGD2000 / Japan Plane Rectangular CS II",
+    "JGD2000 / Japan Plane Rectangular CS III",
+    "JGD2000 / Japan Plane Rectangular CS IV",
+    "JGD2000 / Japan Plane Rectangular CS V",
+    "JGD2000 / Japan Plane Rectangular CS VI",
+    "JGD2000 / Japan Plane Rectangular CS VII",
+    "JGD2000 / Japan Plane Rectangular CS VIII",
+    "JGD2000 / Japan Plane Rectangular CS IX",
+    "JGD2000 / Japan Plane Rectangular CS X",
+    "JGD2000 / Japan Plane Rectangular CS XI",
+    "JGD2000 / Japan Plane Rectangular CS XII",
+    "JGD2000 / Japan Plane Rectangular CS XIII",
+    "JGD2000 / Japan Plane Rectangular CS XIV",
+    "JGD2000 / Japan Plane Rectangular CS XV",
+    "JGD2000 / Japan Plane Rectangular CS XVI",
+    "JGD2000 / Japan Plane Rectangular CS XVII",
+    "JGD2000 / Japan Plane Rectangular CS XVIII",
+    "JGD2000 / Japan Plane Rectangular CS XIX",
+];
+
+/// Names of JGD2011 / UTM zones 51N–55N (EPSG:6688–6692).
+const JGD2011_UTM_NAMES: [&str; 5] = [
+    "JGD2011 / UTM zone 51N",
+    "JGD2011 / UTM zone 52N",
+    "JGD2011 / UTM zone 53N",
+    "JGD2011 / UTM zone 54N",
+    "JGD2011 / UTM zone 55N",
+];
+
+/// Names of JGD2000 / UTM zones 51N–55N (EPSG:3097–3101).
+const JGD2000_UTM_NAMES: [&str; 5] = [
+    "JGD2000 / UTM zone 51N",
+    "JGD2000 / UTM zone 52N",
+    "JGD2000 / UTM zone 53N",
+    "JGD2000 / UTM zone 54N",
+    "JGD2000 / UTM zone 55N",
+];
+
+/// Names of WGS 84 / UTM zones 1N–60N (EPSG:32601–32660).
+const UTM_NORTH_NAMES: [&str; 60] = [
+    "WGS 84 / UTM zone 1N",
+    "WGS 84 / UTM zone 2N",
+    "WGS 84 / UTM zone 3N",
+    "WGS 84 / UTM zone 4N",
+    "WGS 84 / UTM zone 5N",
+    "WGS 84 / UTM zone 6N",
+    "WGS 84 / UTM zone 7N",
+    "WGS 84 / UTM zone 8N",
+    "WGS 84 / UTM zone 9N",
+    "WGS 84 / UTM zone 10N",
+    "WGS 84 / UTM zone 11N",
+    "WGS 84 / UTM zone 12N",
+    "WGS 84 / UTM zone 13N",
+    "WGS 84 / UTM zone 14N",
+    "WGS 84 / UTM zone 15N",
+    "WGS 84 / UTM zone 16N",
+    "WGS 84 / UTM zone 17N",
+    "WGS 84 / UTM zone 18N",
+    "WGS 84 / UTM zone 19N",
+    "WGS 84 / UTM zone 20N",
+    "WGS 84 / UTM zone 21N",
+    "WGS 84 / UTM zone 22N",
+    "WGS 84 / UTM zone 23N",
+    "WGS 84 / UTM zone 24N",
+    "WGS 84 / UTM zone 25N",
+    "WGS 84 / UTM zone 26N",
+    "WGS 84 / UTM zone 27N",
+    "WGS 84 / UTM zone 28N",
+    "WGS 84 / UTM zone 29N",
+    "WGS 84 / UTM zone 30N",
+    "WGS 84 / UTM zone 31N",
+    "WGS 84 / UTM zone 32N",
+    "WGS 84 / UTM zone 33N",
+    "WGS 84 / UTM zone 34N",
+    "WGS 84 / UTM zone 35N",
+    "WGS 84 / UTM zone 36N",
+    "WGS 84 / UTM zone 37N",
+    "WGS 84 / UTM zone 38N",
+    "WGS 84 / UTM zone 39N",
+    "WGS 84 / UTM zone 40N",
+    "WGS 84 / UTM zone 41N",
+    "WGS 84 / UTM zone 42N",
+    "WGS 84 / UTM zone 43N",
+    "WGS 84 / UTM zone 44N",
+    "WGS 84 / UTM zone 45N",
+    "WGS 84 / UTM zone 46N",
+    "WGS 84 / UTM zone 47N",
+    "WGS 84 / UTM zone 48N",
+    "WGS 84 / UTM zone 49N",
+    "WGS 84 / UTM zone 50N",
+    "WGS 84 / UTM zone 51N",
+    "WGS 84 / UTM zone 52N",
+    "WGS 84 / UTM zone 53N",
+    "WGS 84 / UTM zone 54N",
+    "WGS 84 / UTM zone 55N",
+    "WGS 84 / UTM zone 56N",
+    "WGS 84 / UTM zone 57N",
+    "WGS 84 / UTM zone 58N",
+    "WGS 84 / UTM zone 59N",
+    "WGS 84 / UTM zone 60N",
+];
+
+/// Names of WGS 84 / UTM zones 1S–60S (EPSG:32701–32760).
+const UTM_SOUTH_NAMES: [&str; 60] = [
+    "WGS 84 / UTM zone 1S",
+    "WGS 84 / UTM zone 2S",
+    "WGS 84 / UTM zone 3S",
+    "WGS 84 / UTM zone 4S",
+    "WGS 84 / UTM zone 5S",
+    "WGS 84 / UTM zone 6S",
+    "WGS 84 / UTM zone 7S",
+    "WGS 84 / UTM zone 8S",
+    "WGS 84 / UTM zone 9S",
+    "WGS 84 / UTM zone 10S",
+    "WGS 84 / UTM zone 11S",
+    "WGS 84 / UTM zone 12S",
+    "WGS 84 / UTM zone 13S",
+    "WGS 84 / UTM zone 14S",
+    "WGS 84 / UTM zone 15S",
+    "WGS 84 / UTM zone 16S",
+    "WGS 84 / UTM zone 17S",
+    "WGS 84 / UTM zone 18S",
+    "WGS 84 / UTM zone 19S",
+    "WGS 84 / UTM zone 20S",
+    "WGS 84 / UTM zone 21S",
+    "WGS 84 / UTM zone 22S",
+    "WGS 84 / UTM zone 23S",
+    "WGS 84 / UTM zone 24S",
+    "WGS 84 / UTM zone 25S",
+    "WGS 84 / UTM zone 26S",
+    "WGS 84 / UTM zone 27S",
+    "WGS 84 / UTM zone 28S",
+    "WGS 84 / UTM zone 29S",
+    "WGS 84 / UTM zone 30S",
+    "WGS 84 / UTM zone 31S",
+    "WGS 84 / UTM zone 32S",
+    "WGS 84 / UTM zone 33S",
+    "WGS 84 / UTM zone 34S",
+    "WGS 84 / UTM zone 35S",
+    "WGS 84 / UTM zone 36S",
+    "WGS 84 / UTM zone 37S",
+    "WGS 84 / UTM zone 38S",
+    "WGS 84 / UTM zone 39S",
+    "WGS 84 / UTM zone 40S",
+    "WGS 84 / UTM zone 41S",
+    "WGS 84 / UTM zone 42S",
+    "WGS 84 / UTM zone 43S",
+    "WGS 84 / UTM zone 44S",
+    "WGS 84 / UTM zone 45S",
+    "WGS 84 / UTM zone 46S",
+    "WGS 84 / UTM zone 47S",
+    "WGS 84 / UTM zone 48S",
+    "WGS 84 / UTM zone 49S",
+    "WGS 84 / UTM zone 50S",
+    "WGS 84 / UTM zone 51S",
+    "WGS 84 / UTM zone 52S",
+    "WGS 84 / UTM zone 53S",
+    "WGS 84 / UTM zone 54S",
+    "WGS 84 / UTM zone 55S",
+    "WGS 84 / UTM zone 56S",
+    "WGS 84 / UTM zone 57S",
+    "WGS 84 / UTM zone 58S",
+    "WGS 84 / UTM zone 59S",
+    "WGS 84 / UTM zone 60S",
+];
+
 /// Coordinate system family described by an EPSG definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -209,6 +401,36 @@ impl Crs {
                 kind: CrsKind::Projected,
                 unit: CoordinateUnit::Metres,
             }),
+            4612 => Some(CrsDefinition {
+                code: 4612,
+                name: "JGD2000",
+                kind: CrsKind::Geographic,
+                unit: CoordinateUnit::Degrees,
+            }),
+            6669..=6687 => Some(projected(
+                self.code,
+                JGD2011_PLANE_NAMES[(self.code - 6669) as usize],
+            )),
+            2443..=2461 => Some(projected(
+                self.code,
+                JGD2000_PLANE_NAMES[(self.code - 2443) as usize],
+            )),
+            6688..=6692 => Some(projected(
+                self.code,
+                JGD2011_UTM_NAMES[(self.code - 6688) as usize],
+            )),
+            3097..=3101 => Some(projected(
+                self.code,
+                JGD2000_UTM_NAMES[(self.code - 3097) as usize],
+            )),
+            32601..=32660 => Some(projected(
+                self.code,
+                UTM_NORTH_NAMES[(self.code - 32601) as usize],
+            )),
+            32701..=32760 => Some(projected(
+                self.code,
+                UTM_SOUTH_NAMES[(self.code - 32701) as usize],
+            )),
             _ => None,
         }
     }
@@ -260,6 +482,16 @@ impl Crs {
             return Err(CrsError::CoordinateOutOfRange { x, y });
         }
         Ok(())
+    }
+}
+
+/// Built-in definition of a projected CRS with metre axes.
+const fn projected(code: u32, name: &'static str) -> CrsDefinition {
+    CrsDefinition {
+        code,
+        name,
+        kind: CrsKind::Projected,
+        unit: CoordinateUnit::Metres,
     }
 }
 
@@ -655,6 +887,15 @@ mod tests {
     fn rejects_unknown_and_invalid_crs_at_validation_boundary() {
         assert!(Crs::parse("WGS84").is_err());
         assert!(Crs::epsg(999_999).require_known().is_err());
+        assert_eq!(
+            Crs::epsg(6676).require_known().unwrap().name,
+            "JGD2011 / Japan Plane Rectangular CS VIII"
+        );
+        assert_eq!(Crs::epsg(32653).unit(), CoordinateUnit::Metres);
+        assert!(
+            Crs::epsg(4301).require_known().is_err(),
+            "Tokyo datum stays unsupported"
+        );
         assert!(Crs::wgs84().validate_coordinate(181.0, 35.0).is_err());
         assert!(Crs::wgs84().validate_coordinate(137.0, 35.0).is_ok());
         assert_eq!(Crs::nagoya_projected().code(), NAGOYA_PROJECTED_EPSG);

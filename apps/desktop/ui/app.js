@@ -66,6 +66,7 @@ const federatedSummaryEl = document.getElementById("federated-summary");
 const federatedResultsEl = document.getElementById("federated-results");
 const pluginsEl = document.getElementById("plugins");
 const commentsEl = document.getElementById("comments");
+const collabSyncEl = document.getElementById("collab-sync");
 const agentMetaEl = document.getElementById("agent-meta");
 const agentStepsEl = document.getElementById("agent-steps");
 const agentPlanBtn = document.getElementById("agent-plan-btn");

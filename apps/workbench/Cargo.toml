@@ -24,6 +24,7 @@ genegis-crs = { path = "../../crates/genegis-crs" }
 genegis-plugin-host = { path = "../../crates/genegis-plugin-host" }
 genegis-render = { path = "../../crates/genegis-render" }
 genegis-storage = { path = "../../crates/genegis-storage" }
+genegis-toolkit = { path = "../../crates/genegis-toolkit" }
 genegis-vector = { path = "../../crates/genegis-vector" }
 genegis-workflow = { path = "../../crates/genegis-workflow" }
 open = "5"

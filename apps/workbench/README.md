@@ -22,6 +22,8 @@ On startup the workbench pulls collab state from GeneGIS Server (`http://127.0.0
 |----------|---------|---------|
 | `GENEGIS_SERVER_URL` | `http://127.0.0.1:7813` | Collab pull/push target |
 | `GENEGIS_COLLAB_PATH` | `.genegis/collab.json` | Local collab cache |
+| `GENEGIS_LAYER_DIR` | `.genegis/layers` | Persisted, digest-verified GIS layers |
+| `GENEGIS_LLM_API_KEY` / `_BASE_URL` / `_MODEL` | unset | Optional OpenAI-compatible LLM planner for データ分析 |
 
 ## API
 
@@ -90,3 +92,18 @@ genegis collab push
 ## Tauri shell
 
 See [`../desktop/README.md`](../desktop/README.md). Tauri release build verified (`npm run build` → `.deb` / AppImage).
+
+## GIS API (データ分析 view, RFC 0007)
+
+Open `http://127.0.0.1:7812/?view=gis`. Responses use `{ ok, error, result }`;
+a missing CRS returns HTTP 422 with `needs_crs: true` and `crs_options`.
+
+- `POST /api/gis/import?filename=…[&crs=EPSG:…&encoding=…&table=…]` — raw file body; imports through `RunWorkflow` and returns the import receipt.
+- `POST /api/gis/samples` — loads the Nagoya sample layers (wards with population, shelters, POIs, flood zones, stations).
+- `GET /api/gis/layers`, `GET|DELETE /api/gis/layers/{id}`, `GET /api/gis/layers/{id}/geojson`.
+- `GET /api/gis/layers/{id}/table?where=…&sort_by=…&descending=…&offset=…&limit=…`, `GET …/stats?field=…`.
+- `POST /api/gis/layers/{id}/classify` `{ field, method: natural_breaks|quantile|equal_interval|categorical, classes }`, `POST …/style`, `POST …/rename`, `POST …/crs` `{ crs }`.
+- `GET /api/gis/layers/{id}/export?format=geojson|csv|geopackage|geoparquet|pdf[&title=…]` — the `x-genegis-export-receipt` header carries the output digest.
+- `POST /api/gis/pick` `{ lon, lat, tolerance_m, layers }`.
+- `GET /api/gis/operations`; `POST /api/gis/plan` / `POST /api/gis/ask` `{ prompt, context: { point: [lon, lat] }, mode: auto|rule|llm, keep_intermediate }`; `POST /api/gis/run` `{ plan }`.
+- `POST /api/gis/place` `{ query, provider: nominatim|gsi, candidate }`.

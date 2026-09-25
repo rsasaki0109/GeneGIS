@@ -1,5 +1,7 @@
 //! Local web workbench — serves GeneGIS UI and runs the ask pipeline via HTTP.
 
+mod gis;
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -41,6 +43,7 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 use uuid::Uuid;
 
 const DEFAULT_COLLAB_PATH: &str = ".genegis/collab.json";
+const DEFAULT_LAYER_DIR: &str = ".genegis/layers";
 const DEFAULT_AGENT_RUN_PATH_LOCAL: &str = DEFAULT_AGENT_RUN_PATH;
 
 #[derive(Clone, Debug)]
@@ -531,8 +534,14 @@ async fn main() {
         .route("/api/agent/execute", post(execute_agent))
         .route("/api/agent/retry", post(retry_agent))
         .fallback_service(ServeDir::new(static_dir))
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+        .with_state(state)
+        .merge(gis::router(
+            std::env::var("GENEGIS_LAYER_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from(DEFAULT_LAYER_DIR)),
+            manifest_dir.join("../../examples/nagoya-population-density/data"),
+        ))
+        .layer(CorsLayer::permissive());
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 7812));
     let url = format!("http://{addr}/");

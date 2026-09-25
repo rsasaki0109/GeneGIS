@@ -58,6 +58,22 @@ jobs:
         run: |
           ./target/debug/genegis workflow run nagoya-xmin-city --execute > /dev/null
           ./target/debug/genegis agent run "名古屋市の15分都市アクセシビリティを表示"
+      - name: RFC 0007 — bring-your-own-data smoke
+        run: |
+          D=examples/nagoya-population-density/data
+          ./target/debug/genegis gis import $D/nagoya-wards.geojson --out /tmp/wards.gpkg > /dev/null
+          ./target/debug/genegis gis import /tmp/wards.gpkg > /dev/null
+          ./target/debug/genegis gis ask "区ごとの避難所の数" --mode rule             --layer $D/nagoya-wards.geojson --layer $D/nagoya-shelters.geojson             --out /tmp/shelters-per-ward.pdf > /tmp/gis-receipt.json
+          test -s /tmp/shelters-per-ward.pdf
+          python3 - <<'PY'
+          import json
+          receipt = json.load(open("/tmp/gis-receipt.json"))
+          assert receipt["workflow_digest"].startswith("sha256:")
+          assert all(check["passed"] for step in receipt["steps"] for check in step["checks"])
+          assert receipt["output"]["feature_count"] == 16
+          PY
+      - name: RFC 0007 — rule planner calibration
+        run: cargo run -p genegis-toolkit --example planner_eval -- rule --require-calibration
       - name: Regenerate deterministic binary fixtures
         run: |
           cargo run -p genegis-raster --example write_ndvi_fixture
