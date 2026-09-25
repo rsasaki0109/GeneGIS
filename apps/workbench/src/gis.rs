@@ -20,7 +20,6 @@ use axum::{
 use genegis_toolkit::{
     execute::{run_plan, PlanStep, ToolkitPlan},
     export::{export, ExportFormat, MapOptions},
-    geojson_io,
     import::{ImportFormat, ImportOptions},
     import_through_workflow, ops,
     place::{resolve_place, HttpFetcher, PlaceRequest},
@@ -255,19 +254,19 @@ async fn layer_geojson(State(state): State<Shared>, Path(id): Path<String>) -> R
         Ok(layer) => layer,
         Err(e) => return fail(e),
     };
-    let result = blocking(move || {
-        let wgs84 = genegis_toolkit::proj::lookup_epsg(4326)?;
-        let mut display = layer.reprojected(&wgs84)?;
-        for feature in &mut display.features {
-            feature
-                .properties
-                .insert("__id".into(), Value::from(feature.id));
-        }
-        geojson_io::write(&display, true)
-    })
-    .await;
-    match result {
-        Ok(text) => ([(header::CONTENT_TYPE, "application/geo+json")], text).into_response(),
+    // Display-only payload; tables, picking, and exports use full geometry.
+    match blocking(move || genegis_toolkit::export::display_geojson(&layer, 300_000)).await {
+        Ok((text, tolerance)) => (
+            [
+                (header::CONTENT_TYPE, "application/geo+json".to_string()),
+                (
+                    header::HeaderName::from_static("x-genegis-display-tolerance-deg"),
+                    tolerance.map(|t| format!("{t:.8}")).unwrap_or_default(),
+                ),
+            ],
+            text,
+        )
+            .into_response(),
         Err(e) => fail(e),
     }
 }

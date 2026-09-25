@@ -7,6 +7,7 @@
 //! parameters, so the same graph always yields the same layer digest.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use geo::{
     Area, BooleanOps, BoundingRect, Buffer, Centroid, Distance, Euclidean, Geodesic, GeodesicArea,
@@ -21,6 +22,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Result, ToolkitError};
 use crate::expr;
+use crate::index::GridIndex;
 use crate::layer::{CrsStatus, Feature, Layer};
 use crate::proj::{self, AxisUnit, CrsInfo, Projection};
 use crate::table::with_nulls;
@@ -106,6 +108,28 @@ pub fn catalog() -> Vec<OperationSpec> {
             ],
         },
         OperationSpec {
+            name: "place",
+            title: "地名から範囲を取得",
+            description: "Resolve a place name to a boundary (OpenStreetMap Nominatim) or a point (国土地理院). No inputs. Use it to analyse places that are not loaded.",
+            inputs: &[],
+            params: vec![
+                p("query", true, "place name, e.g. 札幌市 or 福岡市中央区"),
+                p("provider", false, "nominatim (boundaries, default) | gsi (points)"),
+                p("candidate", false, "candidate index, default 0"),
+            ],
+        },
+        OperationSpec {
+            name: "census_mesh",
+            title: "国勢調査人口メッシュを取得",
+            description: "Fetch 令和2年国勢調査 population per grid square (e-Stat, no key) for the extent of `area`. Fields: mesh_code, population, male, female (persons). To get the population of an area, spatial_join the area with this layer using area_weighted_sum on population.",
+            inputs: &["area"],
+            params: vec![
+                p("level", false, "1km | 500m (default) | 250m"),
+                p("clip", false, "keep only cells intersecting the area geometry (default true)"),
+                p("cross_check", false, "compare totals with the independent 1km product (default true)"),
+            ],
+        },
+        OperationSpec {
             name: "buffer",
             title: "バッファ",
             description: "Area within a distance of each feature. Distance needs a unit (m or km). Computed in a metric CRS.",
@@ -165,6 +189,7 @@ pub fn catalog() -> Vec<OperationSpec> {
             params: vec![
                 p("predicate", false, "intersects (default) | contains | within | within_distance | disjoint"),
                 p("distance", false, "required for within_distance, with unit"),
+                p("invert", false, "true keeps the features that do NOT satisfy the predicate"),
             ],
         },
         OperationSpec {
@@ -292,6 +317,8 @@ pub fn run(op: &str, inputs: &BTreeMap<String, Layer>, params: &Value) -> Result
     let input = |role: &str| &inputs[role];
     let mut output = match op {
         "make_points" => make_points(&params),
+        "place" => place(&params),
+        "census_mesh" => census_mesh(input("area"), &params),
         "buffer" => buffer(input("layer"), &params),
         "clip" => clip(input("layer"), input("mask"), false),
         "erase" => clip(input("layer"), input("mask"), true),
@@ -723,6 +750,192 @@ fn working_note(crs: &CrsInfo) -> String {
 // ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
+
+fn cache_dir() -> PathBuf {
+    std::env::var("GENEGIS_CACHE_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".genegis/cache"))
+}
+
+fn place(params: &Value) -> Result<OpOutput> {
+    use crate::place::{
+        parse_response, request_url, Fetcher, HttpFetcher, PlaceProvider, PlaceRequest,
+    };
+    let request = PlaceRequest {
+        query: str_param(params, "query").unwrap_or_default().to_string(),
+        provider: serde_json::from_value(
+            params
+                .get("provider")
+                .cloned()
+                .unwrap_or(json!("nominatim")),
+        )
+        .map_err(|e| ToolkitError::parameter("place", e.to_string()))?,
+        candidate: params.get("candidate").and_then(Value::as_u64).unwrap_or(0) as usize,
+    };
+    let url = request_url(&request);
+    let body = HttpFetcher.get(&url)?;
+    let candidates = parse_response(request.provider, &request.query, &body)?;
+    let (chosen, feature) = candidates.get(request.candidate).cloned().ok_or_else(|| {
+        ToolkitError::Provider(format!(
+            "no place named {:?} ({} candidates)",
+            request.query,
+            candidates.len()
+        ))
+    })?;
+    let name = chosen
+        .name
+        .split([',', '、'])
+        .next()
+        .unwrap_or(&chosen.name)
+        .trim()
+        .to_string();
+    let mut layer = derived(name, "EPSG:4326");
+    layer.crs_status = CrsStatus::Declared;
+    layer.features.push(Feature { id: 0, ..feature });
+    let digest = crate::layer::sha256_bytes(&body);
+    let (license, attribution) = match request.provider {
+        PlaceProvider::Nominatim => ("ODbL-1.0", "© OpenStreetMap contributors"),
+        PlaceProvider::Gsi => (
+            "国土地理院コンテンツ利用規約",
+            "国土地理院 地名・住所検索API",
+        ),
+    };
+    let mut output = OpOutput {
+        checks: vec![Check::new(
+            "place_resolved",
+            true,
+            format!(
+                "{} of {} candidates chosen ({}, boundary: {})",
+                request.candidate + 1,
+                candidates.len(),
+                chosen.kind,
+                chosen.has_boundary
+            ),
+        )],
+        notes: vec![format!("{url} → {digest}")],
+        layer,
+    };
+    if !chosen.has_boundary {
+        output
+            .notes
+            .push("provider returned a point, not a boundary".into());
+    }
+    output.layer.provenance.license = Some(license.into());
+    output.layer.provenance.attribution = Some(attribution.into());
+    Ok(output)
+}
+
+fn census_mesh(area: &Layer, params: &Value) -> Result<OpOutput> {
+    use crate::estat::{build_census_mesh, fetch_mesh_file, first_meshes, MeshLevel};
+    use crate::place::HttpFetcher;
+    let level = MeshLevel::parse(str_param(params, "level").unwrap_or("500m"))?;
+    let clip = params.get("clip").and_then(Value::as_bool).unwrap_or(true);
+    let cross_check = params
+        .get("cross_check")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let bbox = area
+        .bbox_wgs84()
+        .ok_or_else(|| ToolkitError::parameter("census_mesh", "area has no geometry"))?;
+    let meshes = first_meshes(bbox);
+    if meshes.is_empty() {
+        return Err(ToolkitError::parameter(
+            "census_mesh",
+            "area lies outside Japan's grid squares",
+        ));
+    }
+    if meshes.len() > 12 {
+        return Err(ToolkitError::parameter(
+            "census_mesh",
+            format!(
+                "area spans {} first-level meshes; choose a smaller area",
+                meshes.len()
+            ),
+        ));
+    }
+    let cache = cache_dir().join("estat");
+    let files = meshes
+        .iter()
+        .map(|m| fetch_mesh_file(level, m, &HttpFetcher, Some(&cache)))
+        .collect::<Result<Vec<_>>>()?;
+    let built = build_census_mesh(level, bbox, &files)?;
+    let mut layer = built.layer;
+    let before_clip = layer.features.len();
+    if clip {
+        let wgs84 = proj::lookup_epsg(4326)?;
+        let area_4326 = area.reprojected(&wgs84)?;
+        let shapes: Vec<Geometry<f64>> = area_4326
+            .features
+            .iter()
+            .filter_map(|f| f.geometry.clone())
+            .collect();
+        layer.features.retain(|cell| {
+            cell.geometry
+                .as_ref()
+                .is_some_and(|g| shapes.iter().any(|shape| shape.intersects(g)))
+        });
+    }
+    let mut checks = vec![Check::new(
+        "cells_conserve_published_totals",
+        built.raw_total == built.built_total,
+        format!(
+            "{} persons in raw rows vs {} in built cells across {} first-level meshes",
+            built.raw_total,
+            built.built_total,
+            meshes.len()
+        ),
+    )];
+    if cross_check && level != MeshLevel::Km1 {
+        let coarse = meshes
+            .iter()
+            .map(|m| fetch_mesh_file(MeshLevel::Km1, m, &HttpFetcher, Some(&cache)))
+            .collect::<Result<Vec<_>>>()?;
+        let reference = build_census_mesh(MeshLevel::Km1, bbox, &coarse)?;
+        let relative = (built.raw_total - reference.raw_total).abs() as f64
+            / reference.raw_total.max(1) as f64;
+        // Every level publishes the same totals per first-level mesh, so the
+        // independent 1 km product must agree exactly.
+        checks.push(Check::new(
+            "matches_1km_product",
+            built.raw_total == reference.raw_total,
+            format!(
+                "{} {} vs independent 1km product {} persons ({:.4}% apart)",
+                level.label(),
+                built.raw_total,
+                reference.raw_total,
+                relative * 100.0
+            ),
+        ));
+    }
+    let mut notes = layer.provenance.notes.clone();
+    notes.push(format!(
+        "{} cells kept of {before_clip} in the area's extent{}",
+        layer.features.len(),
+        if clip {
+            " (clipped to the area geometry)"
+        } else {
+            ""
+        }
+    ));
+    for file in &built.files {
+        notes.push(format!(
+            "{} → {}{}",
+            file.url,
+            file.sha256,
+            if file.cached { " (cache)" } else { "" }
+        ));
+    }
+    let license = layer.provenance.license.clone();
+    let attribution = layer.provenance.attribution.clone();
+    let mut output = OpOutput {
+        layer,
+        checks,
+        notes,
+    };
+    output.layer.provenance.license = license;
+    output.layer.provenance.attribution = attribution;
+    Ok(output)
+}
 
 fn make_points(params: &Value) -> Result<OpOutput> {
     let crs = proj::lookup(str_param(params, "crs").unwrap_or("EPSG:4326"))?;
@@ -1387,6 +1600,7 @@ fn spatial_join(target: &Layer, join: &Layer, params: &Value) -> Result<OpOutput
     let target_m = target.reprojected(&work)?;
     let join_m = join.reprojected(&work)?;
     let joins = index_layer(&join_m);
+    let join_grid = GridIndex::build(joins.iter().map(|j| j.bbox).collect(), 4);
     if area_weighted && joins.iter().any(|j| polygonal(&j.geometry).is_none()) {
         return Err(ToolkitError::parameter(
             "spatial_join",
@@ -1423,10 +1637,8 @@ fn spatial_join(target: &Layer, join: &Layer, params: &Value) -> Result<OpOutput
             if let Some(p) = &target_poly {
                 target_polys.push(p.clone());
             }
-            for (j, candidate) in joins.iter().enumerate() {
-                if !bbox_overlap(&bbox, &candidate.bbox, pad) {
-                    continue;
-                }
+            for j in join_grid.query(bbox, pad) {
+                let candidate = &joins[j];
                 let hit = predicate_holds(predicate, geometry, &candidate.geometry);
                 match predicate_independent(predicate, geometry, &candidate.geometry) {
                     Some(true) => independent_matches += 1,
@@ -1551,10 +1763,15 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
     require_valid("select_by_location", layer)?;
     require_valid("select_by_location", other)?;
     let predicate = predicate_param("select_by_location", params, true)?;
+    let invert = bool_param("select_by_location", params, "invert")?;
     let work = working_crs(layer)?;
     let layer_m = layer.reprojected(&work)?;
     let other_m = other.reprojected(&work)?;
     let others = index_layer(&other_m);
+    let other_grid = GridIndex::build(others.iter().map(|o| o.bbox).collect(), 4);
+    let others_all_points = others
+        .iter()
+        .all(|o| matches!(o.geometry, Geometry::Point(_)));
     let pad = match predicate {
         Predicate::WithinDistance(d) => d,
         _ => 0.0,
@@ -1569,14 +1786,13 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
         let Some(bbox) = bbox_of(geometry) else {
             continue;
         };
-        let candidates: Vec<&Indexed> = if predicate == Predicate::Disjoint {
-            others.iter().collect()
-        } else {
-            others
-                .iter()
-                .filter(|o| bbox_overlap(&bbox, &o.bbox, pad))
-                .collect()
-        };
+        // Features whose boxes do not overlap cannot intersect, so disjoint
+        // only needs to rule out the overlapping candidates too.
+        let candidates: Vec<&Indexed> = other_grid
+            .query(bbox, pad)
+            .into_iter()
+            .map(|i| &others[i])
+            .collect();
         let hit = if predicate == Predicate::Disjoint {
             candidates.iter().all(|o| !o.geometry.intersects(geometry))
         } else {
@@ -1587,20 +1803,20 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
         // Independent verification.
         let independent: Option<bool> = match predicate {
             Predicate::WithinDistance(d) => match geometry {
-                Geometry::Point(pt) => {
+                Geometry::Point(pt) if others_all_points => {
                     let lonlat = proj::to_geographic(&work, pt.x(), pt.y())?;
                     let mut best = f64::INFINITY;
-                    let mut available = true;
-                    for o in &others {
-                        match &o.geometry {
-                            Geometry::Point(q) => {
-                                let q = proj::to_geographic(&work, q.x(), q.y())?;
-                                best = best.min(Geodesic.distance(
-                                    Point::new(lonlat.0, lonlat.1),
-                                    Point::new(q.0, q.1),
-                                ));
-                            }
-                            _ => available = false,
+                    let available = true;
+                    // Geodesic re-measurement of every point within a
+                    // slightly wider box; anything outside it is farther
+                    // than the threshold in both metrics.
+                    for i in other_grid.query(bbox, d * 1.01 + 1.0) {
+                        if let Geometry::Point(q) = &others[i].geometry {
+                            let q = proj::to_geographic(&work, q.x(), q.y())?;
+                            best = best.min(
+                                Geodesic
+                                    .distance(Point::new(lonlat.0, lonlat.1), Point::new(q.0, q.1)),
+                            );
                         }
                     }
                     // Geodesic vs projected distances differ by the UTM scale
@@ -1635,7 +1851,7 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
             Some(_) => {}
             None => independent_available = false,
         }
-        if hit {
+        if hit != invert {
             keep.push(index);
         }
     }
@@ -1686,6 +1902,7 @@ fn distance_to_nearest(layer: &Layer, target: &Layer, params: &Value) -> Result<
     let layer_m = layer.reprojected(&work)?;
     let target_m = target.reprojected(&work)?;
     let targets = index_layer(&target_m);
+    let target_grid = GridIndex::build(targets.iter().map(|t| t.bbox).collect(), 2);
     if targets.is_empty() {
         return Err(ToolkitError::parameter(
             "distance_to_nearest",
@@ -1702,14 +1919,22 @@ fn distance_to_nearest(layer: &Layer, target: &Layer, params: &Value) -> Result<
         let Some(geometry) = &feature.geometry else {
             continue;
         };
-        let mut best: Option<(f64, &Indexed)> = None;
-        for t in &targets {
-            let d = Euclidean.distance(geometry, &t.geometry);
-            if best.is_none_or(|(b, _)| d < b) {
-                best = Some((d, t));
-            }
-        }
-        let (distance, nearest) = best.expect("targets is non-empty");
+        let (best_index, distance) = match geometry {
+            // Points: ring search on the grid with exact distances.
+            Geometry::Point(p) => target_grid
+                .nearest((p.x(), p.y()), |i| {
+                    Euclidean.distance(geometry, &targets[i].geometry)
+                })
+                .expect("targets is non-empty"),
+            // Extended geometries: exact scan (the ring bound assumes a point).
+            _ => targets
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i, Euclidean.distance(geometry, &t.geometry)))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                .expect("targets is non-empty"),
+        };
+        let nearest = &targets[best_index];
         if let (Geometry::Point(a), Geometry::Point(b)) = (geometry, &nearest.geometry) {
             let a = proj::to_geographic(&work, a.x(), a.y())?;
             let b = proj::to_geographic(&work, b.x(), b.y())?;

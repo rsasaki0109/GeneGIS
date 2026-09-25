@@ -73,7 +73,7 @@ its SHA-256, and the executor rejects bytes that do not match.
 
 ### 2. Operations
 
-`ops::catalog()` defines 17 operations: `make_points`, `buffer`, `clip`,
+`ops::catalog()` defines 19 operations: `place`, `census_mesh`, `make_points`, `buffer`, `clip`,
 `erase`, `intersect`, `dissolve`, `spatial_join`, `select_by_location`,
 `distance_to_nearest`, `reproject`, `assign_crs`, `make_valid`, `centroid`,
 `measure`, `filter`, `calculate`, `summarize`. Rules shared by all of them:
@@ -189,14 +189,79 @@ shapes it knows but must not be trusted outside them; an agent planner covers
 compositional questions, and the verification boundary — not the agent —
 decides what counts as an answer.
 
+**Follow-up: the rule planner declines instead of guessing (2026-09-26).**
+It now detects conditions that change the answer — negation, numeric
+thresholds, statistics, sums, time comparisons, and named features (駅名,
+区名) — and declines when the rule it matched does not apply one of them.
+It also applies 「…以内にない」 (`select_by_location` gained `invert`),
+thresholds on the reference layer, and every named feature (`IN` lists).
+
+To keep the comparison honest, a second held-out set of six questions was
+written and committed before this work, then scored before any fix:
+
+| Planner | Held-out set 2 |
+|---------|----------------|
+| Rule (before the fix) | 2/6 correct, 3 declined, **2 wrong** |
+| Claude Code over MCP | 6/6 |
+
+Set 2 then drove the named-feature fix, so both held-out sets are now
+calibration. Over all 23 questions the rule planner is 19 correct, 4
+declined, 0 wrong, and the CI gate fails on any wrong answer to a known
+question ([set 2 reports](../reports/rfc-0007-planner-eval-rule-set2.json)).
+
 ### 4. Places
 
 `place::resolve_place` resolves any name through OpenStreetMap Nominatim
 (boundaries, ODbL) or 国土地理院 地名・住所検索 (points). The response bytes
 are hashed into the source snapshot, all candidates are returned, boundary
 candidates are preferred, and license/attribution travel with the layer.
-Place data can then be combined with any imported statistics (for example
-clip e-Stat mesh data to 札幌市).
+The `place` operation performs the same resolution as a workflow step.
+
+### 4a. Census grid squares without an application ID
+
+The `census_mesh` operation fetches 令和2年国勢調査 population per grid
+square (1 km / 500 m / 250 m, e-Stat statsId T001140/T001141/T001142) from
+the e-Stat 統計GIS download endpoint, which needs no application ID. Grid
+squares are computed from their codes; the zipped CP932 files are cached
+under `.genegis/cache/estat` and hashed into provenance, with the e-Stat
+source statement attached.
+
+Secrecy flags (HTKSYORI/HTKSAKI/GASSAN) suppress only the breakdown columns;
+人口（総数） is published for every cell. This was established from the data:
+summing every row gives identical totals at 1 km, 500 m, and 250 m for each
+first-level mesh, while dropping 秘匿地域 rows does not. A first
+implementation that folded secret cells into their 合算先 was caught by the
+independent check below (0.54 % apart for Sapporo) before release.
+
+Checks: cells conserve the published totals, and finer levels match the
+independent 1 km product exactly.
+
+「札幌市の人口密度」 with nothing loaded now plans and verifies
+`place → census_mesh (500 m) → spatial_join (area-weighted) → measure →
+calculate`:
+
+| Question | GeneGIS | 令和2年国勢調査 |
+|----------|---------|-----------------|
+| 札幌市 population | 1,972,712 | 1,973,395 (0.035 %) |
+| 札幌市 area | 1,121.3 km² | 1,121.26 km² |
+| 札幌市 density | 1,759 /km² | ≈1,760 /km² |
+| 福岡市 population | 1,610,208 | 1,612,392 (0.14 %) |
+
+Remaining differences come from OpenStreetMap vs. official boundaries and
+area-weighted apportionment of cells on the boundary.
+
+### 4b. Scale
+
+A dependency-free uniform grid index drives `spatial_join`,
+`select_by_location` (including its geodesic cross-check), and
+`distance_to_nearest` (ring search). On 100 k points, 10 k cells, and 200
+stations: spatial join 8.83 s → 0.41 s, select within 300 m 28.62 s →
+0.35 s, nearest 0.97 s → 0.58 s, with identical outputs and all checks run
+(`examples/bench_ops.rs`, release build). The Workbench map draws on a
+canvas with cached `Path2D` objects, viewport culling, and batched points;
+the display GeoJSON carries only feature IDs and is simplified past 300 k
+vertices, labelled on the map, while tables, picking, analysis, and exports
+keep full geometry.
 
 ### 5. Attributes
 
@@ -237,8 +302,9 @@ showing the executed graph, every check, units, digests, and sources.
 supported format through `RunWorkflow`; `genegis gis ask "<question>" --layer
 <file> …` plans, executes, verifies, and prints the run receipt; `genegis gis
 ops` lists the catalog. CI runs an import → GeoPackage → re-import → ask →
-PDF smoke test. CI also runs the rule planner against the 12 calibration questions
-(`planner_eval rule --require-calibration`).
+PDF smoke test. CI also runs the rule planner against the calibration
+questions (`planner_eval rule --require-calibration`): known shapes must be
+answered correctly and nothing known may be answered wrongly.
 
 From Claude Code, the repository's `.mcp.json` starts `genegis-mcp` through
 `cargo run`; approve the `genegis` server when prompted and ask spatial
@@ -248,8 +314,8 @@ questions in plain language.
 
 - No raster analysis, network routing, or 3D in the toolkit (those remain in
   their existing crates).
-- No automatic statistics download for arbitrary cities: e-Stat requires an
-  application ID; users import statistics and combine them with places.
+- Automatic statistics cover the 2020 census population grid only (total,
+  male, female); other e-Stat tables still need to be imported.
 - CSV cannot carry types; use GeoPackage/GeoParquet for lossless exchange.
 - The PDF references, and does not embed, a Japanese font; viewers substitute
   an installed Gothic face.

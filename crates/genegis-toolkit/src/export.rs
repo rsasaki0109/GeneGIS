@@ -142,6 +142,45 @@ pub fn export(layer: &Layer, format: ExportFormat, map: &MapOptions) -> Result<E
     })
 }
 
+/// Display payload for map clients: EPSG:4326 GeoJSON carrying only the
+/// feature ID (attributes come from the table/pick APIs). Layers with more
+/// than `vertex_budget` vertices are simplified (Douglas–Peucker) for
+/// display only; the tolerance in degrees is returned so clients can say so.
+pub fn display_geojson(layer: &Layer, vertex_budget: usize) -> Result<(String, Option<f64>)> {
+    use geo::{CoordsIter, Simplify};
+    let wgs84 = proj::lookup_epsg(4326)?;
+    let mut display = layer.reprojected(&wgs84)?;
+    let vertices: usize = display
+        .features
+        .iter()
+        .filter_map(|f| f.geometry.as_ref())
+        .map(|g| g.coords_count())
+        .sum();
+    let tolerance = match (vertices > vertex_budget, display.bbox()) {
+        (true, Some(b)) => {
+            let diagonal = ((b[2] - b[0]).powi(2) + (b[3] - b[1]).powi(2)).sqrt();
+            Some(diagonal / 4000.0 * (vertices as f64 / vertex_budget as f64).sqrt())
+        }
+        _ => None,
+    };
+    for feature in &mut display.features {
+        feature.properties =
+            std::collections::BTreeMap::from([("__id".to_string(), Value::from(feature.id))]);
+        if let (Some(epsilon), Some(geometry)) = (tolerance, feature.geometry.as_mut()) {
+            let simplified = match &*geometry {
+                Geometry::Polygon(p) => Geometry::Polygon(p.simplify(epsilon)),
+                Geometry::MultiPolygon(m) => Geometry::MultiPolygon(m.simplify(epsilon)),
+                Geometry::LineString(l) => Geometry::LineString(l.simplify(epsilon)),
+                Geometry::MultiLineString(m) => Geometry::MultiLineString(m.simplify(epsilon)),
+                other => other.clone(),
+            };
+            *geometry = simplified;
+        }
+    }
+    display.fields.clear();
+    Ok((geojson_io::write(&display, true)?, tolerance))
+}
+
 fn csv_cell(text: &str) -> String {
     if text.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", text.replace('"', "\"\""))
@@ -817,6 +856,25 @@ mod tests {
             assert_eq!(file.receipt.feature_count, 16);
             assert_eq!(file.receipt.layer_digest, layer.digest());
         }
+    }
+
+    #[test]
+    fn display_payload_is_lean_and_simplified_when_large() {
+        let layer = wards();
+        let (full, tolerance) = display_geojson(&layer, usize::MAX).unwrap();
+        assert!(tolerance.is_none());
+        assert!(
+            !full.contains("population_source"),
+            "attributes must not be shipped for display"
+        );
+        let (small, tolerance) = display_geojson(&layer, 2_000).unwrap();
+        assert!(tolerance.is_some());
+        assert!(
+            small.len() < full.len() / 2,
+            "{} vs {}",
+            small.len(),
+            full.len()
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@
 //! units, sources, and provenance recorded at every step.
 
 pub mod error;
+pub mod estat;
 pub mod execute;
 pub mod export;
 pub mod expr;
@@ -14,6 +15,7 @@ pub mod geojson_io;
 pub mod geoparquet_io;
 pub mod gpkg_io;
 pub mod import;
+pub mod index;
 pub mod layer;
 pub mod ops;
 pub mod place;

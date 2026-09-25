@@ -37,7 +37,8 @@ struct Case {
     truth: Option<(Value, &'static str)>,
     rules_expected: bool,
     /// Held-out cases were written after the rule planner was tuned and are
-    /// never used to tune it.
+    /// never used to tune it. Once a held-out set has driven a change it is
+    /// demoted to calibration and a fresh set is written first.
     held_out: bool,
 }
 
@@ -177,7 +178,7 @@ fn cases() -> Vec<Case> {
                 "v",
             )),
             rules_expected: false,
-            held_out: true,
+            held_out: false,
         },
         Case {
             prompt: "避難所から1km以内にない店舗はいくつ？",
@@ -190,7 +191,7 @@ fn cases() -> Vec<Case> {
                 "count",
             )),
             rules_expected: false,
-            held_out: true,
+            held_out: false,
         },
         Case {
             prompt: "収容人数が3000人以上の避難所から500m以内にある店舗の数",
@@ -203,7 +204,7 @@ fn cases() -> Vec<Case> {
                 "count",
             )),
             rules_expected: false,
-            held_out: true,
+            held_out: false,
         },
         Case {
             prompt: "区ごとの避難所の収容人数の合計",
@@ -214,7 +215,7 @@ fn cases() -> Vec<Case> {
                 "v",
             )),
             rules_expected: false,
-            held_out: true,
+            held_out: false,
         },
         Case {
             prompt: "店舗が10件以上ある区の人口の合計は？",
@@ -227,7 +228,81 @@ fn cases() -> Vec<Case> {
                 "v",
             )),
             rules_expected: false,
-            held_out: true,
+            held_out: false,
+        },
+        // Former held-out set 2 (written 2026-09-26 before the planner safety
+        // work; scored in docs/reports/rfc-0007-planner-eval-*-set2.json, then
+        // used to fix named-feature handling, so now calibration).
+        Case {
+            prompt: "浸水想定区域に含まれない店舗の数",
+            point: None,
+            truth: Some((
+                json!({"goal": "", "steps": [
+                {"id": "v", "op": "make_valid", "inputs": {"layer": "{flood}"}},
+                {"id": "e", "op": "erase", "inputs": {"layer": "{pois}", "mask": "v"}},
+                {"id": "out", "op": "summarize", "inputs": {"layer": "e"}, "params": {"aggregates": [{"op": "count"}]}}]}),
+                "count",
+            )),
+            rules_expected: false,
+            held_out: false,
+        },
+        Case {
+            prompt: "栄駅か名古屋駅から1km以内にある避難所の数",
+            point: None,
+            truth: Some((
+                json!({"goal": "", "steps": [
+                {"id": "s", "op": "filter", "inputs": {"layer": "{stations}"}, "params": {"where": "駅名 IN ('栄', '名古屋')"}},
+                {"id": "sel", "op": "select_by_location", "inputs": {"layer": "{shelters}", "other": "s"}, "params": {"predicate": "within_distance", "distance": "1 km"}},
+                {"id": "out", "op": "summarize", "inputs": {"layer": "sel"}, "params": {"aggregates": [{"op": "count"}]}}]}),
+                "count",
+            )),
+            rules_expected: false,
+            held_out: false,
+        },
+        Case {
+            prompt: "人口が10万人未満の区の面積の合計は何km²？",
+            point: None,
+            truth: Some((
+                json!({"goal": "", "steps": [
+                {"id": "f", "op": "filter", "inputs": {"layer": "{wards}"}, "params": {"where": "population < 100000"}},
+                {"id": "m", "op": "measure", "inputs": {"layer": "f"}, "params": {"area_unit": "km2"}},
+                {"id": "out", "op": "summarize", "inputs": {"layer": "m"}, "params": {"aggregates": [{"op": "sum", "field": "area_km2", "as": "v"}]}}]}),
+                "v",
+            )),
+            rules_expected: false,
+            held_out: false,
+        },
+        Case {
+            prompt: "避難所から最寄り駅までの距離の最大値は？",
+            point: None,
+            truth: Some((
+                json!({"goal": "", "steps": [
+                {"id": "n", "op": "distance_to_nearest", "inputs": {"layer": "{shelters}", "target": "{stations}"}},
+                {"id": "out", "op": "summarize", "inputs": {"layer": "n"}, "params": {"aggregates": [{"op": "max", "field": "nearest_distance_m", "as": "v"}]}}]}),
+                "v",
+            )),
+            rules_expected: false,
+            held_out: false,
+        },
+        Case {
+            prompt: "千種区にある店舗の数は？",
+            point: None,
+            truth: Some((
+                json!({"goal": "", "steps": [
+                {"id": "w", "op": "filter", "inputs": {"layer": "{wards}"}, "params": {"where": "ward_name = '千種区'"}},
+                {"id": "sel", "op": "select_by_location", "inputs": {"layer": "{pois}", "other": "w"}, "params": {"predicate": "intersects"}},
+                {"id": "out", "op": "summarize", "inputs": {"layer": "sel"}, "params": {"aggregates": [{"op": "count"}]}}]}),
+                "count",
+            )),
+            rules_expected: false,
+            held_out: false,
+        },
+        Case {
+            prompt: "5年前と比べて名古屋市の人口は増えた？",
+            point: None,
+            truth: None,
+            rules_expected: false,
+            held_out: false,
         },
         Case {
             prompt: "明日の名古屋の天気を教えて",
@@ -455,7 +530,17 @@ fn main() {
     );
     let calibration_failures = rows
         .iter()
-        .filter(|r| r["held_out"] == json!(false) && r["verdict"] != json!("correct"))
+        .filter(|r| {
+            let known = r["held_out"] == json!(false);
+            let must_answer = r["rules_expected"] == json!(true);
+            let verdict = r["verdict"].as_str().unwrap_or("");
+            // Known question shapes must be answered correctly; nothing
+            // known may be answered wrongly (declining is acceptable).
+            known
+                && ((must_answer && verdict != "correct")
+                    || verdict == "wrong"
+                    || verdict == "rejected")
+        })
         .count();
     if let Some(path) = report_path {
         let report = json!({
