@@ -165,6 +165,7 @@ pub fn catalog() -> Vec<OperationSpec> {
             params: vec![
                 p("predicate", false, "intersects (default) | contains | within | within_distance | disjoint"),
                 p("distance", false, "required for within_distance, with unit"),
+                p("invert", false, "true keeps the features that do NOT satisfy the predicate"),
             ],
         },
         OperationSpec {
@@ -1551,6 +1552,7 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
     require_valid("select_by_location", layer)?;
     require_valid("select_by_location", other)?;
     let predicate = predicate_param("select_by_location", params, true)?;
+    let invert = bool_param("select_by_location", params, "invert")?;
     let work = working_crs(layer)?;
     let layer_m = layer.reprojected(&work)?;
     let other_m = other.reprojected(&work)?;
@@ -1635,7 +1637,7 @@ fn select_by_location(layer: &Layer, other: &Layer, params: &Value) -> Result<Op
             Some(_) => {}
             None => independent_available = false,
         }
-        if hit {
+        if hit != invert {
             keep.push(index);
         }
     }

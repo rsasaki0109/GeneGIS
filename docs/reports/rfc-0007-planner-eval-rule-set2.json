@@ -163,15 +163,15 @@
     },
     {
       "detail": "planner could not resolve the request: 「浸水想定区域に含まれない店舗の数」の否定（〜ない・以外）をルール式プランナーでは扱えないため、違う質問に答えてしまわないよう回答を控えます。LLM プランナーか MCP 経由のエージェントを使ってください",
-      "held_out": false,
+      "held_out": true,
       "prompt": "浸水想定区域に含まれない店舗の数",
       "rules_expected": false,
       "steps": [],
       "verdict": "unresolved"
     },
     {
-      "detail": "count matches truth [2.0]",
-      "held_out": false,
+      "detail": "no field matches truth [2.0]",
+      "held_out": true,
       "prompt": "栄駅か名古屋駅から1km以内にある避難所の数",
       "rules_expected": false,
       "steps": [
@@ -179,11 +179,11 @@
         "select_by_location",
         "summarize"
       ],
-      "verdict": "correct"
+      "verdict": "wrong"
     },
     {
       "detail": "planner could not resolve the request: 「人口が10万人未満の区の面積の合計は何km²？」の合計をルール式プランナーでは扱えないため、違う質問に答えてしまわないよう回答を控えます。LLM プランナーか MCP 経由のエージェントを使ってください",
-      "held_out": false,
+      "held_out": true,
       "prompt": "人口が10万人未満の区の面積の合計は何km²？",
       "rules_expected": false,
       "steps": [],
@@ -191,7 +191,7 @@
     },
     {
       "detail": "max_nearest_distance_m matches truth [7550.79]",
-      "held_out": false,
+      "held_out": true,
       "prompt": "避難所から最寄り駅までの距離の最大値は？",
       "rules_expected": false,
       "steps": [
@@ -201,20 +201,19 @@
       "verdict": "correct"
     },
     {
-      "detail": "count matches truth [6.0]",
-      "held_out": false,
+      "detail": "no field matches truth [6.0]",
+      "held_out": true,
       "prompt": "千種区にある店舗の数は？",
       "rules_expected": false,
       "steps": [
-        "filter",
         "clip",
         "summarize"
       ],
-      "verdict": "correct"
+      "verdict": "wrong"
     },
     {
       "detail": "declined: planner could not resolve the request: 「5年前と比べて名古屋市の人口は増えた？」を解析できませんでした。例: 「駅から500m以内の避難所を数えて」「この点から1km以内の人口」「区ごとの店舗数」「人口密度を計算」。読み込み済みレイヤ: 避難所（サンプル）、名古屋市 区界と人口（令和2年国勢調査）、浸水想定区域（サンプル）、主要駅（サンプル）、店舗・施設（サンプル）",
-      "held_out": false,
+      "held_out": true,
       "prompt": "5年前と比べて名古屋市の人口は増えた？",
       "rules_expected": false,
       "steps": [],
@@ -237,15 +236,15 @@
       "verdict": "correct"
     }
   ],
-  "correct": 19,
+  "correct": 17,
   "criteria": "answer field matches a hand-written ground-truth plan within 0.5 %; refusal cases must decline; every plan executes through RunWorkflow with all checks passing",
   "endpoint": null,
   "evaluation": "rfc-0007-planner",
-  "held_out_correct": 0,
-  "held_out_total": 0,
+  "held_out_correct": 2,
+  "held_out_total": 6,
   "mode": "rule",
   "model": null,
-  "observed_at": "2026-09-25T20:38:35.606032600+00:00",
+  "observed_at": "2026-09-25T20:27:49.261720300+00:00",
   "schema_version": "1.0.0",
   "total": 23
 }

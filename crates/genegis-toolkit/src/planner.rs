@@ -401,40 +401,88 @@ fn numeric_field_mentioned(prompt: &str, layer: &Layer) -> Option<String> {
     })
 }
 
-/// A named feature such as 「栄駅」: a text value of `layer` immediately
-/// followed by one of the layer's aliases. Returns a filter expression.
-fn named_feature(prompt: &str, layer: &Layer) -> Option<String> {
-    let aliases = layer_aliases(layer);
-    let mut best: Option<(usize, String)> = None;
+/// Named features of `layer` mentioned in the prompt, e.g. 「栄駅」「千種区」:
+/// text values that select a minority of the layer's features. Returns the
+/// field and every matching value (longest match wins per position).
+fn named_values(prompt: &str, layer: &Layer) -> Option<(String, Vec<String>)> {
+    let total = layer.features.len().max(1);
+    let mut best: Option<(String, Vec<String>)> = None;
     for field in layer
         .fields
         .iter()
         .filter(|f| f.field_type == FieldType::Text)
     {
+        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
         for feature in &layer.features {
-            let Some(value) = feature.properties.get(&field.name).and_then(Value::as_str) else {
-                continue;
-            };
-            let value = normalize(value.trim());
-            if value.is_empty() || value.chars().count() > 20 {
-                continue;
-            }
-            let hit = aliases
-                .iter()
-                .any(|alias| prompt.contains(&format!("{value}{alias}")));
-            if hit
-                && best
-                    .as_ref()
-                    .is_none_or(|(len, _)| value.chars().count() > *len)
-            {
-                best = Some((
-                    value.chars().count(),
-                    format!("\"{}\" = '{}'", field.name, value.replace('\'', "''")),
-                ));
+            if let Some(value) = feature.properties.get(&field.name).and_then(Value::as_str) {
+                *counts.entry(normalize(value.trim())).or_default() += 1;
             }
         }
+        let mut hits: Vec<String> = counts
+            .into_iter()
+            .filter(|(value, count)| {
+                value.chars().count() >= 1
+                    && value.chars().count() <= 20
+                    && *count * 2 <= total
+                    && prompt.contains(value.as_str())
+            })
+            .map(|(value, _)| value)
+            .collect();
+        // Drop values contained in a longer hit (名古屋 inside 名古屋駅西).
+        let snapshot = hits.clone();
+        hits.retain(|v| !snapshot.iter().any(|w| w != v && w.contains(v.as_str())));
+        // Single-character values only count when followed by the layer alias
+        // (栄 in 栄駅), otherwise they match too much text.
+        let aliases = layer_aliases(layer);
+        hits.retain(|v| {
+            v.chars().count() >= 2 || aliases.iter().any(|a| prompt.contains(&format!("{v}{a}")))
+        });
+        if !hits.is_empty() && best.as_ref().is_none_or(|(_, b)| hits.len() > b.len()) {
+            best = Some((field.name.clone(), hits));
+        }
     }
-    best.map(|(_, expression)| expression)
+    best
+}
+
+/// Filter expression selecting the named values.
+fn named_expression(field: &str, values: &[String]) -> String {
+    let quoted: Vec<String> = values
+        .iter()
+        .map(|v| format!("'{}'", v.replace('\'', "''")))
+        .collect();
+    if quoted.len() == 1 {
+        format!("\"{field}\" = {}", quoted[0])
+    } else {
+        format!("\"{field}\" IN ({})", quoted.join(", "))
+    }
+}
+
+/// Restrict `layer_ref` to the named features the prompt mentions; returns
+/// the reference to use afterwards.
+fn apply_named(
+    rp: &mut RulePlan,
+    text: &str,
+    layers: &BTreeMap<String, Layer>,
+    layer_ref: &str,
+    step_id: &str,
+) -> String {
+    let Some(layer) = layers.get(layer_ref) else {
+        return layer_ref.to_string();
+    };
+    let Some((field, values)) = named_values(text, layer) else {
+        return layer_ref.to_string();
+    };
+    let expression = named_expression(&field, &values);
+    rp.steps.push(step(
+        step_id,
+        "filter",
+        &[("layer", layer_ref)],
+        json!({"where": expression}),
+    ));
+    rp.rationale
+        .push(format!("{} を {expression} に絞り込む", layer.name));
+    rp.used.insert("named");
+    step_id.to_string()
 }
 
 /// Numeric threshold such as 「人口が15万人以上」 → (operator, value).
@@ -493,6 +541,57 @@ struct RulePlan {
     assumptions: Vec<String>,
     ambiguities: Vec<String>,
     confidence: f32,
+    /// Conditions detected in the question (negation, threshold, …).
+    signals: Vec<(&'static str, &'static str)>,
+    /// Conditions the chosen rule actually applied.
+    used: std::collections::BTreeSet<&'static str>,
+}
+
+/// Conditions whose presence changes the answer. If the question contains
+/// one that the chosen rule does not apply, the rule planner declines rather
+/// than answering a different question with confidence.
+fn detect_signals(text: &str) -> Vec<(&'static str, &'static str)> {
+    let mut signals = Vec::new();
+    if any(
+        text,
+        &[
+            "ない", "以外", "除く", "除外", "無い", "not ", "without", "except",
+        ],
+    ) {
+        signals.push(("negation", "否定（〜ない・以外）"));
+    }
+    if threshold(text).is_some() {
+        signals.push(("threshold", "数値の条件（以上・未満など）"));
+    }
+    if any(
+        text,
+        &[
+            "平均",
+            "最大",
+            "最小",
+            "最も遠い",
+            "最も多い",
+            "最も少ない",
+            "mean",
+            "average",
+            "maximum",
+            "minimum",
+        ],
+    ) {
+        signals.push(("statistic", "統計値（平均・最大など）"));
+    }
+    if any(text, &["合計", "総計", "sum", "total"]) {
+        signals.push(("sum", "合計"));
+    }
+    if any(
+        text,
+        &[
+            "年前", "前年", "昨年", "比べ", "推移", "増え", "減っ", "変化", "trend",
+        ],
+    ) {
+        signals.push(("temporal", "時点の比較"));
+    }
+    signals
 }
 
 fn step(id: &str, op: &str, inputs: &[(&str, &str)], params: Value) -> PlanStep {
@@ -570,7 +669,16 @@ pub fn plan_with_rules(
         assumptions: Vec::new(),
         ambiguities: Vec::new(),
         confidence: 0.8,
+        signals: detect_signals(&text),
+        used: Default::default(),
     };
+    if layers
+        .values()
+        .filter(|l| is_source(l))
+        .any(|l| named_values(&text, l).is_some())
+    {
+        rp.signals.push(("named", "地物名による絞り込み"));
+    }
     if let Some((_, Some(assumption))) = &distance {
         rp.assumptions.push(assumption.clone());
     }
@@ -697,23 +805,65 @@ pub fn plan_with_rules(
             }
             None => (found[0].1.clone(), found[1].1.clone()),
         };
-        // 「栄駅から…」: restrict the reference layer to the named feature.
-        let reference_name = layers[&reference].name.clone();
-        let reference = match named_feature(&text, &layers[&reference]) {
-            Some(expression) => {
-                rp.steps.push(step(
-                    "named",
-                    "filter",
-                    &[("layer", &reference)],
-                    json!({"where": expression}),
-                ));
-                rp.rationale
-                    .push(format!("{reference_name} を {expression} に絞り込む"));
-                "named".to_string()
+        // 「収容人数が3000人以上の避難所から…」: a threshold on a field of the
+        // reference (or subject) layer restricts that layer first.
+        let (reference, subject) = match threshold(&text) {
+            Some((op, value)) => {
+                let on_reference =
+                    numeric_field_mentioned(&text, &layers[&reference]).map(|f| (true, f));
+                let on_subject =
+                    numeric_field_mentioned(&text, &layers[&subject]).map(|f| (false, f));
+                match on_reference.or(on_subject) {
+                    Some((is_reference, field)) => {
+                        let target = if is_reference { &reference } else { &subject };
+                        let expression = format!("\"{field}\" {op} {value}");
+                        rp.steps.push(step(
+                            "limited",
+                            "filter",
+                            &[("layer", target)],
+                            json!({"where": expression}),
+                        ));
+                        rp.rationale.push(format!(
+                            "{} を {expression} に絞り込む",
+                            layers[target].name
+                        ));
+                        rp.used.insert("threshold");
+                        if is_reference {
+                            ("limited".to_string(), subject)
+                        } else {
+                            (reference, "limited".to_string())
+                        }
+                    }
+                    None => (reference, subject),
+                }
             }
-            None => reference,
+            None => (reference, subject),
         };
-        if population && population_field(&layers[&subject]).is_some() {
+        // 「…以内にない」: keep what is NOT within the distance.
+        let invert = any(
+            &text,
+            &[
+                "以内にない",
+                "以内に無い",
+                "以内にはない",
+                "以内にない",
+                "以内には無い",
+            ],
+        );
+        if invert {
+            rp.used.insert("negation");
+        }
+        // 「栄駅から…」: restrict the reference layer to the named feature.
+        let reference_name = layers
+            .get(&reference)
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| "条件に合う地物".into());
+        let reference = apply_named(&mut rp, &text, layers, &reference, "named");
+        let subject_name = layers
+            .get(&subject)
+            .map(|l| l.name.clone())
+            .unwrap_or_else(|| "条件に合う地物".into());
+        if population && layers.get(&subject).and_then(population_field).is_some() {
             let field = population_field(&layers[&subject]).expect("checked");
             rp.steps.push(step(
                 "area",
@@ -729,7 +879,7 @@ pub fn plan_with_rules(
             ));
             rp.rationale.push(format!(
                 "{} から {metres} m の範囲の人口を {} から面積按分",
-                reference_name, layers[&subject].name
+                reference_name, subject_name
             ));
             rp.assumptions
                 .push("人口は各ポリゴン内に一様に分布すると仮定（面積按分）".into());
@@ -742,18 +892,20 @@ pub fn plan_with_rules(
             ));
             rp.rationale.push(format!(
                 "{} ごとに {metres} m 以内の {} を数える",
-                reference_name, layers[&subject].name
+                reference_name, subject_name
             ));
         } else {
             rp.steps.push(step(
                 "selected",
                 "select_by_location",
                 &[("layer", &subject), ("other", &reference)],
-                json!({"predicate": "within_distance", "distance": format!("{metres} m")}),
+                json!({"predicate": "within_distance", "distance": format!("{metres} m"), "invert": invert}),
             ));
             rp.rationale.push(format!(
-                "{} のうち {} から {metres} m 以内のものを選択",
-                layers[&subject].name, reference_name
+                "{} のうち {} から {metres} m 以内{}のものを選択",
+                subject_name,
+                reference_name,
+                if invert { "にない" } else { "" }
             ));
             if counting {
                 rp.steps.push(step(
@@ -795,6 +947,7 @@ pub fn plan_with_rules(
         .find(|(word, _)| text.contains(word))
         .map(|(_, op)| op);
         if let Some(op) = statistic {
+            rp.used.insert("statistic");
             rp.steps.last_mut().expect("pushed").id = "nearest".into();
             rp.steps.push(step(
                 "result",
@@ -845,6 +998,7 @@ pub fn plan_with_rules(
             let mut aggregates = vec![json!({"op": "count", "as": "count"})];
             if let Some(field) = numeric_field_mentioned(&text, &layers[&other]) {
                 aggregates.push(json!({"op": "sum", "field": field}));
+                rp.used.insert("sum");
             }
             rp.steps.push(step(
                 "result",
@@ -873,8 +1027,16 @@ pub fn plan_with_rules(
             .find(|id| Some(*id) != mask.as_ref())
             .cloned();
         if let (Some(mask), Some(layer)) = (mask, layer) {
+            let mask = apply_named(&mut rp, &text, layers, &mask, "named_area");
+            let mask_name = layers
+                .get(&mask)
+                .map(|l| l.name.clone())
+                .unwrap_or_else(|| "指定した範囲".into());
             // 「区域の外」 means everything the mask does not cover.
             let outside = any(&text, &["外", "以外", "outside"]);
+            if outside && any(&text, &["以外"]) {
+                rp.used.insert("negation");
+            }
             let op = if outside { "erase" } else { "clip" };
             rp.steps.push(step(
                 "result",
@@ -885,7 +1047,7 @@ pub fn plan_with_rules(
             rp.rationale.push(format!(
                 "{} を {} の範囲{}",
                 layers[&layer].name,
-                layers[&mask].name,
+                mask_name,
                 if outside {
                     "から除く（外側だけ残す）"
                 } else {
@@ -895,6 +1057,9 @@ pub fn plan_with_rules(
             let sum_field = any(&text, &["合計", "総", "sum", "total"])
                 .then(|| numeric_field_mentioned(&text, &layers[&layer]))
                 .flatten();
+            if sum_field.is_some() {
+                rp.used.insert("sum");
+            }
             if counting || sum_field.is_some() {
                 rp.steps.last_mut().expect("pushed").id = "clipped".into();
                 let aggregate = match &sum_field {
@@ -933,6 +1098,7 @@ pub fn plan_with_rules(
             .or_else(|| population.then(|| population_field(&layers[&id])).flatten());
         if let Some(field) = field {
             let expression = format!("\"{field}\" {op} {value}");
+            rp.used.insert("threshold");
             rp.steps.push(step(
                 "result",
                 "filter",
@@ -1060,6 +1226,7 @@ pub fn plan_with_rules(
                 .or_else(|| population.then(|| population_field(&layers[&id])).flatten())
             {
                 aggregates.push(json!({"op": "sum", "field": field}));
+                rp.used.insert("sum");
             }
             let op = if kind(&id) == GeometryKind::Polygon
                 && any(&text, &["結合", "ディゾルブ", "dissolve", "まとめ"])
@@ -1152,6 +1319,18 @@ fn finish(
     mut rp: RulePlan,
     layers: &BTreeMap<String, Layer>,
 ) -> Result<PlannerResult> {
+    let unused: Vec<&str> = rp
+        .signals
+        .iter()
+        .filter(|(key, _)| !rp.used.contains(key))
+        .map(|(_, label)| *label)
+        .collect();
+    if !unused.is_empty() {
+        return Err(ToolkitError::Unresolved(format!(
+            "「{prompt}」の{}をルール式プランナーでは扱えないため、違う質問に答えてしまわないよう回答を控えます。LLM プランナーか MCP 経由のエージェントを使ってください",
+            unused.join("・")
+        )));
+    }
     repair_invalid_inputs(&mut rp, layers);
     let plan = ToolkitPlan {
         goal: prompt.trim().to_string(),
@@ -1519,6 +1698,71 @@ mod tests {
         .unwrap();
         let chosen = &layers[&result.plan.steps[0].inputs["layer"]];
         assert_eq!(chosen.name, "店舗", "picked {}", chosen.name);
+    }
+
+    #[test]
+    fn declines_conditions_it_cannot_apply() {
+        let layers = sample_layers();
+        let context = PlannerContext::default();
+        // Unsupported comparison over time.
+        let error = plan_with_rules("5年前と比べて人口は増えた？", &layers, &context).unwrap_err();
+        assert!(matches!(error, ToolkitError::Unresolved(_)));
+        // A threshold on an aggregated count is not a rule the planner knows.
+        let error =
+            plan_with_rules("店舗が10件以上ある区の人口の合計は？", &layers, &context).unwrap_err();
+        assert!(error.to_string().contains("回答を控えます"), "{error}");
+    }
+
+    #[test]
+    fn applies_every_named_feature_or_declines() {
+        let layers = sample_layers();
+        let context = PlannerContext::default();
+        let result = plan_with_rules(
+            "栄駅か名古屋駅から1km以内にある避難所の数",
+            &layers,
+            &context,
+        )
+        .unwrap();
+        let filter = result.plan.steps.iter().find(|s| s.op == "filter").unwrap();
+        let expression = filter.params["where"].as_str().unwrap();
+        assert!(
+            expression.contains("IN")
+                && expression.contains("'栄'")
+                && expression.contains("'名古屋'"),
+            "{expression}"
+        );
+        let result = plan_with_rules("千種区にある店舗の数は？", &layers, &context).unwrap();
+        assert!(result.plan.steps.iter().any(|s| s.params["where"]
+            .as_str()
+            .is_some_and(|w| w.contains("千種区"))));
+        // A named feature the matched rule cannot use makes it decline.
+        assert!(plan_with_rules("千種区の人口密度", &layers, &context).is_err());
+    }
+
+    #[test]
+    fn applies_negation_and_reference_thresholds() {
+        let layers = sample_layers();
+        let context = PlannerContext::default();
+        let result =
+            plan_with_rules("避難所から1km以内にない店舗はいくつ？", &layers, &context).unwrap();
+        let select = result
+            .plan
+            .steps
+            .iter()
+            .find(|s| s.op == "select_by_location")
+            .unwrap();
+        assert_eq!(select.params["invert"], json!(true));
+        let result = plan_with_rules(
+            "収容人数が3000人以上の避難所から500m以内にある店舗の数",
+            &layers,
+            &context,
+        )
+        .unwrap();
+        assert_eq!(result.plan.steps[0].op, "filter");
+        assert!(result.plan.steps[0].params["where"]
+            .as_str()
+            .unwrap()
+            .contains(">= 3000"));
     }
 
     #[test]
