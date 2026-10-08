@@ -154,8 +154,15 @@ fn handle_demo(args: &[String]) {
         eprintln!("       genegis demo frames-contrast [DIR] # render unverified-vs-verified PNGs");
         eprintln!("       genegis demo social-card [DIR] # render the 1280x640 social preview PNG");
         eprintln!("       genegis demo frames-isochrone [DIR] # walk vs walk+rail reach race PNGs");
+        eprintln!(
+            "       genegis demo daily-card DAY THEME density3d|isochrone|contrast [DIR] # 1080x1080 map-of-the-day card"
+        );
         process::exit(1);
     };
+    if action == "daily-card" {
+        handle_daily_card(&args[1..]);
+        return;
+    }
     if ![
         "frames",
         "frames-3d",
@@ -241,6 +248,40 @@ fn handle_demo(args: &[String]) {
         });
         println!("{} ({} bytes)", path.display(), png.len());
     }
+}
+
+fn handle_daily_card(args: &[String]) {
+    let (Some(day), Some(theme), Some(map)) = (args.first(), args.get(1), args.get(2)) else {
+        eprintln!("Usage: genegis demo daily-card DAY THEME density3d|isochrone|contrast [DIR]");
+        process::exit(1);
+    };
+    let day: u32 = day.parse().unwrap_or_else(|_| {
+        eprintln!("DAY must be a number from 1 to 30, got {day}");
+        process::exit(1);
+    });
+    let map = genegis_analysis::DailyMap::parse(map).unwrap_or_else(|error| {
+        eprintln!("{error}");
+        process::exit(1);
+    });
+    let png = genegis_analysis::render_daily_card(day, theme, map).unwrap_or_else(|error| {
+        eprintln!("Daily card render error: {error}");
+        process::exit(1);
+    });
+    let dir = PathBuf::from(
+        args.get(3)
+            .map(String::as_str)
+            .unwrap_or(".genegis/daily-cards"),
+    );
+    std::fs::create_dir_all(&dir).unwrap_or_else(|error| {
+        eprintln!("create {} failed: {error}", dir.display());
+        process::exit(1);
+    });
+    let path = dir.join(format!("day-{day:02}.png"));
+    std::fs::write(&path, &png).unwrap_or_else(|error| {
+        eprintln!("write {} failed: {error}", path.display());
+        process::exit(1);
+    });
+    println!("{} ({} bytes)", path.display(), png.len());
 }
 
 fn handle_capsule(args: &[String]) {

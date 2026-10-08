@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod change;
 pub mod city_scene;
+pub mod daily_card;
 pub mod dashboard;
 pub mod district3d;
 pub mod error;
@@ -44,6 +45,7 @@ pub use change::{
     CHANGE_CELL_SIZE_M, CONTROL_AREA,
 };
 pub use city_scene::{plan_city_scene_workflow, CitySceneWorkflowResult};
+pub use daily_card::{render_daily_card, DailyMap};
 pub use dashboard::{export_dashboard_pmtiles, DashboardExportOptions, DashboardExportReport};
 pub use district3d::{render_district3d_frames, District3dFrame};
 pub use error::AnalysisError;

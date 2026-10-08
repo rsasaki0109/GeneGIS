@@ -269,6 +269,25 @@ the plan. Results land in the same layer store as the Workbench.
 the same 17 questions scored against hand-written ground truth, rule planner
 vs. Claude Code over MCP.
 
+Outside this repository, run the server as a container (stdio, no network
+needed for the bundled Nagoya samples; layers persist in the volume):
+
+```json
+{
+  "mcpServers": {
+    "genegis": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "genegis-layers:/data", "ghcr.io/rsasaki0109/genegis-mcp:0.1.0"]
+    }
+  }
+}
+```
+
+The image is built from `deploy/mcp/Dockerfile` and smoke-tested over stdio on
+every pull request; pushing a `mcp-v<version>` tag publishes it to GHCR and
+lists `server.json` (`io.github.rsasaki0109/genegis`) in the official MCP
+Registry.
+
 ## Why it is different
 
 - Every operation flows through Command + Workflow Graph.
@@ -311,6 +330,9 @@ cargo run -p genegis-cli -- demo social-card && cp .genegis/social-card/social-c
 
 # Rebuild the walk vs walk+rail reach race
 cargo run -p genegis-cli -- demo frames-isochrone && bash scripts/build-isochrone-race-gif.sh
+
+# 1080×1080 map-of-the-day card (#30DayMapChallenge); refuses unless every check passed
+cargo run -p genegis-cli -- demo daily-card 5 "Lines" isochrone   # → .genegis/daily-cards/day-05.png
 
 # Rebuild the Phase 14 M0 3D district orbit
 cargo run -p genegis-cli -- demo frames-3d .genegis/frames-3d

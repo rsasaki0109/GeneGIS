@@ -503,6 +503,24 @@ fn render_frame(race: &Race, minute: usize) -> Result<Vec<u8>, AnalysisError> {
     rasterize_svg(&svg)
 }
 
+/// Final (60-minute) frame and its verification state, for the daily map card.
+pub(crate) fn card_source() -> Result<crate::daily_card::CardSource, AnalysisError> {
+    use sha2::{Digest, Sha256};
+    let race = build_race()?;
+    let mut hasher = Sha256::new();
+    for (node, (walk, transit)) in race.walk_times.iter().zip(&race.transit_times).enumerate() {
+        hasher.update(format!("{node}:{walk:?}:{transit:?}\n").as_bytes());
+    }
+    Ok(crate::daily_card::CardSource {
+        png: render_frame(&race, MAX_MINUTES)?,
+        prompt: "名古屋駅から、何分でどこまで行ける？",
+        checks_passed: race.checks.iter().filter(|c| c.passed).count(),
+        checks_total: race.checks.len(),
+        result_digest: format!("{:x}", hasher.finalize()),
+        synthetic: race.synthetic,
+    })
+}
+
 /// Render one frame every `STEP_MINUTES` from 0 to `MAX_MINUTES`.
 pub fn render_isochrone_race_frames() -> Result<Vec<IsochroneRaceFrame>, AnalysisError> {
     let race = build_race()?;
