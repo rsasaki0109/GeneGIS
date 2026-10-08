@@ -80,6 +80,26 @@ The frames are built only if the verifier actually rejects the Mercator
 candidate (`cargo run -p genegis-cli -- demo frames-contrast` +
 `scripts/build-verification-contrast-gif.sh`).
 
+## How far can you get from Nagoya Station?
+
+Walk only vs. walk + rail, minute by minute, on the same street network and
+POIs. Both sides run the accessibility workflows' own routing engines; reach
+on the right jumps along the rail corridors (expected wait and transfer
+penalty included):
+
+<p align="center">
+  <img src="docs/assets/isochrone-race.gif" alt="Two maps from Nagoya Station over 60 minutes: walk-only reach grows as a diamond while walk plus rail jumps along three rail corridors, reaching 50 POIs versus 14 by minute 45" width="960" />
+</p>
+
+Before any frame is drawn, every walk node is checked against the physical
+speed floors of both modes, adding rail must never make a node slower, and
+all POIs must snap to the network. That check is what caught the original
+synthetic corridors declaring 2 minutes per hop (up to 189 km/h); the fixture
+now derives ride time at 30 km/h (`nagoya-transit-fixture-v2`). Data is the
+synthetic grid fixture; the real OSM / N02 paths plug in through the
+`GENEGIS_WALK_NETWORK_PATH`, `GENEGIS_TRANSIT_PATH` and `GENEGIS_POIS_PATH`
+overrides.
+
 ## Explore a verified district in 3D
 
 The district view combines point-cloud terrain, LOD1 buildings, roads, POIs,
@@ -288,6 +308,9 @@ cargo run -p genegis-cli -- demo frames-nagoya3d && bash scripts/build-nagoya-de
 # Rebuild the unverified-vs-verified contrast and the 1280×640 social card
 cargo run -p genegis-cli -- demo frames-contrast && bash scripts/build-verification-contrast-gif.sh
 cargo run -p genegis-cli -- demo social-card && cp .genegis/social-card/social-card.png public/og.png
+
+# Rebuild the walk vs walk+rail reach race
+cargo run -p genegis-cli -- demo frames-isochrone && bash scripts/build-isochrone-race-gif.sh
 
 # Rebuild the Phase 14 M0 3D district orbit
 cargo run -p genegis-cli -- demo frames-3d .genegis/frames-3d

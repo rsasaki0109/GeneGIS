@@ -283,7 +283,7 @@ pub fn run_nagoya_accessibility_with_threshold(
 /// `genegis-vector` deliberately accepts polygon layers only, so point
 /// fixtures are parsed here with the same fail-closed expectations.
 /// One parsed POI: WGS84 position plus its category label.
-type PoiPoint = ((f64, f64), String);
+pub(crate) type PoiPoint = ((f64, f64), String);
 
 /// Run the X-minute-city analysis with a multimodal walk + transit graph.
 ///
@@ -475,7 +475,7 @@ pub fn run_nagoya_accessibility_with_transit(
 /// properties may declare `wait_minutes` (expected wait) and `ride_minutes`
 /// (in-vehicle time for the whole corridor). When absent, ride time is derived
 /// from the corridor's straight-line length and a default 30 km/h ride speed.
-fn load_transit_corridors(
+pub(crate) fn load_transit_corridors(
     path: &str,
     walk: &WalkGraph,
 ) -> Result<(Vec<TransitStop>, Vec<RideEdge>), AnalysisError> {
@@ -600,7 +600,7 @@ fn load_transit_corridors(
     Ok((stops, rides))
 }
 
-fn load_poi_points(path: &str) -> Result<Vec<PoiPoint>, AnalysisError> {
+pub(crate) fn load_poi_points(path: &str) -> Result<Vec<PoiPoint>, AnalysisError> {
     let text =
         std::fs::read_to_string(path).map_err(|error| AnalysisError::Message(error.to_string()))?;
     let parsed: serde_json::Value =

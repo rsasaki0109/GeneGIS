@@ -27,8 +27,15 @@
   "fixture": {
     "corridors": ["meitetsu-nagoya-main", "meijo-line", "hokusei-line"],
     "stops": 7,
-    "sha256": "sha256:c6849a7c6ea807b687d976561fe573b32222504c05e28b4900f1cb7535f77fb6",
-    "note": "SYNTHETIC rail corridors over the walk grid; real N02/N07 opt-in via GENEGIS_TRANSIT_PATH / GENEGIS_TRANSIT_SHA."
+    "sha256": "sha256:7f427f6f4062a6dffc6922b64234af623e68a1d7e813487204ab8401454684ce",
+    "note": "SYNTHETIC rail corridors over the walk grid; real N02/N07 opt-in via GENEGIS_TRANSIT_PATH / GENEGIS_TRANSIT_SHA.",
+    "revision": {
+      "snapshot_version": "nagoya-transit-fixture-v2",
+      "date": "2026-10-08",
+      "change": "ride time is derived from stop spacing at 30 km/h (500 m/min) instead of a declared 2.0 min per segment",
+      "reason": "v1 implied 40–189 km/h between stops, so multimodal routes beat the physical floor (straight line / 500 m/min) this report and the manifest state; caught by the isochrone-race ride_speed_floor check over every walk node",
+      "measured_impact": "per-ward reachable POIs at the 15-minute threshold are unchanged"
+    }
   },
   "verification": {
     "executor": "run_nagoya_accessibility_with_transit",

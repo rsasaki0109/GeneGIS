@@ -12,6 +12,7 @@ pub mod flood;
 pub mod geocoding;
 pub mod governance;
 pub mod gpu_acceptance;
+pub mod isochrone_race;
 pub mod live_dashboard;
 pub mod live_feed;
 pub mod nagoya;
@@ -63,6 +64,9 @@ pub use governance::{
 pub use gpu_acceptance::{
     gpu_receipt_digest, run_gpu_scene_acceptance_workflow, verify_gpu_scene_acceptance_receipt,
     GpuAcceptanceVerdict, GpuSceneAcceptanceReceipt, GpuSceneAcceptanceRequest,
+};
+pub use isochrone_race::{
+    render_isochrone_race_frames, verify_isochrone_race, IsochroneRaceFrame, RaceCheck,
 };
 pub use live_dashboard::{
     build_scene3d_dashboard, canonical_scene_result_digest, CategoryCount, DashboardWidget,
