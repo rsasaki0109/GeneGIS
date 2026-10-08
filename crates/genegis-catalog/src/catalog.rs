@@ -378,9 +378,9 @@ fn nagoya_transit_record() -> DatasetRecord {
         license: "CC0-1.0 (synthetic fixture; 参考: 国土数値情報 N02 鉄道 / N07 バスルート)".into(),
         checksum: Some(declared_checksum(
             "GENEGIS_TRANSIT_SHA",
-            "c6849a7c6ea807b687d976561fe573b32222504c05e28b4900f1cb7535f77fb6",
+            "7f427f6f4062a6dffc6922b64234af623e68a1d7e813487204ab8401454684ce",
         )),
-        source_version: Some("nagoya-transit-fixture-v1".into()),
+        source_version: Some("nagoya-transit-fixture-v2".into()),
         tags: vec!["nagoya".into(), "transit".into(), "rail".into(), "accessibility".into(), "demo".into()],
     }
 }

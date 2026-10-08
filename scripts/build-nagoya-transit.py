@@ -74,7 +74,9 @@ def main() -> int:
                     "line": line,
                     "mode": mode,
                     "wait_minutes": 6.0,
-                    "ride_minutes": 2.0,
+                    # No declared ride time: the loader derives it from the
+                    # stop spacing at 30 km/h, so routes respect the physical
+                    # floor (straight line / 500 m/min) the verifier checks.
                 },
                 "geometry": {"type": "LineString", "coordinates": coords},
             }
@@ -103,7 +105,8 @@ def main() -> int:
         "crs": "EPSG:4326",
         "description": (
             "SYNTHETIC deterministic transit corridors over the Nagoya walk "
-            "grid (rail mode, ~2 min between stops). NOT real MLIT N02/N07 data; "
+            "grid (rail mode at 30 km/h between stops, 6 min expected wait). "
+            "NOT real MLIT N02/N07 data; "
             "use scripts/fetch-mlit-transit.py for the licensed real corridors."
         ),
         "features": features,

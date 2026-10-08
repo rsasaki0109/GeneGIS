@@ -153,6 +153,7 @@ fn handle_demo(args: &[String]) {
         eprintln!("       genegis demo frames-nagoya3d [DIR] # verified 3D density orbit PNGs");
         eprintln!("       genegis demo frames-contrast [DIR] # render unverified-vs-verified PNGs");
         eprintln!("       genegis demo social-card [DIR] # render the 1280x640 social preview PNG");
+        eprintln!("       genegis demo frames-isochrone [DIR] # walk vs walk+rail reach race PNGs");
         process::exit(1);
     };
     if ![
@@ -161,6 +162,7 @@ fn handle_demo(args: &[String]) {
         "frames-nagoya3d",
         "frames-contrast",
         "social-card",
+        "frames-isochrone",
     ]
     .contains(&action)
     {
@@ -182,6 +184,15 @@ fn handle_demo(args: &[String]) {
         genegis_analysis::render_nagoya_density3d_frames()
             .unwrap_or_else(|error| {
                 eprintln!("3D density render error: {error}");
+                process::exit(1);
+            })
+            .into_iter()
+            .map(|frame| (frame.name, frame.png))
+            .collect()
+    } else if action == "frames-isochrone" {
+        genegis_analysis::render_isochrone_race_frames()
+            .unwrap_or_else(|error| {
+                eprintln!("Isochrone race render error: {error}");
                 process::exit(1);
             })
             .into_iter()

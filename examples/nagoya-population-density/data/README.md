@@ -68,8 +68,9 @@ fixture through `GENEGIS_POPULATION_MESH_PATH` / `GENEGIS_POPULATION_MESH_SHA`
 ## Transit corridor fixture
 
 `nagoya-transit.geojson` is a **synthetic** deterministic set of rail corridors
-over the walk grid (名古屋駅 area → 金山/千種/大曽根). It feeds the multimodal
-accessibility mode:
+over the walk grid (名古屋駅 area → 金山/千種/大曽根). Ride time is derived from
+stop spacing at 30 km/h with a 6 min expected wait, so no route beats the
+physical floor. It feeds the multimodal accessibility mode:
 
 ```bash
 python3 GeneGIS/scripts/build-nagoya-transit.py   # regenerate fixture
