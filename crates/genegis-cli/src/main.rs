@@ -150,24 +150,59 @@ fn handle_demo(args: &[String]) {
     let Some(action) = args.first().map(String::as_str) else {
         eprintln!("Usage: genegis demo frames [DIR]  # render RFC 0005 showcase PNGs");
         eprintln!("       genegis demo frames-3d [DIR] # render Phase 14 3D district orbit PNGs");
+        eprintln!("       genegis demo frames-nagoya3d [DIR] # verified 3D density orbit PNGs");
+        eprintln!("       genegis demo frames-contrast [DIR] # render unverified-vs-verified PNGs");
+        eprintln!("       genegis demo social-card [DIR] # render the 1280x640 social preview PNG");
         process::exit(1);
     };
-    if action != "frames" && action != "frames-3d" {
+    if ![
+        "frames",
+        "frames-3d",
+        "frames-nagoya3d",
+        "frames-contrast",
+        "social-card",
+    ]
+    .contains(&action)
+    {
         eprintln!("Unknown demo action: {action}");
         process::exit(1);
     }
     let dir = args.get(1).cloned().unwrap_or_else(|| {
-        if action == "frames-3d" {
-            ".genegis/frames-3d".into()
-        } else {
+        if action == "frames" {
             ".genegis/frames".into()
+        } else {
+            format!(".genegis/{action}")
         }
     });
     std::fs::create_dir_all(&dir).unwrap_or_else(|error| {
         eprintln!("create {dir} failed: {error}");
         process::exit(1);
     });
-    let frames: Vec<(String, Vec<u8>)> = if action == "frames-3d" {
+    let frames: Vec<(String, Vec<u8>)> = if action == "frames-nagoya3d" {
+        genegis_analysis::render_nagoya_density3d_frames()
+            .unwrap_or_else(|error| {
+                eprintln!("3D density render error: {error}");
+                process::exit(1);
+            })
+            .into_iter()
+            .map(|frame| (frame.name, frame.png))
+            .collect()
+    } else if action == "social-card" {
+        let png = genegis_analysis::render_nagoya_density3d_social_card().unwrap_or_else(|error| {
+            eprintln!("Social card render error: {error}");
+            process::exit(1);
+        });
+        vec![("social-card".to_string(), png)]
+    } else if action == "frames-contrast" {
+        genegis_analysis::render_verification_contrast_frames()
+            .unwrap_or_else(|error| {
+                eprintln!("Contrast render error: {error}");
+                process::exit(1);
+            })
+            .into_iter()
+            .map(|frame| (frame.name, frame.png))
+            .collect()
+    } else if action == "frames-3d" {
         genegis_analysis::render_district3d_frames()
             .unwrap_or_else(|error| {
                 eprintln!("3D showcase render error: {error}");

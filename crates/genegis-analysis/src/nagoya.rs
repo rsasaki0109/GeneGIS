@@ -1139,6 +1139,19 @@ fn run_nagoya_population_density_mesh_with_source(
     })
 }
 
+/// Run the release verifier over externally computed ward densities.
+///
+/// This is the same check set the Nagoya workflow applies to its own output,
+/// so a candidate result (for example one produced by unverified generated
+/// code) is accepted or rejected on identical terms.
+pub fn verify_nagoya_density_features(
+    crs: &Crs,
+    features: &[DensityFeature],
+    source: SourceMetadata,
+) -> VerificationReport {
+    build_verification(crs, features, source)
+}
+
 fn build_verification(
     crs: &Crs,
     features: &[DensityFeature],
