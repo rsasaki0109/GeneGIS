@@ -15,6 +15,7 @@ pub mod gpu_acceptance;
 pub mod live_dashboard;
 pub mod live_feed;
 pub mod nagoya;
+pub mod nagoya_density3d;
 pub mod ndvi;
 pub mod ogc_service;
 pub mod operational_dashboard;
@@ -26,6 +27,7 @@ pub mod result;
 pub mod scenario;
 pub mod showcase;
 pub mod temporal_playback;
+pub mod verification_contrast;
 pub mod verified_alert;
 pub mod zone_index;
 
@@ -74,8 +76,12 @@ pub use nagoya::{
     nagoya_population_density_workflow_for_dataset, run_nagoya_population_density,
     run_nagoya_population_density_for_dataset, run_nagoya_population_density_from_catalog,
     run_nagoya_population_density_geoparquet, run_nagoya_population_density_mesh,
-    verify_nagoya_analysis, NagoyaArtifactDigests,
+    verify_nagoya_analysis, verify_nagoya_density_features, NagoyaArtifactDigests,
     NagoyaExecutionOutput, NagoyaWorkflowExecutor,
+};
+pub use nagoya_density3d::{
+    render_nagoya_density3d_frames, render_nagoya_density3d_social_card, verify_nagoya_density3d,
+    Density3dCheck, NagoyaDensity3dFrame,
 };
 pub use ndvi::{
     run_nagoya_ndvi_timeseries, NdviEpochSummary, NdviFeature, NdviTimeseriesAnalysis,
@@ -125,6 +131,7 @@ pub use temporal_playback::{
     build_ndvi_temporal_playback, TemporalEpochLayer, TemporalFeatureValue, TemporalPlayback,
     TileEncodingBudget, TileEncodingReceipt, TEMPORAL_PLAYBACK_SCHEMA_VERSION, TEMPORAL_TILE_ZOOM,
 };
+pub use verification_contrast::{render_verification_contrast_frames, ContrastFrame};
 pub use verified_alert::{
     acknowledge_verified_alert, evaluate_verified_alert, verify_alert_record, AlertAcknowledgement,
     AlertAcknowledgementReceipt, AlertComparison, AlertMetric, AlertTriggeringWindow,

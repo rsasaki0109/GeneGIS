@@ -39,6 +39,47 @@ checks. It is a verification workbench—not a QGIS clone.
 Intent → Command → GeoWorkflow → Verified Execution → Map / Report
 ```
 
+## The north-star prompt, in 3D
+
+Every census grid square rises as a column whose height is its population
+density. Seven independent checks (source checksum, CRS, cell identity, two
+area methods, population conservation, ward coverage, official city total)
+run first, and the frame is never drawn if one fails:
+
+<p align="center">
+  <img src="docs/assets/nagoya-density3d.gif" alt="Nagoya population density as verified 3D mesh columns: the columns rise while seven pre-render checks pass, then the camera orbits" width="960" />
+</p>
+
+The committed GIF uses the **synthetic** 500 m fixture (official 2020 ward
+totals spread by area), so densities are flat within each ward; the frame says
+so. Run the same render on the real e-Stat mesh (no application ID needed):
+
+```bash
+python3 scripts/fetch-estat-mesh.py --download --level 250m   # prints sha256
+export GENEGIS_POPULATION_MESH_PATH=examples/nagoya-population-density/data/real/nagoya-population-mesh-real.geojson
+export GENEGIS_POPULATION_MESH_SHA=<printed sha256>
+cargo run -p genegis-cli -- demo frames-nagoya3d
+bash scripts/build-nagoya-density3d-gif.sh
+```
+
+## Same prompt, same data — the difference is verification
+
+A common generated-code mistake measures area after reprojecting to Web
+Mercator (`gdf.to_crs(3857).area`). The map looks plausible, but Mercator is
+not equal-area: Nagoya's area comes out about 50% too large, and every density
+about a third too low. Run through GeneGIS's own release verifier, eleven of
+thirteen checks pass (CRS, units, checksum, even the population oracle); the
+independent area and density oracles reject it, and the result is never
+returned:
+
+<p align="center">
+  <img src="docs/assets/verification-contrast.gif" alt="Left: unverified Web Mercator code gives 4,766 persons/km². Right: GeneGIS's verifier rejects it on two oracle checks and returns the verified 7,143 persons/km²" width="960" />
+</p>
+
+The frames are built only if the verifier actually rejects the Mercator
+candidate (`cargo run -p genegis-cli -- demo frames-contrast` +
+`scripts/build-verification-contrast-gif.sh`).
+
 ## Explore a verified district in 3D
 
 The district view combines point-cloud terrain, LOD1 buildings, roads, POIs,
@@ -240,6 +281,13 @@ bash scripts/render-readme-hero.sh
 
 # Rebuild the RFC 0005 use-case showcase GIF (synthetic fixtures)
 cargo run -p genegis-cli -- demo frames && bash scripts/build-readme-showcase.sh
+
+# Rebuild the verified 3D population-density orbit
+cargo run -p genegis-cli -- demo frames-nagoya3d && bash scripts/build-nagoya-density3d-gif.sh
+
+# Rebuild the unverified-vs-verified contrast and the 1280×640 social card
+cargo run -p genegis-cli -- demo frames-contrast && bash scripts/build-verification-contrast-gif.sh
+cargo run -p genegis-cli -- demo social-card && cp .genegis/social-card/social-card.png public/og.png
 
 # Rebuild the Phase 14 M0 3D district orbit
 cargo run -p genegis-cli -- demo frames-3d .genegis/frames-3d
