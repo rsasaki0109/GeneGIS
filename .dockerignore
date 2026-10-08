@@ -1,0 +1,7 @@
+target
+node_modules
+dist
+.git
+.genegis
+docs/assets
+examples/nagoya-population-density/data/real

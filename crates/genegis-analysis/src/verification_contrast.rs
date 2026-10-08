@@ -380,6 +380,20 @@ fn stage_for(index: usize) -> Stage {
     }
 }
 
+/// Verified-stage frame and its verification state, for the daily map card.
+pub(crate) fn card_source() -> Result<crate::daily_card::CardSource, AnalysisError> {
+    let contrast = build_contrast()?;
+    let checks = &contrast.verified.verification.checks;
+    Ok(crate::daily_card::CardSource {
+        png: render_frame(&contrast, Stage::Verified)?,
+        prompt: PROMPT,
+        checks_passed: checks.iter().filter(|c| c.passed).count(),
+        checks_total: checks.len(),
+        result_digest: crate::result::canonical_analysis_result_digest(&contrast.verified),
+        synthetic: false,
+    })
+}
+
 /// Render the unverified-vs-verified contrast sequence.
 pub fn render_verification_contrast_frames() -> Result<Vec<ContrastFrame>, AnalysisError> {
     let contrast = build_contrast()?;

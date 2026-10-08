@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.rsasaki0109/genegis",
+  "title": "GeneGIS",
+  "description": "Verified spatial analysis: the model plans, GeneGIS validates, executes and checks every step.",
+  "repository": {
+    "url": "https://github.com/rsasaki0109/GeneGIS",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/rsasaki0109/genegis-mcp:0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

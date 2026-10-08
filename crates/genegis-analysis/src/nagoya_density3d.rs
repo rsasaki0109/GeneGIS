@@ -881,6 +881,19 @@ pub fn render_nagoya_density3d_social_card() -> Result<Vec<u8>, AnalysisError> {
     rasterize_svg(&svg)
 }
 
+/// Final orbit frame and its verification state, for the daily map card.
+pub(crate) fn card_source() -> Result<crate::daily_card::CardSource, AnalysisError> {
+    let scene = build_scene()?;
+    Ok(crate::daily_card::CardSource {
+        png: render_frame(&scene, FRAME_COUNT - 1)?,
+        prompt: PROMPT,
+        checks_passed: scene.checks.iter().filter(|c| c.passed).count(),
+        checks_total: scene.checks.len(),
+        result_digest: scene.result_digest.clone(),
+        synthetic: scene.synthetic,
+    })
+}
+
 /// Render the verified rise-and-orbit sequence over the Nagoya population mesh.
 pub fn render_nagoya_density3d_frames() -> Result<Vec<NagoyaDensity3dFrame>, AnalysisError> {
     let scene = build_scene()?;
