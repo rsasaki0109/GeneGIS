@@ -122,6 +122,16 @@ pub trait Fetcher {
 /// by the Nominatim usage policy.
 pub struct HttpFetcher;
 
+#[cfg(not(feature = "native"))]
+impl Fetcher for HttpFetcher {
+    fn get(&self, url: &str) -> Result<Vec<u8>> {
+        Err(ToolkitError::Provider(format!(
+            "{url}: network fetches are not available in this build (requires the native feature)"
+        )))
+    }
+}
+
+#[cfg(feature = "native")]
 impl Fetcher for HttpFetcher {
     fn get(&self, url: &str) -> Result<Vec<u8>> {
         let mut response = ureq::get(url)

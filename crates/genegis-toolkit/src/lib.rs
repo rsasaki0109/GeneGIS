@@ -12,7 +12,15 @@ pub mod execute;
 pub mod export;
 pub mod expr;
 pub mod geojson_io;
+#[cfg(feature = "native")]
 pub mod geoparquet_io;
+#[cfg(not(feature = "native"))]
+#[path = "unavailable/geoparquet_io.rs"]
+pub mod geoparquet_io;
+#[cfg(feature = "native")]
+pub mod gpkg_io;
+#[cfg(not(feature = "native"))]
+#[path = "unavailable/gpkg_io.rs"]
 pub mod gpkg_io;
 pub mod import;
 pub mod index;
@@ -26,6 +34,10 @@ pub mod store;
 pub mod table;
 pub mod wkb;
 pub mod wkt;
+
+/// Whether this build includes the `native` feature (GeoPackage, GeoParquet,
+/// network fetches, LLM planner). Browser builds report `false`.
+pub const NATIVE: bool = cfg!(feature = "native");
 
 pub use error::{Result, ToolkitError};
 pub use execute::{

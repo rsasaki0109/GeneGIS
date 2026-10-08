@@ -1,0 +1,101 @@
+name: Release
+
+# Tag `v<version>` (or run manually with a tag name) to publish:
+#   - genegis-mcp binaries for Linux, macOS and Windows, each bundled with the
+#     Nagoya sample layers so `load_sample_data` works offline;
+#   - genegis-web.zip, the self-contained browser build (open with any static
+#     file server);
+#   - SHA256SUMS for every asset.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update (e.g. v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  mcp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, archive: tar.gz }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, archive: tar.gz }
+          - { os: macos-14, target: aarch64-apple-darwin, archive: tar.gz }
+          - { os: macos-14, target: x86_64-apple-darwin, archive: tar.gz } # cross-compiled on Apple silicon
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, archive: zip }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build genegis-mcp
+        run: cargo build --locked --release -p genegis-toolkit --bin genegis-mcp --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          name="genegis-mcp-${TAG}-${{ matrix.target }}"
+          mkdir -p "$name/examples/nagoya-population-density"
+          cp -r examples/nagoya-population-density/data "$name/examples/nagoya-population-density/"
+          rm -rf "$name/examples/nagoya-population-density/data/real"
+          cp LICENSE README.md "$name/"
+          bin="target/${{ matrix.target }}/release/genegis-mcp"
+          if [ -f "$bin.exe" ]; then cp "$bin.exe" "$name/"; else cp "$bin" "$name/"; fi
+          if [ "${{ matrix.archive }}" = zip ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcp-${{ matrix.target }}
+          path: genegis-mcp-*.*
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
+      - name: Build and package the browser bundle
+        run: |
+          bash scripts/build-wasm.sh
+          (cd public && zip -qr "../genegis-web-${TAG}.zip" try)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: genegis-web-*.zip
+
+  publish:
+    needs: [mcp, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: (cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: GeneGIS ${{ env.TAG }}
+          generate_release_notes: true
+          files: dist/*

@@ -39,3 +39,4 @@ __pycache__/
 
 # Real open data fetched by scripts/fetch-*.py (regenerable; flood layer is ~42 MB)
 examples/nagoya-population-density/data/real/
+public/try/pkg/

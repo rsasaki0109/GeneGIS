@@ -1454,6 +1454,25 @@ fn finish(
 // ---------------------------------------------------------------------------
 
 /// System prompt describing the catalog and plan format.
+#[cfg(feature = "native")]
+fn post_chat_completion(url: &str, api_key: &str, body: Value) -> Result<Value> {
+    let mut response = ureq::post(url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send_json(body)
+        .map_err(|e| ToolkitError::Provider(format!("LLM transport: {e}")))?;
+    response
+        .body_mut()
+        .read_json()
+        .map_err(|e| ToolkitError::Provider(format!("LLM response: {e}")))
+}
+
+#[cfg(not(feature = "native"))]
+fn post_chat_completion(_url: &str, _api_key: &str, _body: Value) -> Result<Value> {
+    Err(ToolkitError::Provider(
+        "the LLM planner is not available in this build (requires the native feature)".into(),
+    ))
+}
+
 pub fn llm_system_prompt() -> String {
     let mut catalog = String::new();
     for spec in ops::catalog() {
@@ -1593,14 +1612,7 @@ fn plan_with_llm(
             "response_format": {"type": "json_object"},
             "messages": messages,
         });
-        let mut response = ureq::post(&url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .send_json(body)
-            .map_err(|e| ToolkitError::Provider(format!("LLM transport: {e}")))?;
-        let payload: Value = response
-            .body_mut()
-            .read_json()
-            .map_err(|e| ToolkitError::Provider(format!("LLM response: {e}")))?;
+        let payload = post_chat_completion(&url, api_key, body)?;
         let content = payload
             .pointer("/choices/0/message/content")
             .and_then(Value::as_str)

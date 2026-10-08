@@ -16,6 +16,8 @@
 </p>
 
 <p align="center">
+  <a href="https://rsasaki0109.github.io/GeneGIS/try/"><strong>Try it in your browser</strong></a>
+  ·
   <a href="https://genegis-playground.rsasaki0109.chatgpt.site"><strong>Open Playground</strong></a>
   ·
   <a href="#run"><strong>Run locally</strong></a>
@@ -26,6 +28,23 @@
 GeneGIS turns intent into a typed Workflow DAG, executes through open GIS
 engines, and returns a map with CRS, units, sources, provenance, and independent
 checks. It is a verification workbench—not a QGIS clone.
+
+## Try it in your browser — your data never leaves the page
+
+The same toolkit as the CLI and the MCP server, compiled to WebAssembly: drop a
+GeoJSON, CSV or zipped Shapefile (or load the Nagoya samples), ask in plain
+Japanese, and get the plan, a map, every per-step check and the digests. A
+failed check returns its reason instead of an answer. There is no server.
+
+<p align="center">
+  <a href="https://rsasaki0109.github.io/GeneGIS/try/"><img src="docs/assets/try-in-browser.png" alt="GeneGIS running in the browser: ward population density answered with 2/2 checks passed, the plan, digests and the result table" width="960" /></a>
+</p>
+
+Build it locally with `scripts/build-wasm.sh` and serve `public/` with any
+static file server. GeoPackage, GeoParquet, place lookups and the LLM planner
+need native libraries or the network, so the browser build refuses them with a
+reason; everything else (import, the 19 operations, the rule planner, checks,
+GeoJSON/CSV export) is the native code path.
 
 ## From prompt to proof
 
@@ -269,7 +288,10 @@ the plan. Results land in the same layer store as the Workbench.
 the same 17 questions scored against hand-written ground truth, rule planner
 vs. Claude Code over MCP.
 
-Outside this repository, run the server as a container (stdio, no network
+Prebuilt `genegis-mcp` binaries for Linux, macOS and Windows (with the
+Nagoya samples) are attached to each
+[release](https://github.com/rsasaki0109/GeneGIS/releases). Outside this
+repository you can also run the server as a container (stdio, no network
 needed for the bundled Nagoya samples; layers persist in the volume):
 
 ```json

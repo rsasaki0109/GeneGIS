@@ -2838,7 +2838,10 @@ dependencies = [
 name = "genegis-wasm"
 version = "0.1.0"
 dependencies = [
+ "genegis-toolkit",
  "serde",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

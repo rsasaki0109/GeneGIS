@@ -143,3 +143,26 @@ jobs:
           npm ci
           npm run check
           npm run build
+
+  wasm:
+    # GeneGIS in the browser: the toolkit must keep compiling without its
+    # native-only features, and the generated bindings must load.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Check toolkit without native features
+        run: cargo check -p genegis-toolkit --lib --no-default-features --target wasm32-unknown-unknown
+      - name: Test the browser session natively
+        run: cargo test -p genegis-wasm
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.123 --locked
+      - name: Build the browser bundle
+        run: bash scripts/build-wasm.sh
+      - name: Check page scripts
+        run: |
+          node --check public/try/app.js
+          node scripts/smoke-wasm.mjs

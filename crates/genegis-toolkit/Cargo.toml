@@ -5,6 +5,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["native"]
+# Everything that needs C libraries, TLS or the network: GeoPackage (SQLite),
+# GeoParquet (zstd), place / census-mesh fetches and the LLM planner. Builds
+# without it (the browser) keep import, operations, planning and checks, and
+# return an explicit "not available in this build" error for the rest.
+native = ["dep:rusqlite", "dep:arrow-array", "dep:arrow-schema", "dep:parquet", "dep:bytes", "dep:ureq"]
+
 [dependencies]
 genegis-core = { path = "../genegis-core" }
 genegis-crs = { path = "../genegis-crs" }
@@ -21,11 +29,19 @@ uuid.workspace = true
 encoding_rs = "0.8"
 flate2 = "1"
 zip = { version = "6", default-features = false, features = ["deflate"] }
-rusqlite = { version = "0.40", features = ["bundled"] }
-arrow-array = "58"
-arrow-schema = "58"
-parquet = { version = "58", default-features = false, features = ["arrow", "zstd"] }
-bytes = "1"
-ureq = { version = "3", features = ["json"] }
+rusqlite = { version = "0.40", features = ["bundled"], optional = true }
+arrow-array = { version = "58", optional = true }
+arrow-schema = { version = "58", optional = true }
+parquet = { version = "58", default-features = false, features = ["arrow", "zstd"], optional = true }
+bytes = { version = "1", optional = true }
+ureq = { version = "3", features = ["json"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Browser randomness for command / workflow ids.
+uuid = { workspace = true, features = ["js"] }
+
+[[bin]]
+name = "genegis-mcp"
+required-features = ["native"]
 
 [dev-dependencies]

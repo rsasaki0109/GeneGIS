@@ -60,9 +60,17 @@ pub fn samples_dir() -> PathBuf {
 /// `(key, layer, receipt)` with keys `wards`, `shelters`, `pois`, `flood`,
 /// `stations`.
 pub fn load_nagoya_samples(dir: &Path) -> Result<Vec<(&'static str, Layer, ImportReceipt)>> {
+    load_nagoya_samples_with(|file| Ok(std::fs::read(dir.join(file))?))
+}
+
+/// Same as [`load_nagoya_samples`], reading each file through `read` (for
+/// builds without a filesystem, e.g. bytes embedded in the browser module).
+pub fn load_nagoya_samples_with(
+    read: impl Fn(&str) -> Result<Vec<u8>>,
+) -> Result<Vec<(&'static str, Layer, ImportReceipt)>> {
     let mut loaded = Vec::new();
     for (key, file, name, attribution, license) in SAMPLE_FILES {
-        let bytes = std::fs::read(dir.join(file))?;
+        let bytes = read(file)?;
         let options = ImportOptions {
             name: Some(name.into()),
             attribution: Some(attribution.into()),
